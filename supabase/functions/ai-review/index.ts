@@ -4,7 +4,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { AI_REVIEW_SCHEMA_NAME, type AiReview, aiReviewJsonSchema } from "../_shared/aiReviewSchema.ts";
 import { type EditLog, checkpoints, gunzipJson, lineDiff } from "../_shared/edits.ts";
-import { HttpError, env, handler, json, readJson } from "../_shared/http.ts";
+import { HttpError, env, envOptional, handler, json, readJson } from "../_shared/http.ts";
 import { adminClient, requireUser } from "../_shared/supabase.ts";
 
 const DAILY_LIMIT = 5;
@@ -179,7 +179,7 @@ Deno.serve(
       finalCode ? finalCode.slice(0, 8000) : "(no code captured)",
     ].join("\n");
 
-    const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-5-mini";
+    const model = envOptional("OPENAI_MODEL") ?? "gpt-5-mini";
     const res = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { authorization: `Bearer ${env("OPENAI_API_KEY")}`, "content-type": "application/json" },
