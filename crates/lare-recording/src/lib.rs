@@ -34,6 +34,30 @@ pub fn find_display_track(project_path: &Path) -> Option<PathBuf> {
     first_segment_file(project_path, &["display.mp4", "display.mov"])
 }
 
+/// Every recording clip of a studio project (one per pause/resume stretch) with its display
+/// track and duration in seconds, in recording order. Empty until the project is remuxed.
+pub fn clip_tracks(project_path: &Path) -> Vec<(PathBuf, f64)> {
+    let segments = project_path.join("content").join("segments");
+    let Ok(rd) = std::fs::read_dir(&segments) else {
+        return Vec::new();
+    };
+    let mut dirs: Vec<PathBuf> = rd
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.is_dir())
+        .collect();
+    dirs.sort();
+    dirs.into_iter()
+        .filter_map(|dir| {
+            let p = ["display.mp4", "display.mov"]
+                .iter()
+                .map(|n| dir.join(n))
+                .find(|p| p.exists())?;
+            let d = thumbnail::probe(&p).ok()?.duration_ms? as f64 / 1000.0;
+            (d > 0.0).then_some((p, d))
+        })
+        .collect()
+}
+
 /// Path of the camera track of a studio project (first segment), if a camera was recorded.
 pub fn find_camera_track(project_path: &Path) -> Option<PathBuf> {
     first_segment_file(project_path, &["camera.mp4", "camera.mov"])
@@ -378,6 +402,16 @@ impl ActiveRecording {
             }
             Handle::Studio(h) => {
                 let done = h.stop().await.context("stopping studio recording")?;
+                // Cap's studio pipeline writes each display track as DASH fragments and marks the
+                // project `NeedsRemux`; produce the per-segment `display.mp4` files the exporter,
+                // the editor preview and ffprobe-style tooling expect.
+                let project = done.project_path.clone();
+                tokio::task::spawn_blocking(move || {
+                    cap_recording::recovery::RecoveryManager::remux_if_needed(&project)
+                })
+                .await
+                .context("remux task panicked")?
+                .map_err(|e| anyhow!("remuxing studio recording: {e}"))?;
                 let mic_track = find_mic_track(&done.project_path);
                 Ok(CompletedRecording {
                     mode: RecordingMode::Studio,
@@ -410,7 +444,12 @@ pub fn find_mic_track(project_path: &Path) -> Option<PathBuf> {
         .collect();
     dirs.sort();
     for dir in dirs {
-        for name in ["audio-input.ogg", "audio-input.mp3", "audio-input.wav"] {
+        for name in [
+            "audio-input.m4a",
+            "audio-input.ogg",
+            "audio-input.mp3",
+            "audio-input.wav",
+        ] {
             let p = dir.join(name);
             if p.exists() {
                 return Some(p);
@@ -418,6 +457,14 @@ pub fn find_mic_track(project_path: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// Remux a studio project's DASH display fragments into `display.mp4` files if Cap marked it
+/// `NeedsRemux` (e.g. a recording that was interrupted before `stop` completed). Returns `true`
+/// when work was done.
+pub fn remux_studio_if_needed(project_path: &Path) -> anyhow::Result<bool> {
+    cap_recording::recovery::RecoveryManager::remux_if_needed(project_path)
+        .map_err(|e| anyhow!("remuxing studio recording: {e}"))
 }
 
 // ---------------------------------------------------------------------------

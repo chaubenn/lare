@@ -41,7 +41,8 @@ export const sessionVideoKey = (id: string) => ["session", id, "video"] as const
 export const sessionEditLogKey = (id: string, problemId: string) =>
   ["session", id, "edit-log", problemId] as const;
 
-const SESSION_DETAIL_SELECT = "*, session_problems(*, submissions(*))" as const;
+const SESSION_DETAIL_SELECT =
+  "*, session_problems(*, submissions(*)), session_events(t, type)" as const;
 
 function sessionQuery(id: string) {
   return supabase.from("sessions").select(SESSION_DETAIL_SELECT).eq("id", id).maybeSingle();

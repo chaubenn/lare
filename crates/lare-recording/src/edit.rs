@@ -132,44 +132,59 @@ pub fn normalise_ranges(ranges: &[TimeRange], duration_s: f64) -> Vec<TimeRange>
     out
 }
 
+/// Map kept ranges expressed on the concatenated recording (all clips back to back) onto Cap
+/// timeline segments, which address one recording clip each. `clip_durations` are the clip
+/// lengths in seconds, in recording order.
+pub fn timeline_segments(ranges: &[TimeRange], clip_durations: &[f64]) -> Vec<TimelineSegment> {
+    let total: f64 = clip_durations.iter().sum();
+    let mut out = Vec::new();
+    for r in normalise_ranges(ranges, total) {
+        let mut offset = 0.0;
+        for (clip, &len) in clip_durations.iter().enumerate() {
+            let clip_start = offset;
+            let clip_end = offset + len;
+            offset = clip_end;
+            let s = r.start.max(clip_start);
+            let e = r.end.min(clip_end);
+            if e - s > 0.05 {
+                out.push(TimelineSegment {
+                    recording_clip: clip as u32,
+                    timescale: 1.0,
+                    start: s - clip_start,
+                    end: e - clip_start,
+                    name: None,
+                    speed_audio_mode: None,
+                });
+            }
+        }
+    }
+    out
+}
+
 /// Build the Cap configuration for an edit. `base` is the project's saved configuration (or
-/// `ProjectConfiguration::default()`); `duration_s` is the source recording length.
-pub fn apply_edit(mut base: ProjectConfiguration, edit: &StudioEdit, duration_s: f64) -> ProjectConfiguration {
-    let ranges = normalise_ranges(&edit.segments, duration_s);
-    let segments: Vec<TimelineSegment> = if ranges.is_empty() {
-        vec![TimelineSegment {
-            recording_clip: 0,
-            timescale: 1.0,
-            start: 0.0,
-            end: duration_s.max(0.0),
-            name: None,
-            speed_audio_mode: None,
-        }]
+/// `ProjectConfiguration::default()`); `clip_durations` are the recording clips' lengths in
+/// seconds (one studio recording produces one clip per pause/resume stretch).
+///
+/// With no kept ranges the timeline is left unset so `cap-export` synthesises its default
+/// (every clip, in full).
+pub fn apply_edit(mut base: ProjectConfiguration, edit: &StudioEdit, clip_durations: &[f64]) -> ProjectConfiguration {
+    let segments = timeline_segments(&edit.segments, clip_durations);
+    base.timeline = if segments.is_empty() {
+        None
     } else {
-        ranges
-            .iter()
-            .map(|r| TimelineSegment {
-                recording_clip: 0,
-                timescale: 1.0,
-                start: r.start,
-                end: r.end,
-                name: None,
-                speed_audio_mode: None,
-            })
-            .collect()
+        Some(TimelineConfiguration {
+            segments,
+            transitions: Vec::new(),
+            zoom_segments: Vec::new(),
+            scene_segments: Vec::new(),
+            mask_segments: Vec::new(),
+            text_segments: Vec::new(),
+            caption_segments: Vec::new(),
+            keyboard_segments: Vec::new(),
+            audio_segments: Vec::new(),
+            camera3d_segments: Vec::new(),
+        })
     };
-    base.timeline = Some(TimelineConfiguration {
-        segments,
-        transitions: Vec::new(),
-        zoom_segments: Vec::new(),
-        scene_segments: Vec::new(),
-        mask_segments: Vec::new(),
-        text_segments: Vec::new(),
-        caption_segments: Vec::new(),
-        keyboard_segments: Vec::new(),
-        audio_segments: Vec::new(),
-        camera3d_segments: Vec::new(),
-    });
 
     let cam = &edit.camera;
     base.camera.hide = cam.hide;
@@ -206,12 +221,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_edit_keeps_whole_recording() {
-        let cfg = apply_edit(ProjectConfiguration::default(), &StudioEdit::default(), 12.5);
-        let tl = cfg.timeline.unwrap();
-        assert_eq!(tl.segments.len(), 1);
-        assert_eq!(tl.segments[0].start, 0.0);
-        assert_eq!(tl.segments[0].end, 12.5);
+    fn empty_edit_leaves_timeline_to_cap_default() {
+        let cfg = apply_edit(ProjectConfiguration::default(), &StudioEdit::default(), &[12.5]);
+        assert!(cfg.timeline.is_none());
     }
 
     #[test]
@@ -224,12 +236,23 @@ mod tests {
             ],
             ..Default::default()
         };
-        let cfg = apply_edit(ProjectConfiguration::default(), &edit, 10.0);
+        let cfg = apply_edit(ProjectConfiguration::default(), &edit, &[10.0]);
         let segs = cfg.timeline.unwrap().segments;
         assert_eq!(segs.len(), 2);
         assert_eq!((segs[0].start, segs[0].end), (0.0, 2.0));
         assert_eq!((segs[1].start, segs[1].end), (8.0, 10.0));
         assert!((edit.output_duration(10.0) - 4.01).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ranges_split_across_recording_clips() {
+        // Two clips (a pause in between): 10 s + 5 s. Keep 8 s..13 s of the concatenated recording.
+        let segs = timeline_segments(&[TimeRange { start: 8.0, end: 13.0 }], &[10.0, 5.0]);
+        assert_eq!(segs.len(), 2);
+        assert_eq!(segs[0].recording_clip, 0);
+        assert_eq!((segs[0].start, segs[0].end), (8.0, 10.0));
+        assert_eq!(segs[1].recording_clip, 1);
+        assert_eq!((segs[1].start, segs[1].end), (0.0, 3.0));
     }
 
     #[test]
@@ -242,7 +265,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let cfg = apply_edit(ProjectConfiguration::default(), &edit, 1.0);
+        let cfg = apply_edit(ProjectConfiguration::default(), &edit, &[1.0]);
         assert!(matches!(cfg.camera.position.x, CameraXPosition::Left));
         assert!(matches!(cfg.camera.position.y, CameraYPosition::Top));
         assert_eq!(cfg.camera.size, 80.0);

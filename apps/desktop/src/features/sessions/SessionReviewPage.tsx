@@ -17,7 +17,14 @@ import { formatDateTime, plural } from "@/lib/format";
 import { errorMessage, invokeFunction } from "@/lib/supabase";
 import { CodeTimeline } from "./CodeTimeline";
 import { lastEditAt } from "./editLog";
-import { clampTime, epochToMedia, isoToMedia, mediaEpoch, withKeys } from "./media";
+import {
+  clampTime,
+  epochToMedia,
+  isoToMedia,
+  type MediaClock,
+  mediaClock,
+  withKeys,
+} from "./media";
 import {
   type SessionDetail,
   useEditLogs,
@@ -79,7 +86,10 @@ function SessionReview({ session }: { session: SessionDetail }) {
     [session.session_problems],
   );
   const logs = useEditLogs(session.id, problems);
-  const t0 = useMemo(() => mediaEpoch(session), [session]);
+  const t0: MediaClock = useMemo(
+    () => mediaClock(session, session.session_events ?? []),
+    [session],
+  );
   const segments = transcript.data?.segments ?? null;
 
   // One clock for the whole page (media seconds). `seekTarget` only changes on explicit seeks

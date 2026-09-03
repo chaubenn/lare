@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { ErrorState, Spinner } from "@/components/ui/States";
-import { epochToMedia, formatMediaTime, mediaToEpoch } from "./media";
+import { epochToMedia, formatMediaTime, type MediaClock, mediaToEpoch } from "./media";
 
 /** Typing pause that separates two checkpoints (mirrors the ai-review function). */
 const CHECKPOINT_PAUSE_MS = 20_000;
@@ -37,7 +37,7 @@ export function CodeTimeline({
   /** One query per problem, aligned with `problems` (see `useEditLogs`). */
   logs: readonly UseQueryResult<EditLog, Error>[];
   /** Epoch ms of media time zero. */
-  t0: number;
+  t0: MediaClock;
   /** Media seconds. */
   currentTime: number;
   /** Move the page's current time (does not re-load the video). */
@@ -124,7 +124,7 @@ function LogView({
   onJump,
 }: {
   log: EditLog;
-  t0: number;
+  t0: MediaClock;
   currentTime: number;
   onJump: (t: number) => void;
 }) {

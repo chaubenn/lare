@@ -3,7 +3,7 @@
 // submissions, then asks OpenAI (Responses API, strict JSON schema) for a graded debrief.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { AI_REVIEW_SCHEMA_NAME, type AiReview, aiReviewJsonSchema } from "../_shared/aiReviewSchema.ts";
-import { type EditLog, checkpoints, gunzipJson, lineDiff } from "../_shared/edits.ts";
+import { type EditLog, checkpoints, gunzipJson, lineDiff, pausedIntervals, toMediaMs } from "../_shared/edits.ts";
 import { HttpError, env, envOptional, handler, json, readJson } from "../_shared/http.ts";
 import { adminClient, requireUser } from "../_shared/supabase.ts";
 
@@ -82,14 +82,22 @@ Deno.serve(
       ? new Date(session.recording_started_at).getTime()
       : new Date(session.started_at).getTime();
 
-    const [{ data: problems }, { data: transcript }] = await Promise.all([
+    const [{ data: problems }, { data: transcript }, { data: events }] = await Promise.all([
       admin
         .from("session_problems")
         .select("id, slug, title, difficulty, description_html, edits_path, opened_at, submissions(*)")
         .eq("session_id", session.id)
         .order("opened_at"),
       admin.from("transcripts").select("segments, language").eq("session_id", session.id).maybeSingle(),
+      admin.from("session_events").select("t, type").eq("session_id", session.id).order("t"),
     ]);
+    // The recording (and therefore the transcript) skips paused stretches; map wall-clock
+    // timestamps of edits and submissions onto the same media clock.
+    const pauses = pausedIntervals(
+      ((events as { t: string; type: string }[] | null) ?? []).map((e) => ({ t: new Date(e.t).getTime(), type: e.type })),
+      session.ended_at ? new Date(session.ended_at).getTime() : Date.now(),
+    );
+    const media = (epochMs: number) => toMediaMs(epochMs, t0, pauses);
 
     const segments = ((transcript?.segments as Segment[] | null) ?? []).filter((s) => s.text?.trim());
     const timeline: TimelineItem[] = segments.map((s) => ({ t: s.s, text: `[${mmss(s.s)}] SAID: ${s.text.trim()}` }));
@@ -110,7 +118,7 @@ Deno.serve(
           let prev = "";
           for (const cp of cps) {
             const { added, removed } = lineDiff(prev, cp.code);
-            const rel = cp.t - t0;
+            const rel = media(cp.t);
             const diffText = [
               ...removed.slice(0, 40).map((l) => `- ${l}`),
               ...added.slice(0, 60).map((l) => `+ ${l}`),
@@ -135,7 +143,7 @@ Deno.serve(
         lang: string | null;
       };
       for (const s of (p.submissions as Sub[] | null) ?? []) {
-        const rel = new Date(s.submitted_at).getTime() - t0;
+        const rel = media(new Date(s.submitted_at).getTime());
         const stats = s.accepted
           ? `runtime ${s.runtime_ms ?? "?"} ms (beats ${s.runtime_percentile?.toFixed(2) ?? "?"}%), memory ${s.memory_mb ?? "?"} MB (beats ${s.memory_percentile?.toFixed(2) ?? "?"}%)`
           : `${s.total_correct ?? "?"}/${s.total_testcases ?? "?"} testcases passed`;
@@ -152,7 +160,7 @@ Deno.serve(
     if (timelineText.length > MAX_INPUT_CHARS) {
       timelineText = `${timelineText.slice(0, MAX_INPUT_CHARS)}\n…(timeline truncated)`;
     }
-    const durationMs = session.active_ms || (session.ended_at ? new Date(session.ended_at).getTime() - t0 : 0);
+    const durationMs = session.active_ms || (session.ended_at ? media(new Date(session.ended_at).getTime()) : 0);
 
     const system = [
       "You are a senior software engineer running the debrief of a mock coding interview.",

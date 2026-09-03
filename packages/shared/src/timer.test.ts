@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { activeMs, problemActiveMs, type TimerEvent, timerStatus } from "./timer";
+import {
+  activeMs,
+  fromMediaMs,
+  pausedIntervals,
+  problemActiveMs,
+  type TimerEvent,
+  timerStatus,
+  toMediaMs,
+} from "./timer";
 
 const e = (t: number, type: TimerEvent["type"], slug?: string): TimerEvent =>
   slug ? { t, type, slug } : { t, type };
@@ -54,5 +62,53 @@ describe("problemActiveMs", () => {
   it("closes an open problem at end", () => {
     const events = [e(0, "start"), e(0, "problem_open", "x"), e(5000, "end")];
     expect(problemActiveMs(events, "x", 99_999)).toBe(5000);
+  });
+});
+
+describe("media time with pauses", () => {
+  const t0 = 1_000_000;
+  const events: TimerEvent[] = [
+    { t: t0, type: "start" },
+    { t: t0 + 10_000, type: "pause" },
+    { t: t0 + 15_000, type: "resume" },
+    { t: t0 + 30_000, type: "pause" },
+    { t: t0 + 32_000, type: "resume" },
+    { t: t0 + 40_000, type: "end" },
+  ];
+  const pauses = pausedIntervals(events, t0 + 40_000);
+
+  it("extracts pause/resume pairs", () => {
+    expect(pauses).toEqual([
+      { start: t0 + 10_000, end: t0 + 15_000 },
+      { start: t0 + 30_000, end: t0 + 32_000 },
+    ]);
+  });
+
+  it("closes an unmatched pause at now", () => {
+    const open: TimerEvent[] = [
+      { t: t0, type: "start" },
+      { t: t0 + 5_000, type: "pause" },
+    ];
+    expect(pausedIntervals(open, t0 + 9_000)).toEqual([{ start: t0 + 5_000, end: t0 + 9_000 }]);
+  });
+
+  it("subtracts elapsed pauses from wall-clock time", () => {
+    expect(toMediaMs(t0 + 5_000, t0, pauses)).toBe(5_000);
+    expect(toMediaMs(t0 + 12_000, t0, pauses)).toBe(10_000); // inside pause -> pause start
+    expect(toMediaMs(t0 + 20_000, t0, pauses)).toBe(15_000);
+    expect(toMediaMs(t0 + 40_000, t0, pauses)).toBe(33_000);
+    expect(toMediaMs(t0 - 500, t0, pauses)).toBe(0);
+  });
+
+  it("round-trips through fromMediaMs", () => {
+    for (const media of [0, 5_000, 10_000, 15_000, 33_000]) {
+      expect(toMediaMs(fromMediaMs(media, t0, pauses), t0, pauses)).toBe(media);
+    }
+    expect(fromMediaMs(15_000, t0, pauses)).toBe(t0 + 20_000);
+  });
+
+  it("ignores pauses that ended before the recording started", () => {
+    const early = [{ start: t0 - 5_000, end: t0 - 1_000 }];
+    expect(toMediaMs(t0 + 3_000, t0, early)).toBe(3_000);
   });
 });

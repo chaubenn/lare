@@ -207,18 +207,65 @@ function StudioEditor({
     recording.purpose === "interview" ? "Mock interview" : "Demo video",
   );
 
+  // A pause/resume during recording produces several clips; the preview plays them back to back
+  // by switching the <video> source when the playhead crosses a clip boundary.
+  const clips =
+    info.clips.length > 0 || !info.displayPath
+      ? info.clips
+      : [{ displayPath: info.displayPath, durationMs: info.durationMs, offsetMs: 0 }];
+  const clipAt = (seconds: number) => {
+    const ms = seconds * 1000;
+    let found = clips[0];
+    for (const c of clips) if (ms >= c.offsetMs) found = c;
+    return found;
+  };
+  const [clipIndex, setClipIndex] = useState(0);
+  const activeClip = clips[clipIndex] ?? clips[0];
+  const pendingSeek = useRef<number | null>(null);
+
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const onTime = () => setCurrent(v.currentTime);
+    const onTime = () => {
+      const clip = clips[clipIndex];
+      if (clip) setCurrent(clip.offsetMs / 1000 + v.currentTime);
+    };
+    const onEnded = () => {
+      if (clipIndex + 1 < clips.length) {
+        pendingSeek.current = 0;
+        setClipIndex(clipIndex + 1);
+        // Autoplay the next clip once its source is attached.
+        window.setTimeout(() => void videoRef.current?.play().catch(() => undefined), 50);
+      }
+    };
+    const onLoaded = () => {
+      if (pendingSeek.current !== null) {
+        v.currentTime = pendingSeek.current;
+        pendingSeek.current = null;
+      }
+    };
     v.addEventListener("timeupdate", onTime);
-    return () => v.removeEventListener("timeupdate", onTime);
-  }, []);
+    v.addEventListener("ended", onEnded);
+    v.addEventListener("loadedmetadata", onLoaded);
+    return () => {
+      v.removeEventListener("timeupdate", onTime);
+      v.removeEventListener("ended", onEnded);
+      v.removeEventListener("loadedmetadata", onLoaded);
+    };
+  }, [clips, clipIndex]);
 
   const seek = (t: number) => {
-    const v = videoRef.current;
     const clamped = Math.max(0, Math.min(duration, t));
-    if (v) v.currentTime = clamped;
+    const clip = clipAt(clamped);
+    const index = clip ? clips.indexOf(clip) : 0;
+    const local = clip ? clamped - clip.offsetMs / 1000 : clamped;
+    const v = videoRef.current;
+    if (index !== clipIndex) {
+      pendingSeek.current = local;
+      setClipIndex(index);
+    } else if (v) {
+      v.currentTime = local;
+    }
     setCurrent(clamped);
   };
 
@@ -347,7 +394,7 @@ function StudioEditor({
     }
   };
 
-  const previewSrc = info.displayPath ? convertFileSrc(info.displayPath) : null;
+  const previewSrc = activeClip ? convertFileSrc(activeClip.displayPath) : null;
 
   return (
     <div className="space-y-5">
@@ -419,7 +466,18 @@ function StudioEditor({
             {previewSrc ? (
               <div className="relative overflow-hidden rounded-lg bg-black">
                 {/* biome-ignore lint/a11y/useMediaCaption: raw preview of the user's own recording */}
-                <video ref={videoRef} src={previewSrc} controls className="aspect-video w-full" />
+                <video
+                  key={activeClip?.displayPath}
+                  ref={videoRef}
+                  src={previewSrc}
+                  controls
+                  className="aspect-video w-full"
+                />
+                {clips.length > 1 ? (
+                  <span className="pointer-events-none absolute top-2 left-2 rounded bg-zinc-950/70 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                    Take {clipIndex + 1} of {clips.length}
+                  </span>
+                ) : null}
                 {!edit.camera.hide && info.cameraPath ? (
                   <div
                     aria-hidden

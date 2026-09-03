@@ -6,9 +6,28 @@
  * recorded). Transcript segments and AI moments are already relative to media start; edit events
  * and submissions carry wall-clock epochs and are shifted by `t0`.
  */
-import { formatDuration, type TranscriptSegment, TranscriptSegmentSchema } from "@lare/shared";
-import type { Json, Session } from "@lare/supabase-types";
+import {
+  formatDuration,
+  fromMediaMs,
+  type PauseInterval,
+  pausedIntervals,
+  type TimerEvent,
+  type TranscriptSegment,
+  TranscriptSegmentSchema,
+  toMediaMs,
+} from "@lare/shared";
+import type { Json, Session, SessionEvent } from "@lare/supabase-types";
 import { z } from "zod";
+
+/**
+ * Wall-clock <-> media time mapping for one session. The recording skips paused stretches, so
+ * media time = wall-clock since `t0` minus the pauses that happened before it.
+ */
+export interface MediaClock {
+  /** Epoch ms of media time zero. */
+  t0: number;
+  pauses: PauseInterval[];
+}
 
 /** Epoch ms of media time zero for a session. */
 export function mediaEpoch(session: Pick<Session, "recording_started_at" | "started_at">): number {
@@ -16,20 +35,34 @@ export function mediaEpoch(session: Pick<Session, "recording_started_at" | "star
   return Number.isFinite(t0) ? t0 : Date.parse(session.started_at) || 0;
 }
 
+/** Build the clock from the session and its timer events (`session_events`). */
+export function mediaClock(
+  session: Pick<Session, "recording_started_at" | "started_at" | "ended_at">,
+  events: readonly Pick<SessionEvent, "t" | "type">[] = [],
+): MediaClock {
+  const t0 = mediaEpoch(session);
+  const timerEvents: TimerEvent[] = events
+    .map((e) => ({ t: Date.parse(e.t), type: e.type }))
+    .filter((e) => Number.isFinite(e.t))
+    .sort((a, b) => a.t - b.t);
+  const now = session.ended_at ? Date.parse(session.ended_at) : Date.now();
+  return { t0, pauses: pausedIntervals(timerEvents, Number.isFinite(now) ? now : Date.now()) };
+}
+
 /** Epoch ms -> media seconds. */
-export function epochToMedia(epochMs: number, t0: number): number {
-  return (epochMs - t0) / 1000;
+export function epochToMedia(epochMs: number, clock: MediaClock): number {
+  return toMediaMs(epochMs, clock.t0, clock.pauses) / 1000;
 }
 
 /** ISO timestamp -> media seconds (NaN-safe: unparsable dates map to 0). */
-export function isoToMedia(iso: string, t0: number): number {
+export function isoToMedia(iso: string, clock: MediaClock): number {
   const ms = Date.parse(iso);
-  return Number.isFinite(ms) ? epochToMedia(ms, t0) : 0;
+  return Number.isFinite(ms) ? epochToMedia(ms, clock) : 0;
 }
 
 /** Media seconds -> epoch ms (for `codeAt`). */
-export function mediaToEpoch(seconds: number, t0: number): number {
-  return t0 + seconds * 1000;
+export function mediaToEpoch(seconds: number, clock: MediaClock): number {
+  return fromMediaMs(seconds * 1000, clock.t0, clock.pauses);
 }
 
 export function clampTime(seconds: number, duration: number): number {

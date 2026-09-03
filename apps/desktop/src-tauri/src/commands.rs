@@ -233,34 +233,67 @@ pub async fn make_thumbnail(req: ThumbnailRequest) -> Result<PathBuf, String> {
     .map_err(err)?
 }
 
+/// One recording clip of a studio project (a pause/resume creates a new clip).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipInfo {
+    pub display_path: PathBuf,
+    pub duration_ms: u64,
+    /// Start of this clip on the concatenated timeline.
+    pub offset_ms: u64,
+}
+
 /// Facts about a studio project the editor needs.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StudioProjectInfo {
     pub project_path: PathBuf,
+    /// First clip's display track (preview poster / single-clip preview).
     pub display_path: Option<PathBuf>,
     pub camera_path: Option<PathBuf>,
     pub mic_path: Option<PathBuf>,
+    /// Total duration across clips.
     pub duration_ms: u64,
     pub width: Option<u32>,
     pub height: Option<u32>,
+    pub clips: Vec<ClipInfo>,
 }
 
 #[tauri::command]
 pub async fn studio_project_info(project_path: PathBuf) -> Result<StudioProjectInfo, String> {
     tokio::task::spawn_blocking(move || {
-        let display_path = lare_recording::find_display_track(&project_path);
+        // Interrupted recordings may still hold DASH fragments; finish them first.
+        if let Err(e) = lare_recording::remux_studio_if_needed(&project_path) {
+            warn!(%e, "remux failed");
+        }
+        let tracks = lare_recording::clip_tracks(&project_path);
+        let mut offset = 0u64;
+        let clips: Vec<ClipInfo> = tracks
+            .iter()
+            .map(|(path, secs)| {
+                let duration_ms = (secs * 1000.0).round() as u64;
+                let clip = ClipInfo {
+                    display_path: path.clone(),
+                    duration_ms,
+                    offset_ms: offset,
+                };
+                offset += duration_ms;
+                clip
+            })
+            .collect();
+        let display_path = clips.first().map(|c| c.display_path.clone());
         let info = display_path
             .as_deref()
             .and_then(|p| lare_recording::thumbnail::probe(p).ok());
         Ok(StudioProjectInfo {
             camera_path: lare_recording::find_camera_track(&project_path),
             mic_path: lare_recording::find_mic_track(&project_path),
-            duration_ms: info.and_then(|i| i.duration_ms).unwrap_or(0),
+            duration_ms: offset,
             width: info.and_then(|i| i.width),
             height: info.and_then(|i| i.height),
             display_path,
             project_path,
+            clips,
         })
     })
     .await
@@ -358,19 +391,22 @@ pub async fn export_studio(app: AppHandle, jobs: State<'_, Jobs>, job: ExportJob
         tokio::fs::create_dir_all(parent).await.map_err(err)?;
     }
     let project_path = job.project_path.clone();
-    let (base_cfg, source) = tokio::task::spawn_blocking({
+    let (base_cfg, source, clip_durations) = tokio::task::spawn_blocking({
         let project_path = project_path.clone();
         move || {
+            if let Err(e) = lare_recording::remux_studio_if_needed(&project_path) {
+                warn!(%e, "remux failed");
+            }
             let cfg = ProjectConfiguration::load(&project_path).unwrap_or_default();
             let source = lare_recording::find_display_track(&project_path)
                 .and_then(|p| lare_recording::thumbnail::probe(&p).ok());
-            (cfg, source)
+            let clips: Vec<f64> = lare_recording::clip_tracks(&project_path).into_iter().map(|(_, d)| d).collect();
+            (cfg, source, clips)
         }
     })
     .await
     .map_err(err)?;
-    let duration_s = source.and_then(|s| s.duration_ms).unwrap_or(0) as f64 / 1000.0;
-    let config = lare_recording::edit::apply_edit(base_cfg, &job.edit, duration_s);
+    let config = lare_recording::edit::apply_edit(base_cfg, &job.edit, &clip_durations);
     // Persist so a re-export (or Cap itself) sees the same edit.
     if let Err(e) = config.write(&project_path) {
         warn!(%e, "could not save project-config.json");

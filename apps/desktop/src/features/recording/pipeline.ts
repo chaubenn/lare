@@ -289,22 +289,8 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
       "sessions update",
     );
 
-    let vtt: string | null = null;
-    if (recording.micTrack && !opts.resume?.transcribed) {
-      try {
-        vtt = await transcribeSession({
-          job,
-          sessionId,
-          input: recording.micTrack,
-          recordingId: recording.recordingId,
-        });
-      } catch (e) {
-        // A missing transcript must not block the video: record and carry on.
-        console.warn("transcription failed", e);
-        updateJob(job.id, { detail: `Transcription failed: ${errorMessage(e)}` });
-      }
-    }
-
+    // Render first: the exported MP4 carries the full mic track across every pause/resume clip,
+    // and its clock is the video's clock, so the transcript lines up with playback and captions.
     let output = opts.resume?.exportPath ?? null;
     if (!output || !(await recorder.pathExists(output))) {
       output = await renderStudio({
@@ -313,6 +299,22 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
         edit: { ...DEFAULT_EDIT, camera: { ...DEFAULT_EDIT.camera, hide: !recording.facecam } },
         recordingId: recording.recordingId,
       });
+    }
+
+    let vtt: string | null = null;
+    if (!opts.resume?.transcribed) {
+      try {
+        vtt = await transcribeSession({
+          job,
+          sessionId,
+          input: output,
+          recordingId: recording.recordingId,
+        });
+      } catch (e) {
+        // A missing transcript must not block the video: record and carry on.
+        console.warn("transcription failed", e);
+        updateJob(job.id, { detail: `Transcription failed: ${errorMessage(e)}` });
+      }
     }
 
     const post = await postForSession(sessionId);

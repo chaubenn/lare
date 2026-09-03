@@ -64,3 +64,38 @@ export async function gunzipJson<T>(bytes: Uint8Array): Promise<T> {
   const text = await new Response(stream).text();
   return JSON.parse(text) as T;
 }
+
+// ---------------------------------------------------------------------------
+// Media time (mirror of packages/shared/src/timer.ts). Recordings skip paused stretches, so
+// media time = wall-clock since t0 minus the pauses that happened before it.
+// ---------------------------------------------------------------------------
+
+export interface PauseInterval {
+  start: number;
+  end: number;
+}
+
+export function pausedIntervals(events: { t: number; type: string }[], now: number): PauseInterval[] {
+  const out: PauseInterval[] = [];
+  let pausedSince: number | null = null;
+  for (const e of [...events].sort((a, b) => a.t - b.t)) {
+    if (e.type === "pause" && pausedSince === null) pausedSince = e.t;
+    else if ((e.type === "resume" || e.type === "end") && pausedSince !== null) {
+      if (e.t > pausedSince) out.push({ start: pausedSince, end: e.t });
+      pausedSince = null;
+    }
+  }
+  if (pausedSince !== null && now > pausedSince) out.push({ start: pausedSince, end: now });
+  return out;
+}
+
+export function toMediaMs(epochMs: number, t0: number, pauses: PauseInterval[]): number {
+  let media = epochMs - t0;
+  for (const p of pauses) {
+    if (p.end <= t0) continue;
+    const start = Math.max(p.start, t0);
+    if (epochMs <= start) break;
+    media -= Math.min(epochMs, p.end) - start;
+  }
+  return Math.max(0, media);
+}

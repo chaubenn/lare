@@ -73,6 +73,57 @@ export function activeMs(events: readonly TimerEvent[], now: number): number {
   return total;
 }
 
+/** A paused stretch of a session, in epoch ms. */
+export interface PauseInterval {
+  start: number;
+  end: number;
+}
+
+/**
+ * Paused intervals from the event log (pause -> resume pairs). An unmatched pause ends at `now`.
+ * Recordings skip these stretches, so media time = wall-clock time minus the pauses before it.
+ */
+export function pausedIntervals(events: readonly TimerEvent[], now: number): PauseInterval[] {
+  const out: PauseInterval[] = [];
+  let pausedSince: number | null = null;
+  for (const e of events) {
+    if (e.type === "pause" && pausedSince === null) pausedSince = e.t;
+    else if ((e.type === "resume" || e.type === "end") && pausedSince !== null) {
+      if (e.t > pausedSince) out.push({ start: pausedSince, end: e.t });
+      pausedSince = null;
+    }
+  }
+  if (pausedSince !== null && now > pausedSince) out.push({ start: pausedSince, end: now });
+  return out;
+}
+
+/**
+ * Wall-clock epoch ms -> media ms of a recording that started at `t0` and skipped `pauses`.
+ * Times inside a pause map to the pause's start (the frame shown while paused).
+ */
+export function toMediaMs(epochMs: number, t0: number, pauses: readonly PauseInterval[]): number {
+  let media = epochMs - t0;
+  for (const p of pauses) {
+    if (p.end <= t0) continue;
+    const start = Math.max(p.start, t0);
+    if (epochMs <= start) break;
+    media -= Math.min(epochMs, p.end) - start;
+  }
+  return Math.max(0, media);
+}
+
+/** Inverse of {@link toMediaMs}: media ms -> wall-clock epoch ms (skipping paused stretches). */
+export function fromMediaMs(mediaMs: number, t0: number, pauses: readonly PauseInterval[]): number {
+  let epoch = t0 + Math.max(0, mediaMs);
+  for (const p of pauses) {
+    if (p.end <= t0) continue;
+    const start = Math.max(p.start, t0);
+    if (epoch < start) break;
+    epoch += p.end - start;
+  }
+  return epoch;
+}
+
 /**
  * Active milliseconds attributed to a single problem: the intersection of the
  * session's running intervals with the problem's open interval(s).

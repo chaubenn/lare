@@ -91,14 +91,24 @@ export interface MediaInfo {
   hasAudio: boolean;
 }
 
+export interface ClipInfo {
+  displayPath: string;
+  durationMs: number;
+  /** Start of this clip on the concatenated timeline. */
+  offsetMs: number;
+}
+
 export interface StudioProjectInfo {
   projectPath: string;
+  /** First clip's display track. */
   displayPath: string | null;
   cameraPath: string | null;
   micPath: string | null;
+  /** Total duration across clips (a pause/resume creates a new clip). */
   durationMs: number;
   width: number | null;
   height: number | null;
+  clips: ClipInfo[];
 }
 
 export interface TimeRange {
