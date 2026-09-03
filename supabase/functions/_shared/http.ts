@@ -40,41 +40,46 @@ const APP_SECRETS = [
 const vaultValues = new Map<string, string>();
 let vaultLoaded: Promise<void> | null = null;
 
-async function fetchSecret(name: string): Promise<string | null> {
+/** One RPC for all names; retried because the gateway occasionally answers a cold isolate with 401. */
+async function fetchSecrets(names: string[]): Promise<Record<string, string> | null> {
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) return null;
-  const res = await fetch(`${url}/rest/v1/rpc/get_app_secret`, {
-    method: "POST",
-    headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ secret_name: name }),
-  });
-  if (!res.ok) {
-    console.warn(`get_app_secret(${name}) failed: ${res.status}`);
-    return null;
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 150 * 2 ** attempt));
+    const res = await fetch(`${url}/rest/v1/rpc/get_app_secrets`, {
+      method: "POST",
+      headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ secret_names: names }),
+    });
+    if (res.ok) {
+      const value = (await res.json()) as Record<string, unknown> | null;
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(value ?? {})) if (typeof v === "string" && v) out[k] = v;
+      return out;
+    }
+    lastStatus = res.status;
   }
-  const value = (await res.json()) as string | null;
-  return typeof value === "string" && value.length > 0 ? value : null;
+  console.warn(`get_app_secrets failed: ${lastStatus}`);
+  return null;
 }
 
 /**
  * Load Vault-backed values for every name missing from Deno.env. Resolved values are cached for
- * the isolate's lifetime; if any lookup fails the next request retries the missing ones.
+ * the isolate's lifetime; if the lookup fails the next request retries.
  */
 export function ensureSecrets(): Promise<void> {
   if (!vaultLoaded) {
     vaultLoaded = (async () => {
       const missing = APP_SECRETS.filter((n) => !Deno.env.get(n) && !vaultValues.has(n));
       if (missing.length === 0) return;
-      const values = await Promise.all(missing.map((n) => fetchSecret(n)));
-      let incomplete = false;
-      missing.forEach((n, i) => {
-        const v = values[i];
-        if (v) vaultValues.set(n, v);
-        else incomplete = true;
-      });
-      // Optional names (OPENAI_MODEL) may legitimately be absent; only retry when a lookup errored.
-      if (incomplete) vaultLoaded = null;
+      const values = await fetchSecrets(missing);
+      if (!values) {
+        vaultLoaded = null;
+        return;
+      }
+      for (const [k, v] of Object.entries(values)) vaultValues.set(k, v);
     })().catch((e) => {
       console.error("loading secrets from vault failed", e);
       vaultLoaded = null;
