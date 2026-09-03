@@ -25,7 +25,38 @@ use serde::{Deserialize, Serialize};
 pub use cap_project::{ProjectConfiguration, RecordingMeta};
 
 pub mod devices;
+pub mod edit;
 pub mod permissions;
+pub mod thumbnail;
+
+/// Path of the primary display track of a studio project (first segment).
+pub fn find_display_track(project_path: &Path) -> Option<PathBuf> {
+    first_segment_file(project_path, &["display.mp4", "display.mov"])
+}
+
+/// Path of the camera track of a studio project (first segment), if a camera was recorded.
+pub fn find_camera_track(project_path: &Path) -> Option<PathBuf> {
+    first_segment_file(project_path, &["camera.mp4", "camera.mov"])
+}
+
+fn first_segment_file(project_path: &Path, names: &[&str]) -> Option<PathBuf> {
+    let segments = project_path.join("content").join("segments");
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(&segments)
+        .ok()?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.is_dir())
+        .collect();
+    dirs.sort();
+    for dir in dirs {
+        for name in names {
+            let p = dir.join(name);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
 
 // ---------------------------------------------------------------------------
 // Feeds (long-lived device actors)
@@ -440,7 +471,15 @@ where
     }
     let base = builder.build().await.map_err(|e| anyhow!("export setup failed: {e}"))?;
     let total = base.total_frames(req.fps);
-    let (w, h) = req.resolution_base.unwrap_or((1920, 1080));
+    // Default to the display track's own size so nothing is upscaled.
+    let source_size = find_display_track(&req.project_path)
+        .and_then(|p| thumbnail::probe(&p).ok())
+        .and_then(|m| Some((m.width?, m.height?)));
+    let (w, h) = req
+        .resolution_base
+        .or(source_size)
+        .map(|(w, h)| (w.max(2) & !1, h.max(2) & !1))
+        .unwrap_or((1920, 1080));
     let settings = cap_export::mp4::Mp4ExportSettings {
         fps: req.fps,
         resolution_base: cap_project::XY::new(w, h),

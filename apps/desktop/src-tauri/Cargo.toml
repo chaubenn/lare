@@ -15,7 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["macos-private-api", "protocol-asset"] }
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
 tauri-plugin-shell = "2"
@@ -34,8 +34,14 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 futures-util = "0.3"
+futures = { workspace = true }
+anyhow = { workspace = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream", "json"] }
 
 lare-core = { path = "../../../crates/lare-core" }
+lare-recording = { path = "../../../crates/lare-recording" }
+lare-transcribe = { path = "../../../crates/lare-transcribe" }
+lare-bunny = { path = "../../../crates/lare-bunny" }
 
 [dev-dependencies]
 tokio-tungstenite = "0.30"

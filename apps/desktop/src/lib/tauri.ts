@@ -8,6 +8,7 @@ import { WS_PORT } from "@lare/shared";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type EventCallback, listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
+import type { RecorderEvents } from "./recorder";
 
 export const inTauri = isTauri();
 
@@ -42,12 +43,20 @@ export async function takeInitialDeeplink(): Promise<string | null> {
 }
 
 /** Payloads of the events emitted by the Rust side. */
-export interface TauriEvents {
+export interface TauriEvents extends RecorderEvents {
   "auth:callback": { code: string; next: string | null };
   "auth:error": { error: string; description: string | null };
   "ext:message": unknown;
   "ext:connected": boolean;
   "deeplink:navigate": string;
+}
+
+/** Which UI this webview should render: the app, or one of the mini overlay windows. */
+export type WindowKind = "main" | "recorder" | "camera";
+
+export function windowKind(): WindowKind {
+  const kind = new URLSearchParams(window.location.search).get("window");
+  return kind === "recorder" || kind === "camera" ? kind : "main";
 }
 
 /**

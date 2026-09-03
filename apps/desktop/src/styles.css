@@ -27,6 +27,14 @@ body {
   cursor: default;
 }
 
+/* Overlay windows (recorder pill, camera preview) sit on a transparent window. */
+html.overlay-window,
+html.overlay-window body,
+html.overlay-window #root {
+  background-color: transparent;
+  overflow: hidden;
+}
+
 input,
 textarea,
 select,

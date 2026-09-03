@@ -1,8 +1,11 @@
 //! Lare desktop (Tauri 2). Hosts the local server the Chrome extension talks to, the OAuth
 //! loopback redirect, deep links, and a handful of commands the React frontend calls.
 
+pub mod commands;
 pub mod deeplink;
+pub mod recorder;
 pub mod recording;
+pub mod windows;
 pub mod ws_server;
 
 use std::sync::{Arc, Mutex};
@@ -74,7 +77,7 @@ fn init_tracing() {
     let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
 }
 
-fn focus_main_window(app: &AppHandle) {
+pub fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -122,8 +125,7 @@ pub fn run() {
     let (hub, events) = WsHub::new();
     let current_user = Arc::new(Mutex::new(None));
     let server_ctx = ServerContext::new(hub.clone(), current_user.clone(), env!("CARGO_PKG_VERSION"));
-    // TODO(recording): register the recorder here once it exists, e.g.
-    // `server_ctx.set_recording_backend(Some(Arc::new(CapRecorder::new(...))))`.
+    let backend_ctx = server_ctx.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -146,14 +148,55 @@ pub fn run() {
             ws: hub,
             initial_deeplink: Mutex::new(None),
         })
+        .manage(commands::Jobs::default())
         .invoke_handler(tauri::generate_handler![
             set_current_user,
             ws_status,
             ws_send,
             app_version,
             take_initial_deeplink,
+            commands::list_devices,
+            commands::check_permissions,
+            commands::request_permission,
+            commands::permission_settings_url,
+            commands::recorder_settings,
+            commands::set_recorder_settings,
+            commands::recorder_status,
+            commands::recording_start,
+            commands::recording_pause,
+            commands::recording_resume,
+            commands::recording_stop,
+            commands::recording_cancel,
+            commands::recordings_list,
+            commands::recording_delete,
+            commands::open_recorder_window,
+            commands::close_recorder_window,
+            commands::open_camera_window,
+            commands::close_camera_window,
+            commands::resize_camera_window,
+            commands::focus_main,
+            commands::media_info,
+            commands::make_thumbnail,
+            commands::studio_project_info,
+            commands::export_studio,
+            commands::cancel_job,
+            commands::upload_to_bunny,
+            commands::remember_upload,
+            commands::whisper_models,
+            commands::ensure_whisper_model,
+            commands::transcribe_recording,
+            commands::read_file_bytes,
+            commands::delete_file,
+            commands::path_exists,
         ])
         .setup(move |app| {
+            // Recorder (Cap capture stack) shared by commands and the extension bridge.
+            let recorder = recorder::Recorder::new(app.handle().clone());
+            backend_ctx.set_recording_backend(Some(Arc::new(recorder::CapRecordingBackend::new(
+                recorder.clone(),
+            ))));
+            app.manage(recorder);
+
             // Deep links. macOS registers the scheme via the bundle's Info.plist; Windows/Linux
             // need a runtime registration for unpackaged (dev) builds.
             #[cfg(any(windows, target_os = "linux"))]
