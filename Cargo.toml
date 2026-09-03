@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
   "crates/lare-core",
+  "crates/lare-bunny",
+  "apps/desktop/src-tauri",
 ]
 # Added in later phases: "crates/lare-bunny", "crates/lare-transcribe",
 # "apps/desktop/src-tauri", "crates/cap/*" (vendored Cap crates).

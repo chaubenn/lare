@@ -1,0 +1,20 @@
+[package]
+name = "lare-bunny"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Resumable TUS uploads to Bunny Stream for the Lare desktop app."
+
+[dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream", "json"] }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+base64 = "0.22"
+
+[dev-dependencies]
+axum = { version = "0.8", features = ["http1", "tokio"] }
+tempfile = "3"
