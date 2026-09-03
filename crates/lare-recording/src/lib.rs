@@ -440,9 +440,7 @@ where
     }
     let base = builder.build().await.map_err(|e| anyhow!("export setup failed: {e}"))?;
     let total = base.total_frames(req.fps);
-    let (w, h) = req
-        .resolution_base
-        .unwrap_or_else(|| (1920, 1080));
+    let (w, h) = req.resolution_base.unwrap_or((1920, 1080));
     let settings = cap_export::mp4::Mp4ExportSettings {
         fps: req.fps,
         resolution_base: cap_project::XY::new(w, h),

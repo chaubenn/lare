@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  js:
+    name: TypeScript (lint, typecheck, unit, extension e2e, web build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm -r --if-present typecheck
+      - run: pnpm --filter @lare/shared test
+      - name: Extension e2e (Playwright + Monaco fixture)
+        working-directory: apps/extension
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm build:e2e
+          pnpm exec playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: extension-e2e-report
+          path: apps/extension/test-results
+      - name: Web build
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
+          NEXT_PUBLIC_SITE_URL: https://lare.vercel.app
+          NEXT_PUBLIC_BUNNY_LIBRARY_ID: "743884"
+        run: pnpm build
+      - name: Extension production build
+        working-directory: apps/extension
+        run: pnpm build && pnpm zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-chrome-mv3
+          path: apps/extension/.output/*.zip
+
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Native deps (prebuilt ffmpeg, cargo env)
+        run: node scripts/setup-native-deps.mjs
+      - name: cmake (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake || true
+      - name: Check
+        run: cargo check --workspace --all-targets
+      - name: Test (portable crates)
+        run: cargo test -p lare-core -p lare-bunny -p lare-transcribe
+      - name: Clippy (Lare crates)
+        run: cargo clippy -p lare-core -p lare-bunny -p lare-recording -p lare-transcribe -- -D warnings
