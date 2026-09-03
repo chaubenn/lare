@@ -1,0 +1,27 @@
+{
+  "name": "lare",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Hevy for LeetCode: log sessions, share demo videos, and get AI-graded mock interviews.",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @lare/web dev",
+    "dev:extension": "pnpm --filter @lare/extension dev",
+    "dev:desktop": "pnpm --filter @lare/desktop tauri dev",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "setup:native": "node scripts/setup-native-deps.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "typescript": "5.9.3"
+  }
+}

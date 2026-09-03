@@ -1,0 +1,35 @@
+{
+  "name": "@lare/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lare for LeetCode: session timer, problem/submission capture, mock-interview trigger.",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "typecheck": "wxt prepare && tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "@lare/shared": "workspace:*",
+    "@lare/supabase-types": "workspace:*",
+    "@supabase/supabase-js": "^2.115.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/chrome": "^0.1.0",
+    "@types/node": "^22.20.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@wxt-dev/module-react": "^1.1.0",
+    "typescript": "5.9.3",
+    "vitest": "^5.0.0",
+    "wxt": "^0.21.4"
+  }
+}

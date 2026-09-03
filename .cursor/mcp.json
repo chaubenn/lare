@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "url": "https://mcp.supabase.com/mcp?project_ref=jndqrvwkwoyvzoqcveev"
+    },
+    "bunny-docs": {
+      "url": "https://bunny.net/docs/mcp"
+    }
+  }
+}

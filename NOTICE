@@ -1,0 +1,16 @@
+Lare
+Copyright (c) 2026 Benjamin Chau
+
+Lare is licensed under the GNU Affero General Public License v3.0 (see LICENSE).
+
+This project vendors and adapts source code from Cap (https://github.com/CapSoftware/Cap),
+Copyright (c) 2023-present Cap Software, Inc.
+
+- Crates under crates/cap/ are copied from the Cap repository at the commit recorded in
+  crates/cap/UPSTREAM_COMMIT. Local modifications are listed in crates/cap/CHANGES.md.
+- Cap's `cap-camera*` and `scap-*` crate families are licensed under the MIT License
+  (see crates/cap/licenses/LICENSE-MIT). All other Cap code is licensed under AGPL-3.0.
+- Third-party components retain their original licenses.
+
+whisper.cpp (https://github.com/ggml-org/whisper.cpp) is used through the whisper-rs crate
+and is licensed under the MIT License.

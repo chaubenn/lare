@@ -1,0 +1,4 @@
+[toolchain]
+# Pinned to the toolchain used by the vendored Cap crates (crates/cap/*).
+channel = "1.88.0"
+components = ["rustfmt", "clippy"]
