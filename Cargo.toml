@@ -4,6 +4,8 @@ members = [
   "crates/lare-core",
   "crates/lare-bunny",
   "crates/lare-recording",
+  "crates/lare-transcribe",
+  "crates/lare-transcribe",
   "crates/cap/*",
   "apps/desktop/src-tauri",
 ]
