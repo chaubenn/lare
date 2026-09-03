@@ -28,9 +28,17 @@ export type IsolatedToMain =
   | { [BRIDGE_MARK]: 2; kind: "list-models" };
 
 export function isMainToIsolated(data: unknown): data is MainToIsolated {
-  return typeof data === "object" && data !== null && (data as Record<string, unknown>)[BRIDGE_MARK] === 1;
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    (data as Record<string, unknown>)[BRIDGE_MARK] === 1
+  );
 }
 
 export function isIsolatedToMain(data: unknown): data is IsolatedToMain {
-  return typeof data === "object" && data !== null && (data as Record<string, unknown>)[BRIDGE_MARK] === 2;
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    (data as Record<string, unknown>)[BRIDGE_MARK] === 2
+  );
 }

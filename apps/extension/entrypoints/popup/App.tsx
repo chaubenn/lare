@@ -16,7 +16,11 @@ export function App() {
   const refresh = useCallback(async () => {
     const res = await sendRuntime({ type: "GET_STATE" });
     if (res.ok && res.state) {
-      setSnap({ state: res.state, auth: res.auth ?? null, appConnected: res.appConnected ?? false });
+      setSnap({
+        state: res.state,
+        auth: res.auth ?? null,
+        appConnected: res.appConnected ?? false,
+      });
     }
   }, []);
 
@@ -24,13 +28,21 @@ export function App() {
     void refresh();
     void sendRuntime({ type: "PROBE_APP" }).then((res) => {
       if (res.ok && res.state) {
-        setSnap({ state: res.state, auth: res.auth ?? null, appConnected: res.appConnected ?? false });
+        setSnap({
+          state: res.state,
+          auth: res.auth ?? null,
+          appConnected: res.appConnected ?? false,
+        });
       }
     });
     const listener = (raw: unknown) => {
       const msg = raw as Partial<StateBroadcast>;
       if (msg?.type === "STATE_CHANGED" && msg.state) {
-        setSnap({ state: msg.state, auth: msg.auth ?? null, appConnected: msg.appConnected ?? false });
+        setSnap({
+          state: msg.state,
+          auth: msg.auth ?? null,
+          appConnected: msg.appConnected ?? false,
+        });
       }
     };
     chrome.runtime.onMessage.addListener(listener);
@@ -48,7 +60,11 @@ export function App() {
       const res = await fn();
       if (!res.ok) setError(res.error);
       else if (res.state) {
-        setSnap({ state: res.state, auth: res.auth ?? null, appConnected: res.appConnected ?? false });
+        setSnap({
+          state: res.state,
+          auth: res.auth ?? null,
+          appConnected: res.appConnected ?? false,
+        });
       }
       return res;
     } finally {
@@ -68,7 +84,10 @@ export function App() {
           <div className="title">Lare</div>
           <div className="subtitle">Hevy for LeetCode</div>
         </div>
-        <span className={`app-dot ${snap?.appConnected ? "on" : ""}`} title={snap?.appConnected ? "Desktop app connected" : "Desktop app not detected"} />
+        <span
+          className={`app-dot ${snap?.appConnected ? "on" : ""}`}
+          title={snap?.appConnected ? "Desktop app connected" : "Desktop app not detected"}
+        />
       </header>
 
       {error && <div className="error">{error}</div>}
@@ -78,10 +97,20 @@ export function App() {
       ) : !auth ? (
         <section className="card">
           <div className="card-title">Sign in</div>
-          <button type="button" className="btn" disabled={busy} onClick={() => void run(() => sendRuntime({ type: "SIGN_IN", provider: "github" }))}>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => void run(() => sendRuntime({ type: "SIGN_IN", provider: "github" }))}
+          >
             Continue with GitHub
           </button>
-          <button type="button" className="btn" disabled={busy} onClick={() => void run(() => sendRuntime({ type: "SIGN_IN", provider: "google" }))}>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => void run(() => sendRuntime({ type: "SIGN_IN", provider: "google" }))}
+          >
             Continue with Google
           </button>
           <div className="divider">or email</div>
@@ -90,10 +119,18 @@ export function App() {
               className="row"
               onSubmit={(e) => {
                 e.preventDefault();
-                void run(() => sendRuntime({ type: "SIGN_IN_OTP", email })).then((r) => r.ok && setOtpSent(true));
+                void run(() => sendRuntime({ type: "SIGN_IN_OTP", email })).then(
+                  (r) => r.ok && setOtpSent(true),
+                );
               }}
             >
-              <input type="email" required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input
+                type="email"
+                required
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
               <button type="submit" className="btn btn-sm" disabled={busy || !email}>
                 Send code
               </button>
@@ -106,7 +143,13 @@ export function App() {
                 void run(() => sendRuntime({ type: "VERIFY_OTP", email, token: otp.trim() }));
               }}
             >
-              <input inputMode="numeric" required placeholder="6-digit code" value={otp} onChange={(e) => setOtp(e.target.value)} />
+              <input
+                inputMode="numeric"
+                required
+                placeholder="6-digit code"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+              />
               <button type="submit" className="btn btn-sm" disabled={busy || otp.trim().length < 6}>
                 Verify
               </button>
@@ -116,12 +159,25 @@ export function App() {
       ) : (
         <>
           <section className="card user">
-            {auth.avatarUrl ? <img src={auth.avatarUrl} alt="" className="avatar" /> : <div className="avatar" />}
+            {auth.avatarUrl ? (
+              <img src={auth.avatarUrl} alt="" className="avatar" />
+            ) : (
+              <div className="avatar" />
+            )}
             <div className="grow">
-              <div className="name">{auth.displayName ?? auth.handle ?? auth.email ?? "Signed in"}</div>
-              <div className="muted">{auth.handle ? `@${auth.handle}` : "Set a handle in the app"}</div>
+              <div className="name">
+                {auth.displayName ?? auth.handle ?? auth.email ?? "Signed in"}
+              </div>
+              <div className="muted">
+                {auth.handle ? `@${auth.handle}` : "Set a handle in the app"}
+              </div>
             </div>
-            <button type="button" className="link" disabled={busy || !!session} onClick={() => void run(() => sendRuntime({ type: "SIGN_OUT" }))}>
+            <button
+              type="button"
+              className="link"
+              disabled={busy || !!session}
+              onClick={() => void run(() => sendRuntime({ type: "SIGN_OUT" }))}
+            >
               Sign out
             </button>
           </section>
@@ -130,7 +186,11 @@ export function App() {
             {session ? (
               <>
                 <div className="card-title">
-                  {session.kind === "interview" ? "Mock interview" : session.scope === "session" ? "Practice session" : "Practice problem"}
+                  {session.kind === "interview"
+                    ? "Mock interview"
+                    : session.scope === "session"
+                      ? "Practice session"
+                      : "Practice problem"}
                   <span className={`badge ${status}`}>{status}</span>
                 </div>
                 <div className="timer">{formatDuration(activeMs(session.events, Date.now()))}</div>
@@ -139,23 +199,41 @@ export function App() {
                     <li key={p.sessionProblemId}>
                       <span>{p.problem.title}</span>
                       <span className="muted">
-                        {p.submissions.filter((s) => s.accepted).length}/{p.submissions.length} accepted
+                        {p.submissions.filter((s) => s.accepted).length}/{p.submissions.length}{" "}
+                        accepted
                       </span>
                     </li>
                   ))}
-                  {session.problems.length === 0 && <li className="muted">Open a problem to start tracking</li>}
+                  {session.problems.length === 0 && (
+                    <li className="muted">Open a problem to start tracking</li>
+                  )}
                 </ul>
                 <div className="row">
                   {status === "running" ? (
-                    <button type="button" className="btn" disabled={busy} onClick={() => void run(() => sendRuntime({ type: "PAUSE_SESSION" }))}>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={busy}
+                      onClick={() => void run(() => sendRuntime({ type: "PAUSE_SESSION" }))}
+                    >
                       Pause
                     </button>
                   ) : (
-                    <button type="button" className="btn" disabled={busy} onClick={() => void run(() => sendRuntime({ type: "RESUME_SESSION" }))}>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={busy}
+                      onClick={() => void run(() => sendRuntime({ type: "RESUME_SESSION" }))}
+                    >
                       Resume
                     </button>
                   )}
-                  <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void run(() => sendRuntime({ type: "END_SESSION" }))}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busy}
+                    onClick={() => void run(() => sendRuntime({ type: "END_SESSION" }))}
+                  >
                     End &amp; save
                   </button>
                 </div>
@@ -163,13 +241,20 @@ export function App() {
             ) : (
               <>
                 <div className="card-title">No active session</div>
-                <p className="muted">Open a LeetCode problem and use the Lare button in the bottom-right corner to start.</p>
+                <p className="muted">
+                  Open a LeetCode problem and use the Lare button in the bottom-right corner to
+                  start.
+                </p>
               </>
             )}
           </section>
 
           <section className="links">
-            <button type="button" className="link" onClick={() => void sendRuntime({ type: "OPEN_APP" })}>
+            <button
+              type="button"
+              className="link"
+              onClick={() => void sendRuntime({ type: "OPEN_APP" })}
+            >
               Open desktop app
             </button>
             <a href={SITE_URL} target="_blank" rel="noreferrer" className="link">

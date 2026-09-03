@@ -33,7 +33,9 @@ export async function saveState(state: ExtensionState): Promise<void> {
  */
 let chain: Promise<unknown> = Promise.resolve();
 export function withState<T>(
-  fn: (state: ExtensionState) => Promise<{ state: ExtensionState; result: T }> | { state: ExtensionState; result: T },
+  fn: (
+    state: ExtensionState,
+  ) => Promise<{ state: ExtensionState; result: T }> | { state: ExtensionState; result: T },
 ): Promise<T> {
   const run = chain.then(async () => {
     const current = await loadState();

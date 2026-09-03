@@ -5,13 +5,13 @@
 import {
   type Distribution,
   LEETCODE_STATUS,
+  parseDistribution,
   QUESTION_QUERY,
   type Question,
   QuestionResponseSchema,
   SUBMISSION_DETAILS_QUERY,
   type SubmissionDetails,
   SubmissionDetailsResponseSchema,
-  parseDistribution,
 } from "@lare/shared";
 
 function csrfToken(): string | null {
@@ -86,7 +86,11 @@ export async function fetchSubmissionDetails(
   };
 }
 
-export function statusLabel(code: number | null | undefined, fallback: string | null): string | null {
-  if (code !== null && code !== undefined && LEETCODE_STATUS[code]) return LEETCODE_STATUS[code] ?? fallback;
+export function statusLabel(
+  code: number | null | undefined,
+  fallback: string | null,
+): string | null {
+  if (code !== null && code !== undefined && LEETCODE_STATUS[code])
+    return LEETCODE_STATUS[code] ?? fallback;
   return fallback;
 }

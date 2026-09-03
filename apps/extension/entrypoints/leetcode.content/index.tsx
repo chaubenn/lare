@@ -5,7 +5,7 @@ import "./overlay.css";
 
 const MATCHES = ["https://leetcode.com/problems/*", "https://leetcode.com/contest/*/problems/*"];
 const fixtureOrigin = import.meta.env.WXT_DEV_FIXTURE_ORIGIN;
-if (import.meta.env.DEV && fixtureOrigin) MATCHES.push(`${fixtureOrigin}/*`);
+if (import.meta.env.MODE !== "production" && fixtureOrigin) MATCHES.push(`${fixtureOrigin}/*`);
 
 export default defineContentScript({
   matches: MATCHES,

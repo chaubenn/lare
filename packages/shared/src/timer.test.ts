@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type TimerEvent, activeMs, problemActiveMs, timerStatus } from "./timer";
+import { activeMs, problemActiveMs, type TimerEvent, timerStatus } from "./timer";
 
 const e = (t: number, type: TimerEvent["type"], slug?: string): TimerEvent =>
   slug ? { t, type, slug } : { t, type };

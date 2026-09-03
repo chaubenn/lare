@@ -3,18 +3,13 @@
  * `window.monaco` and observe the judge endpoints. It has no chrome.* access and
  * forwards everything to the isolated content script via window.postMessage.
  */
-import {
-  SNAPSHOT_EVERY_EVENTS,
-  SNAPSHOT_EVERY_MS,
-  isCheckUrl,
-  isSubmitUrl,
-} from "@lare/shared";
+import { isCheckUrl, isSubmitUrl, SNAPSHOT_EVERY_EVENTS, SNAPSHOT_EVERY_MS } from "@lare/shared";
 import {
   BRIDGE_MARK,
   type DistributiveOmit,
   type IsolatedToMain,
-  type MainToIsolated,
   isIsolatedToMain,
+  type MainToIsolated,
 } from "@/src/bridge";
 
 // Minimal structural types for the parts of Monaco we touch.
@@ -45,7 +40,7 @@ interface MonacoNamespace {
 
 const MATCHES = ["https://leetcode.com/problems/*", "https://leetcode.com/contest/*/problems/*"];
 const fixtureOrigin = import.meta.env.WXT_DEV_FIXTURE_ORIGIN;
-if (import.meta.env.DEV && fixtureOrigin) MATCHES.push(`${fixtureOrigin}/*`);
+if (import.meta.env.MODE !== "production" && fixtureOrigin) MATCHES.push(`${fixtureOrigin}/*`);
 
 export default defineContentScript({
   matches: MATCHES,
@@ -76,11 +71,19 @@ export default defineContentScript({
     };
 
     const originalFetch = window.fetch;
-    window.fetch = async function lareFetch(this: unknown, input: RequestInfo | URL, init?: RequestInit) {
+    window.fetch = async function lareFetch(
+      this: unknown,
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) {
       const res = await originalFetch.call(this, input, init);
       try {
         const url =
-          typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : (input as Request).url;
         const abs = absolute(url);
         if (isSubmitUrl(abs) || isCheckUrl(abs)) {
           res
@@ -97,11 +100,17 @@ export default defineContentScript({
 
     const xhrOpen = XMLHttpRequest.prototype.open;
     const xhrSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function lareOpen(this: XMLHttpRequest & { __lareUrl?: string }, ...args: unknown[]) {
+    XMLHttpRequest.prototype.open = function lareOpen(
+      this: XMLHttpRequest & { __lareUrl?: string },
+      ...args: unknown[]
+    ) {
       this.__lareUrl = String(args[1] ?? "");
       return (xhrOpen as (...a: unknown[]) => void).apply(this, args);
     } as typeof XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.send = function lareSend(this: XMLHttpRequest & { __lareUrl?: string }, body?: Document | XMLHttpRequestBodyInit | null) {
+    XMLHttpRequest.prototype.send = function lareSend(
+      this: XMLHttpRequest & { __lareUrl?: string },
+      body?: Document | XMLHttpRequestBodyInit | null,
+    ) {
       this.addEventListener("load", () => {
         const url = this.__lareUrl;
         if (!url) return;
@@ -121,7 +130,10 @@ export default defineContentScript({
     const notifyRoute = () => post({ kind: "route", url: window.location.href });
     const wrapHistory = (name: "pushState" | "replaceState") => {
       const original = history[name];
-      history[name] = function lareHistory(this: History, ...args: Parameters<History["pushState"]>) {
+      history[name] = function lareHistory(
+        this: History,
+        ...args: Parameters<History["pushState"]>
+      ) {
         const result = original.apply(this, args);
         queueMicrotask(notifyRoute);
         return result;
@@ -164,7 +176,8 @@ export default defineContentScript({
         const c = counters.get(model) ?? { events: 0, lastSnapshotAt: 0 };
         c.events += 1;
         const now = Date.now();
-        const snapshot = c.events >= SNAPSHOT_EVERY_EVENTS || now - c.lastSnapshotAt >= SNAPSHOT_EVERY_MS;
+        const snapshot =
+          c.events >= SNAPSHOT_EVERY_EVENTS || now - c.lastSnapshotAt >= SNAPSHOT_EVERY_MS;
         if (snapshot) {
           c.events = 0;
           c.lastSnapshotAt = now;
@@ -173,7 +186,9 @@ export default defineContentScript({
         const event = {
           t: now,
           v: e.versionId,
-          c: e.changes.map((ch) => [ch.rangeOffset, ch.rangeLength, ch.text] as [number, number, string]),
+          c: e.changes.map(
+            (ch) => [ch.rangeOffset, ch.rangeLength, ch.text] as [number, number, string],
+          ),
           ...(snapshot ? { full: model.getValue() } : {}),
         };
         post({

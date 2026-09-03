@@ -1,10 +1,10 @@
 import {
   type AppToExt,
+  decodeAppToExt,
   type ExtToApp,
+  encode,
   PROTOCOL_VERSION,
   WS_URL,
-  decodeAppToExt,
-  encode,
 } from "@lare/shared";
 
 type HelloAck = Extract<AppToExt, { type: "hello.ack" }>;
@@ -70,13 +70,20 @@ export class DesktopClient {
       ws.addEventListener("close", onError);
       ws.addEventListener("open", () => {
         ws.send(
-          encode({ type: "hello", protocol: PROTOCOL_VERSION, extVersion: __EXT_VERSION__, userId }),
+          encode({
+            type: "hello",
+            protocol: PROTOCOL_VERSION,
+            extVersion: __EXT_VERSION__,
+            userId,
+          }),
         );
       });
     });
     if (ack.protocol !== PROTOCOL_VERSION) {
       ws.close();
-      throw new Error(`Lare desktop app uses protocol v${ack.protocol}; update the extension or app`);
+      throw new Error(
+        `Lare desktop app uses protocol v${ack.protocol}; update the extension or app`,
+      );
     }
     this.helloAck = ack;
     ws.addEventListener("message", (ev) => {

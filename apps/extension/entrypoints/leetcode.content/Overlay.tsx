@@ -22,6 +22,14 @@ export function Overlay({ controller }: { controller: PageController }) {
     if (open && !session) void controller.probeApp();
   }, [open, session, controller]);
 
+  // Collapse the launcher whenever a session starts or ends.
+  const sessionId = session?.sessionId ?? null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is the trigger, not a value used inside
+  useEffect(() => {
+    setOpen(false);
+    setConfirmEnd(false);
+  }, [sessionId]);
+
   const status = session ? timerStatus(session.events) : "idle";
   const elapsed = session ? activeMs(session.events, Date.now()) : 0;
   const appConnected = page.snapshot?.appConnected ?? false;
@@ -41,15 +49,29 @@ export function Overlay({ controller }: { controller: PageController }) {
         <div className={`lare-pill lare-pill--active ${status === "paused" ? "is-paused" : ""}`}>
           <span className={`lare-dot ${session.kind === "interview" ? "lare-dot--rec" : ""}`} />
           <span className="lare-kind">
-            {session.kind === "interview" ? "Interview" : session.scope === "session" ? "Session" : "Problem"}
+            {session.kind === "interview"
+              ? "Interview"
+              : session.scope === "session"
+                ? "Session"
+                : "Problem"}
           </span>
           <span className="lare-time">{formatDuration(elapsed)}</span>
           {status === "running" ? (
-            <button type="button" className="lare-btn" onClick={() => void controller.pause()} disabled={page.busy}>
+            <button
+              type="button"
+              className="lare-btn"
+              onClick={() => void controller.pause()}
+              disabled={page.busy}
+            >
               Pause
             </button>
           ) : (
-            <button type="button" className="lare-btn" onClick={() => void controller.resume()} disabled={page.busy}>
+            <button
+              type="button"
+              className="lare-btn"
+              onClick={() => void controller.resume()}
+              disabled={page.busy}
+            >
               Resume
             </button>
           )}
@@ -71,7 +93,12 @@ export function Overlay({ controller }: { controller: PageController }) {
               </button>
             </>
           ) : (
-            <button type="button" className="lare-btn lare-btn--primary" onClick={() => setConfirmEnd(true)} disabled={page.busy}>
+            <button
+              type="button"
+              className="lare-btn lare-btn--primary"
+              onClick={() => setConfirmEnd(true)}
+              disabled={page.busy}
+            >
               End
             </button>
           )}
@@ -91,20 +118,34 @@ export function Overlay({ controller }: { controller: PageController }) {
               {!auth ? (
                 <>
                   <div className="lare-menu-title">Sign in to Lare</div>
-                  <button type="button" className="lare-menu-item" onClick={() => void controller.signIn("github")} disabled={page.busy}>
+                  <button
+                    type="button"
+                    className="lare-menu-item"
+                    onClick={() => void controller.signIn("github")}
+                    disabled={page.busy}
+                  >
                     Continue with GitHub
                   </button>
-                  <button type="button" className="lare-menu-item" onClick={() => void controller.signIn("google")} disabled={page.busy}>
+                  <button
+                    type="button"
+                    className="lare-menu-item"
+                    onClick={() => void controller.signIn("google")}
+                    disabled={page.busy}
+                  >
                     Continue with Google
                   </button>
-                  <div className="lare-menu-hint">Or use the extension popup for email sign-in.</div>
+                  <div className="lare-menu-hint">
+                    Or use the extension popup for email sign-in.
+                  </div>
                 </>
               ) : (
                 <>
                   <div className="lare-menu-title">
                     {page.problem ? page.problem.title : "Open a problem to start"}
                     {page.problem?.difficulty && (
-                      <span className={`lare-diff lare-diff--${page.problem.difficulty.toLowerCase()}`}>
+                      <span
+                        className={`lare-diff lare-diff--${page.problem.difficulty.toLowerCase()}`}
+                      >
                         {page.problem.difficulty}
                       </span>
                     )}
@@ -131,20 +172,32 @@ export function Overlay({ controller }: { controller: PageController }) {
                     type="button"
                     className="lare-menu-item lare-menu-item--interview"
                     disabled={page.busy || !onProblemPage || !appConnected}
-                    title={appConnected ? "" : "Open the Lare desktop app to record a mock interview"}
+                    title={
+                      appConnected ? "" : "Open the Lare desktop app to record a mock interview"
+                    }
                     onClick={() => void controller.start("interview", "problem", facecam)}
                   >
                     <strong>Mock interview</strong>
                     <span>
-                      {appConnected ? "Records screen + mic, AI review after" : "Lare desktop app not detected"}
+                      {appConnected
+                        ? "Records screen + mic, AI review after"
+                        : "Lare desktop app not detected"}
                     </span>
                   </button>
                   <label className="lare-check">
-                    <input type="checkbox" checked={facecam} onChange={(e) => setFacecam(e.target.checked)} />
+                    <input
+                      type="checkbox"
+                      checked={facecam}
+                      onChange={(e) => setFacecam(e.target.checked)}
+                    />
                     Include facecam
                   </label>
                   {!appConnected && (
-                    <button type="button" className="lare-link" onClick={() => void controller.probeApp()}>
+                    <button
+                      type="button"
+                      className="lare-link"
+                      onClick={() => void controller.probeApp()}
+                    >
                       Retry app detection
                     </button>
                   )}
@@ -152,7 +205,12 @@ export function Overlay({ controller }: { controller: PageController }) {
               )}
             </div>
           )}
-          <button type="button" className="lare-fab" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          <button
+            type="button"
+            className="lare-fab"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+          >
             <span className="lare-fab-logo">L</span>
             <span>Lare</span>
           </button>

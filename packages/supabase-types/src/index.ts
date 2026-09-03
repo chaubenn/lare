@@ -1,4 +1,4 @@
-export type { Database, Json, Tables, TablesInsert, TablesUpdate, Enums } from "./database.types";
+export type { Database, Enums, Json, Tables, TablesInsert, TablesUpdate } from "./database.types";
 export { Constants } from "./database.types";
 
 import type { Database } from "./database.types";

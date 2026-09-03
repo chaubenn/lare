@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { type EditEvent, applyEvent, checkpoints, codeAt, finalCode, lineDiff, shouldSnapshot } from "./edits";
+import {
+  applyEvent,
+  checkpoints,
+  codeAt,
+  type EditEvent,
+  finalCode,
+  lineDiff,
+  shouldSnapshot,
+} from "./edits";
 
 const ev = (t: number, v: number, c: EditEvent["c"], full?: string): EditEvent =>
   full === undefined ? { t, v, c } : { t, v, c, full };
@@ -24,7 +32,15 @@ describe("applyEvent", () => {
     expect(applyEvent("ab", forward)).toBe("1a1b");
     expect(applyEvent("ab", backward)).toBe("1a1b");
     // Offsets always refer to the text before the event: 2 is the end of "ab".
-    expect(applyEvent("ab", ev(0, 2, [[0, 0, "1"], [2, 0, "1"]]))).toBe("1ab1");
+    expect(
+      applyEvent(
+        "ab",
+        ev(0, 2, [
+          [0, 0, "1"],
+          [2, 0, "1"],
+        ]),
+      ),
+    ).toBe("1ab1");
   });
 
   it("a snapshot event replaces the text wholesale", () => {
@@ -82,7 +98,11 @@ describe("codeAt", () => {
       const insert = rand() < 0.7 ? String.fromCharCode(97 + Math.floor(rand() * 26)) : "";
       text = text.slice(0, offset) + insert + text.slice(offset + length);
       const snapshot = i % 50 === 0;
-      evs.push(snapshot ? ev(i * 100, i, [[offset, length, insert]], text) : ev(i * 100, i, [[offset, length, insert]]));
+      evs.push(
+        snapshot
+          ? ev(i * 100, i, [[offset, length, insert]], text)
+          : ev(i * 100, i, [[offset, length, insert]]),
+      );
     }
     expect(finalCode(evs)).toBe(text);
     expect(codeAt(evs, 12_000)).toBe(codeAt(evs.slice(0, 121), 12_000));

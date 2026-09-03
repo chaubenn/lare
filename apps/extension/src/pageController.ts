@@ -4,19 +4,19 @@
  * the service worker, and exposes state/actions to the overlay UI.
  */
 import {
+  CheckResponseSchema,
   type EditEvent,
-  type ProblemInfo,
   isAccepted,
   isFinalCheck,
+  type ProblemInfo,
   parseMemoryMb,
   parseRuntimeMs,
   problemSlugFromUrl,
   problemUrl,
-  submissionIdFromUrl,
-  CheckResponseSchema,
   SubmitResponseSchema,
+  submissionIdFromUrl,
 } from "@lare/shared";
-import { BRIDGE_MARK, type MainToIsolated, isMainToIsolated } from "./bridge";
+import { BRIDGE_MARK, isMainToIsolated, type MainToIsolated } from "./bridge";
 import { fetchQuestion, fetchSubmissionDetails, statusLabel } from "./leetcodeApi";
 import {
   type CapturedSubmission,
@@ -65,6 +65,11 @@ export class PageController {
   private buffer: EditEvent[] = [];
   private bufferLanguage: string | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True until the first event with a full snapshot has been captured for the current
+   *  (session, problem) pair, so a log can always be replayed from its first event. */
+  private needsSnapshot = true;
+  private lastSnapshotRequestAt = 0;
+  private trackedSessionId: string | null = null;
 
   // Judge bookkeeping
   private pendingSubmissionIds = new Set<number>();
@@ -100,7 +105,27 @@ export class PageController {
 
   private set(patch: Partial<PageState>) {
     this.state = { ...this.state, ...patch };
+    const sessionId = this.state.snapshot?.state.session?.sessionId ?? null;
+    if (sessionId !== this.trackedSessionId) {
+      this.trackedSessionId = sessionId;
+      this.buffer = [];
+      if (sessionId) {
+        this.needsSnapshot = true;
+        this.requestSnapshot();
+      }
+    }
     for (const l of this.listeners) l();
+  }
+
+  private requestSnapshot() {
+    if (!this.primaryModelId) return;
+    const now = Date.now();
+    if (now - this.lastSnapshotRequestAt < 500) return;
+    this.lastSnapshotRequestAt = now;
+    window.postMessage(
+      { [BRIDGE_MARK]: 2, kind: "request-snapshot", modelId: this.primaryModelId },
+      window.location.origin,
+    );
   }
 
   toast(kind: Toast["kind"], text: string) {
@@ -113,14 +138,26 @@ export class PageController {
   async refresh(): Promise<void> {
     const res = await sendRuntime({ type: "GET_STATE" });
     if (res.ok && res.state) {
-      this.set({ snapshot: { state: res.state, auth: res.auth ?? null, appConnected: res.appConnected ?? false } });
+      this.set({
+        snapshot: {
+          state: res.state,
+          auth: res.auth ?? null,
+          appConnected: res.appConnected ?? false,
+        },
+      });
     }
   }
 
   async probeApp(): Promise<boolean> {
     const res = await sendRuntime({ type: "PROBE_APP" });
     if (res.ok && res.state) {
-      this.set({ snapshot: { state: res.state, auth: res.auth ?? null, appConnected: res.appConnected ?? false } });
+      this.set({
+        snapshot: {
+          state: res.state,
+          auth: res.auth ?? null,
+          appConnected: res.appConnected ?? false,
+        },
+      });
     }
     return res.ok ? (res.appConnected ?? false) : false;
   }
@@ -128,7 +165,13 @@ export class PageController {
   private onRuntimeMessage = (raw: unknown) => {
     const msg = raw as Partial<StateBroadcast>;
     if (msg?.type !== "STATE_CHANGED" || !msg.state) return;
-    this.set({ snapshot: { state: msg.state, auth: msg.auth ?? null, appConnected: msg.appConnected ?? false } });
+    this.set({
+      snapshot: {
+        state: msg.state,
+        auth: msg.auth ?? null,
+        appConnected: msg.appConnected ?? false,
+      },
+    });
     if (msg.toast) this.toast(msg.toast.kind, msg.toast.text);
   };
 
@@ -138,7 +181,13 @@ export class PageController {
       const res = await fn();
       if (!res.ok) this.toast("error", res.error);
       else if (res.state) {
-        this.set({ snapshot: { state: res.state, auth: res.auth ?? null, appConnected: res.appConnected ?? false } });
+        this.set({
+          snapshot: {
+            state: res.state,
+            auth: res.auth ?? null,
+            appConnected: res.appConnected ?? false,
+          },
+        });
       }
       return res;
     } finally {
@@ -155,7 +204,8 @@ export class PageController {
   pause = () => this.run(() => sendRuntime({ type: "PAUSE_SESSION" }));
   resume = () => this.run(() => sendRuntime({ type: "RESUME_SESSION" }));
   end = () => this.run(() => sendRuntime({ type: "END_SESSION" }));
-  signIn = (provider: "github" | "google") => this.run(() => sendRuntime({ type: "SIGN_IN", provider }));
+  signIn = (provider: "github" | "google") =>
+    this.run(() => sendRuntime({ type: "SIGN_IN", provider }));
   openApp = () => sendRuntime({ type: "OPEN_APP" });
 
   // ---- problem detection ---------------------------------------------------
@@ -170,6 +220,7 @@ export class PageController {
     // Reset Monaco bookkeeping for the new problem.
     this.primaryModelId = null;
     this.buffer = [];
+    this.needsSnapshot = true;
     const question = await fetchQuestion(slug);
     if (this.disposed || problemSlugFromUrl(window.location.href) !== slug) return;
     const problem: ProblemInfo = {
@@ -228,11 +279,25 @@ export class PageController {
       if (!(msg.focused && hasRealChange)) return;
       // Switch primary model: ask for a fresh snapshot so replay has a base.
       this.primaryModelId = msg.modelId;
-      window.postMessage({ [BRIDGE_MARK]: 2, kind: "request-snapshot", modelId: msg.modelId }, window.location.origin);
+      this.needsSnapshot = true;
+      this.lastSnapshotRequestAt = 0;
+      this.requestSnapshot();
+      return;
     }
     if (!this.state.snapshot?.state.session) return;
+    let events = msg.events;
+    if (this.needsSnapshot) {
+      const idx = events.findIndex((e) => e.full !== undefined);
+      if (idx === -1) {
+        // Deltas without a base are useless for replay; ask for a snapshot and drop them.
+        this.requestSnapshot();
+        return;
+      }
+      events = events.slice(idx);
+      this.needsSnapshot = false;
+    }
     this.bufferLanguage = msg.language;
-    this.buffer.push(...msg.events);
+    this.buffer.push(...events);
     if (this.buffer.length >= 50) this.flush();
     else if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flush(), FLUSH_MS);
   }
@@ -265,7 +330,8 @@ export class PageController {
     if (!Number.isFinite(id) || this.handledSubmissionIds.has(id)) return;
     // Only capture real submissions (not "Run" interpretations) when we saw the submit call,
     // or when the check payload carries judge totals (submissions do, test runs don't).
-    const looksLikeSubmission = this.pendingSubmissionIds.has(id) || typeof check.total_testcases === "number";
+    const looksLikeSubmission =
+      this.pendingSubmissionIds.has(id) || typeof check.total_testcases === "number";
     if (!looksLikeSubmission) return;
     this.handledSubmissionIds.add(id);
     this.pendingSubmissionIds.delete(id);
@@ -283,7 +349,10 @@ export class PageController {
       submittedAt: Date.now(),
       lang: details?.lang?.name ?? check.lang ?? null,
       langVerbose: details?.lang?.verboseName ?? check.pretty_lang ?? null,
-      statusDisplay: statusLabel(details?.statusCode ?? check.status_code, check.status_msg ?? null),
+      statusDisplay: statusLabel(
+        details?.statusCode ?? check.status_code,
+        check.status_msg ?? null,
+      ),
       statusCode: details?.statusCode ?? check.status_code ?? null,
       accepted,
       runtimeMs: details?.runtime ?? parseRuntimeMs(check.status_runtime ?? check.display_runtime),

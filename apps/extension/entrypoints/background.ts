@@ -1,10 +1,10 @@
 import {
   type ActiveSession,
   type AppToExt,
+  activeMs,
   type EditEvent,
   type ProblemInfo,
   type TrackedProblem,
-  activeMs,
   timerStatus,
 } from "@lare/shared";
 import { getAuthInfo, signInWithOtp, signInWithProvider, signOut, verifyOtp } from "@/src/auth";
@@ -220,7 +220,10 @@ async function startSession(
     await withState(async (s) => {
       if (!s.session || s.session.sessionId !== sessionId) return { state: s, result: undefined };
       const problems = s.session.problems.map((p) => ({ ...p, synced: true }));
-      return { state: { ...s, session: { ...s.session, synced: true, problems } }, result: undefined };
+      return {
+        state: { ...s, session: { ...s.session, synced: true, problems } },
+        result: undefined,
+      };
     });
   } catch (e) {
     console.warn("[lare] initial sync failed", e);
@@ -286,7 +289,11 @@ async function endSession(): Promise<RuntimeResponse> {
     }
     postId = await finalizeSession(session, userId, now);
     await withState(async (s) => ({
-      state: { ...s, session: null, pendingSync: s.pendingSync.filter((id) => id !== session.sessionId) },
+      state: {
+        ...s,
+        session: null,
+        pendingSync: s.pendingSync.filter((id) => id !== session.sessionId),
+      },
       result: undefined,
     }));
     await broadcast({ kind: "success", text: "Session saved. Draft is ready in Lare." });
@@ -328,7 +335,10 @@ async function problemOpened(
     }
     if (session.scope === "problem") {
       // Single-problem sessions ignore navigation to other problems.
-      return { state: { ...s, session: { ...session, currentSlug: session.currentSlug } }, result: null };
+      return {
+        state: { ...s, session: { ...session, currentSlug: session.currentSlug } },
+        result: null,
+      };
     }
     const events = [...session.events];
     let closed: TrackedProblem | null = null;
@@ -342,7 +352,8 @@ async function problemOpened(
         problems.push(p);
       }
     }
-    if (session.currentSlug) events.push({ t: now, type: "problem_close", slug: session.currentSlug });
+    if (session.currentSlug)
+      events.push({ t: now, type: "problem_close", slug: session.currentSlug });
     const existing = problems.find((p) => p.problem.slug === problem.slug);
     let opened: TrackedProblem;
     if (existing) {
@@ -364,7 +375,10 @@ async function problemOpened(
     }
     events.push({ t: now, type: "problem_open", slug: problem.slug });
     const next: ActiveSession = { ...session, events, problems, currentSlug: problem.slug };
-    return { state: { ...s, session: next }, result: { session: next, closed, opened, isNew: !existing } };
+    return {
+      state: { ...s, session: next },
+      result: { session: next, closed, opened, isNew: !existing },
+    };
   });
 
   if (change) {
@@ -380,7 +394,11 @@ async function problemOpened(
     }
     (async () => {
       if (closed) {
-        await syncTimerEvent(session.sessionId, { t: now, type: "problem_close", slug: closed.problem.slug });
+        await syncTimerEvent(session.sessionId, {
+          t: now,
+          type: "problem_close",
+          slug: closed.problem.slug,
+        });
         await syncProblemClose(session, closed, now);
       }
       if (isNew) {
@@ -393,7 +411,11 @@ async function problemOpened(
           return { state: { ...s, session: { ...s.session, problems } }, result: undefined };
         });
       } else {
-        await syncTimerEvent(session.sessionId, { t: now, type: "problem_open", slug: problem.slug });
+        await syncTimerEvent(session.sessionId, {
+          t: now,
+          type: "problem_open",
+          slug: problem.slug,
+        });
       }
     })().catch((e) => console.warn("[lare] problem sync failed", e));
     await broadcast();
@@ -401,7 +423,11 @@ async function problemOpened(
   return { ok: true, ...(await snapshot()) };
 }
 
-async function edits(slug: string, language: string | null, events: EditEvent[]): Promise<RuntimeResponse> {
+async function edits(
+  slug: string,
+  language: string | null,
+  events: EditEvent[],
+): Promise<RuntimeResponse> {
   if (events.length === 0) return { ok: true };
   const target = await withState(async (s) => {
     const session = s.session;
@@ -449,7 +475,14 @@ async function submission(slug: string, sub: CapturedSubmission): Promise<Runtim
   });
   if (!target) return { ok: true };
   if (target.session.kind === "interview") {
-    const { runtimeDistribution: _r, memoryDistribution: _m, langVerbose: _l, runtimeDisplay: _rd, memoryDisplay: _md, ...info } = sub;
+    const {
+      runtimeDistribution: _r,
+      memoryDistribution: _m,
+      langVerbose: _l,
+      runtimeDisplay: _rd,
+      memoryDisplay: _md,
+      ...info
+    } = sub;
     desktop.send({
       type: "submission",
       sessionId: target.session.sessionId,
@@ -513,7 +546,11 @@ async function resumeAfterRestart(): Promise<void> {
 // ---------------------------------------------------------------------------
 async function snapshot(): Promise<RuntimeSnapshot> {
   const [state, auth] = await Promise.all([loadState(), getAuthInfo().catch(() => null)]);
-  return { state: { ...state, appConnected: desktop.connected }, auth, appConnected: desktop.connected };
+  return {
+    state: { ...state, appConnected: desktop.connected },
+    auth,
+    appConnected: desktop.connected,
+  };
 }
 
 async function broadcast(toast?: StateBroadcast["toast"]): Promise<void> {

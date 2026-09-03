@@ -114,7 +114,8 @@ describe("distribution", () => {
 
 describe("excerptFromHtml", () => {
   it("strips tags and entities and truncates", () => {
-    const html = "<p>Given an array of integers <code>nums</code>&nbsp;and an integer <code>target</code>.</p>";
+    const html =
+      "<p>Given an array of integers <code>nums</code>&nbsp;and an integer <code>target</code>.</p>";
     expect(excerptFromHtml(html)).toBe("Given an array of integers nums and an integer target .");
     expect(excerptFromHtml(html, 12)).toBe("Given an ar…");
     expect(excerptFromHtml(null)).toBe("");

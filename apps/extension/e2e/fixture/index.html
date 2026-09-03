@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Two Sum - LeetCode</title>
+    <link rel="stylesheet" data-name="vs/editor/editor.main" href="/vs/editor/editor.main.css" />
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; background: #1a1a1a; color: #eee; }
+      #editor { height: 320px; border: 1px solid #444; }
+      #tc { height: 80px; border: 1px solid #444; margin-top: 12px; }
+      button { margin-top: 12px; padding: 8px 14px; }
+    </style>
+  </head>
+  <body>
+    <h1>1. Two Sum</h1>
+    <p>Fixture page standing in for leetcode.com. Monaco is real; the judge is mocked by server.mjs.</p>
+    <div id="editor"></div>
+    <div id="tc"></div>
+    <button id="run" type="button">Run</button>
+    <button id="submit" type="button">Submit</button>
+    <pre id="result" data-testid="result"></pre>
+
+    <script src="/vs/loader.js"></script>
+    <script>
+      require.config({ paths: { vs: "/vs" } });
+      require(["vs/editor/editor.main"], () => {
+        window.editor = monaco.editor.create(document.getElementById("editor"), {
+          value: "class Solution:\n    def twoSum(self, nums, target):\n        pass\n",
+          language: "python",
+          theme: "vs-dark",
+          minimap: { enabled: false },
+        });
+        // A plaintext testcase editor, which the extension must ignore.
+        window.tc = monaco.editor.create(document.getElementById("tc"), {
+          value: "[2,7,11,15]\n9",
+          language: "plaintext",
+          theme: "vs-dark",
+          minimap: { enabled: false },
+        });
+        document.body.dataset.monacoReady = "1";
+      });
+
+      async function judge(kind) {
+        const code = window.editor.getValue();
+        const path = kind === "submit" ? "/problems/two-sum/submit/" : "/problems/two-sum/interpret_solution/";
+        const r = await fetch(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ lang: "python3", question_id: "1", typed_code: code }),
+        });
+        const json = await r.json();
+        const id = json.submission_id ?? json.interpret_id;
+        let data;
+        do {
+          await new Promise((res) => setTimeout(res, 250));
+          data = await (await fetch(`/submissions/detail/${id}/check/`)).json();
+        } while (data.state !== "SUCCESS" && data.state !== "FAILURE");
+        document.getElementById("result").textContent = `${kind}:${data.status_msg}`;
+      }
+      document.getElementById("submit").onclick = () => judge("submit");
+      document.getElementById("run").onclick = () => judge("run");
+    </script>
+  </body>
+</html>

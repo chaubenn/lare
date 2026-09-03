@@ -1,5 +1,5 @@
 import type { Database } from "@lare/supabase-types";
-import { type SupabaseClient, createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { chromeStorageAdapter } from "./storage";
 
 export const SUPABASE_URL: string = import.meta.env.WXT_SUPABASE_URL;

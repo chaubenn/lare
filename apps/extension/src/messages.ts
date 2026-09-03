@@ -5,7 +5,7 @@
 import {
   DistributionSchema,
   EditEventSchema,
-  ExtensionStateSchema,
+  type ExtensionStateSchema,
   ProblemInfoSchema,
   SubmissionInfoSchema,
 } from "@lare/shared";

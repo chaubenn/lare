@@ -21,6 +21,8 @@ export default defineConfig({
       "https://leetcode.com/*",
       "https://jndqrvwkwoyvzoqcveev.supabase.co/*",
       "http://127.0.0.1/*",
+      // Local fixture page + mocked backend for e2e tests (dev/e2e builds only).
+      ...(mode === "production" ? [] : ["http://localhost/*"]),
     ],
     action: {
       default_title: "Lare",

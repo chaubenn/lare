@@ -27,7 +27,8 @@ export async function signInWithProvider(provider: "github" | "google"): Promise
 
   const parsed = new URL(responseUrl);
   const code = parsed.searchParams.get("code");
-  const oauthError = parsed.searchParams.get("error_description") ?? parsed.searchParams.get("error");
+  const oauthError =
+    parsed.searchParams.get("error_description") ?? parsed.searchParams.get("error");
   if (oauthError) throw new Error(oauthError);
   if (!code) throw new Error("Sign-in did not return a code");
 
