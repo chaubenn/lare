@@ -13,6 +13,7 @@ import { useExtensionStatus } from "@/features/shell/useExtensionStatus";
 import { copyText } from "@/lib/clipboard";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { appVersion } from "@/lib/tauri";
+import { RecordingPanel } from "./RecordingPanel";
 
 const EXTENSION_ID = "koplffaeeahehnfikinmldhhmmldghhl";
 
@@ -23,6 +24,7 @@ export function SettingsPage() {
       <div className="space-y-4">
         <ProfileForm />
         <ExtensionPanel />
+        <RecordingPanel />
         <AccountPanel />
       </div>
     </>

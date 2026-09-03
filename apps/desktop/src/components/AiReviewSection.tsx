@@ -1,5 +1,6 @@
 import type { AiReview } from "@lare/shared";
 import { formatDuration } from "@lare/shared";
+import { cn } from "@lare/ui";
 import { Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Card, SectionTitle } from "@/components/ui/Card";
@@ -18,7 +19,17 @@ function scoreTone(score: number): "emerald" | "amber" | "rose" {
   return "rose";
 }
 
-export function AiReviewSection({ review }: { review: AiReview }) {
+/**
+ * Renders a parsed `AiReview`. Pass `onSeek` to make timestamped moments and code iterations
+ * clickable (the callback receives the moment's `t_ms`, relative to the recording start).
+ */
+export function AiReviewSection({
+  review,
+  onSeek,
+}: {
+  review: AiReview;
+  onSeek?: (tMs: number) => void;
+}) {
   const entries = Object.entries(SCORE_LABELS) as Array<[keyof AiReview["scores"], string]>;
   return (
     <Card>
@@ -53,24 +64,51 @@ export function AiReviewSection({ review }: { review: AiReview }) {
         <div className="mt-4">
           <h3 className="text-xs font-semibold text-zinc-400">Moments</h3>
           <ul className="mt-2 space-y-2">
-            {review.moments.map((m) => (
-              <li
-                key={`${m.t_ms}-${m.kind}-${m.quote.slice(0, 24)}`}
-                className="rounded-lg border border-zinc-800 p-3 text-sm"
-              >
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <span className="font-mono">{formatDuration(m.t_ms)}</span>
-                  <Badge tone={m.kind === "good" ? "emerald" : m.kind === "issue" ? "rose" : "sky"}>
-                    {m.kind}
-                  </Badge>
-                  <span>{m.source}</span>
-                </div>
-                <blockquote className="mt-1 border-l-2 border-zinc-700 pl-2 text-xs italic text-zinc-400">
-                  {m.quote}
-                </blockquote>
-                <p className="mt-1 text-zinc-300">{m.comment}</p>
-              </li>
-            ))}
+            {review.moments.map((m) => {
+              const body = (
+                <>
+                  <span className="flex items-center gap-2 text-xs text-zinc-500">
+                    <span
+                      className={cn(
+                        "font-mono",
+                        onSeek && "text-emerald-400 underline decoration-emerald-400/40",
+                      )}
+                    >
+                      {formatDuration(m.t_ms)}
+                    </span>
+                    <Badge
+                      tone={m.kind === "good" ? "emerald" : m.kind === "issue" ? "rose" : "sky"}
+                    >
+                      {m.kind}
+                    </Badge>
+                    <span>{m.source}</span>
+                  </span>
+                  <span className="mt-1 block border-l-2 border-zinc-700 pl-2 text-xs italic text-zinc-400">
+                    {m.quote}
+                  </span>
+                  <span className="mt-1 block text-zinc-300">{m.comment}</span>
+                </>
+              );
+              return (
+                <li
+                  key={`${m.t_ms}-${m.kind}-${m.quote.slice(0, 24)}`}
+                  className="rounded-lg border border-zinc-800 text-sm"
+                >
+                  {onSeek ? (
+                    <button
+                      type="button"
+                      onClick={() => onSeek(m.t_ms)}
+                      title={`Jump to ${formatDuration(m.t_ms)}`}
+                      className="block w-full rounded-lg p-3 text-left transition-colors hover:bg-zinc-900/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    >
+                      {body}
+                    </button>
+                  ) : (
+                    <div className="p-3">{body}</div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
@@ -81,9 +119,20 @@ export function AiReviewSection({ review }: { review: AiReview }) {
           <ol className="mt-2 space-y-1.5 text-sm">
             {review.code_iterations.map((it) => (
               <li key={`${it.t_ms}-${it.label}`} className="flex gap-3">
-                <span className="w-14 shrink-0 font-mono text-xs text-zinc-500">
-                  {formatDuration(it.t_ms)}
-                </span>
+                {onSeek ? (
+                  <button
+                    type="button"
+                    onClick={() => onSeek(it.t_ms)}
+                    title={`Jump to ${formatDuration(it.t_ms)}`}
+                    className="w-14 shrink-0 text-left font-mono text-xs text-emerald-400 underline decoration-emerald-400/40 hover:text-emerald-300"
+                  >
+                    {formatDuration(it.t_ms)}
+                  </button>
+                ) : (
+                  <span className="w-14 shrink-0 font-mono text-xs text-zinc-500">
+                    {formatDuration(it.t_ms)}
+                  </span>
+                )}
                 <div>
                   <span className="text-zinc-200">{it.label}</span>
                   {it.complexity ? (

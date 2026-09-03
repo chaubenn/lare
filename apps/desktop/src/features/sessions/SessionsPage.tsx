@@ -3,7 +3,6 @@ import { DifficultyBadge } from "@lare/ui";
 import { Inbox, Sparkles } from "lucide-react";
 import { Link } from "react-router";
 import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { formatDateTime, plural } from "@/lib/format";
@@ -27,7 +26,10 @@ export function SessionsPage() {
       ) : (
         <ul className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800">
           {sessions.data.map((s) => (
-            <li key={s.id}>
+            <li
+              key={s.id}
+              className="transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-zinc-900/40"
+            >
               <SessionItem session={s} />
             </li>
           ))}
@@ -46,9 +48,14 @@ function SessionItem({ session }: { session: SessionRow }) {
       : `/posts/${post.id}`
     : null;
 
+  const reviewLink = `/sessions/${session.id}`;
+
   return (
     <div className="flex flex-wrap items-center gap-3 p-4">
-      <div className="min-w-0 flex-1">
+      <Link
+        to={reviewLink}
+        className="min-w-0 flex-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+      >
         <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
           <KindBadge kind={session.kind} />
           <SessionStatusBadge status={session.status} />
@@ -71,12 +78,16 @@ function SessionItem({ session }: { session: SessionRow }) {
             ) : null}
           </div>
         ) : null}
-      </div>
+      </Link>
       <div className="flex shrink-0 items-center gap-2">
         {session.kind === "interview" ? (
-          <Button size="sm" disabled icon={<Sparkles className="size-3.5" aria-hidden />}>
-            Review (coming soon)
-          </Button>
+          <Link
+            to={reviewLink}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100 hover:bg-zinc-800"
+          >
+            <Sparkles className="size-3.5" aria-hidden />
+            Review
+          </Link>
         ) : null}
         {postLink && post ? (
           <Link

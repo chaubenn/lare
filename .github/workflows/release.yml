@@ -1,0 +1,108 @@
+name: Release
+
+# Tag a commit `v0.1.0` (or run manually) to build installers for macOS (Apple Silicon + Intel)
+# and Windows x64 plus the Chrome extension zip, attached to a draft GitHub release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # Public client configuration baked into the desktop bundle.
+  VITE_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
+  VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
+  VITE_SITE_URL: https://lare.vercel.app
+  VITE_BUNNY_LIBRARY_ID: "743884"
+
+jobs:
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+          - name: macOS x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - run: pnpm install --frozen-lockfile
+      - name: cmake (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake || true
+      - name: Native deps (prebuilt ffmpeg, cargo env)
+        env:
+          RUST_TARGET_TRIPLE: ${{ matrix.target }}
+        run: node scripts/setup-native-deps.mjs
+      - name: Build and attach installers
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unsigned builds: set APPLE_* / TAURI_SIGNING_* secrets later to sign and notarise.
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          args: --target ${{ matrix.target }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('manual-{0}', github.run_number) }}
+          releaseName: Lare ${{ github.ref_type == 'tag' && github.ref_name || format('manual build {0}', github.run_number) }}
+          releaseBody: "Unsigned preview builds. macOS: right-click > Open the first time. See README for setup."
+          releaseDraft: true
+          prerelease: true
+
+  extension:
+    name: Chrome extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build and zip
+        working-directory: apps/extension
+        env:
+          WXT_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
+          WXT_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
+          WXT_SITE_URL: https://lare.vercel.app
+        run: pnpm build && pnpm zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-chrome-mv3
+          path: apps/extension/.output/*.zip
+      - name: Attach to release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" apps/extension/.output/*.zip --clobber

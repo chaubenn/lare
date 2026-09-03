@@ -34,8 +34,18 @@ export function usePlaybackUrl(video: Pick<Video, "id" | "status" | "bunny_video
 /**
  * Bunny Stream player for a ready video; a status placeholder otherwise.
  * The iframe URL is `https://player.mediadelivery.net/embed/{libraryId}/{guid}?token=…&expires=…`.
+ * `startAt` (seconds) is appended as `&t=…s`; changing it re-mounts the iframe, which is how
+ * callers seek (the player does not expose a postMessage seek API to us).
  */
-export function VideoEmbed({ video, title = "Demo video" }: { video: Video; title?: string }) {
+export function VideoEmbed({
+  video,
+  title = "Demo video",
+  startAt,
+}: {
+  video: Video;
+  title?: string;
+  startAt?: number;
+}) {
   const libraryId = video.library_id || env.VITE_BUNNY_LIBRARY_ID;
   const playback = usePlaybackUrl(video);
   if (video.status === "ready" && video.bunny_video_id) {
@@ -47,12 +57,16 @@ export function VideoEmbed({ video, title = "Demo video" }: { video: Video; titl
       );
     }
     // Fall back to the plain embed if token minting fails (e.g. token auth disabled).
-    const src =
+    const base =
       playback.data?.embedUrl ??
       `${BUNNY_EMBED_BASE}/${libraryId}/${video.bunny_video_id}?autoplay=false&preload=true`;
+    const start =
+      startAt !== undefined && Number.isFinite(startAt) ? Math.max(0, Math.floor(startAt)) : null;
+    const src = start === null ? base : `${base}${base.includes("?") ? "&" : "?"}t=${start}s`;
     return (
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-black">
         <iframe
+          key={start === null ? "start" : `t-${start}`}
           title={title}
           src={src}
           loading="lazy"
