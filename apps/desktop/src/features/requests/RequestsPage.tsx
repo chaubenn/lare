@@ -12,7 +12,10 @@ export function RequestsPage() {
   const requests = useFollowRequests();
   return (
     <>
-      <PageHeader title="Follow requests" subtitle="People who want to follow your private account." />
+      <PageHeader
+        title="Follow requests"
+        subtitle="People who want to follow your private account."
+      />
       {requests.isPending ? (
         <PageSpinner />
       ) : requests.isError ? (
@@ -48,7 +51,12 @@ function RequestRow({ request }: { request: FollowRequest }) {
       {
         onSuccess: () =>
           toast({ title: accept ? `Accepted ${name}` : `Declined ${name}`, variant: "success" }),
-        onError: (err) => toast({ title: "Couldn't update request", description: errorMessage(err), variant: "error" }),
+        onError: (err) =>
+          toast({
+            title: "Couldn't update request",
+            description: errorMessage(err),
+            variant: "error",
+          }),
       },
     );
   };

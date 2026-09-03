@@ -2,10 +2,11 @@
  * Thin wrappers around the Tauri commands/events exposed by src-tauri/src/lib.rs.
  * Everything degrades gracefully when the UI runs in a plain browser (`pnpm dev` without Tauri).
  */
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { type EventCallback, listen } from "@tauri-apps/api/event";
+
 import type { AppToExt } from "@lare/shared";
 import { WS_PORT } from "@lare/shared";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { type EventCallback, listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 
 export const inTauri = isTauri();

@@ -9,7 +9,11 @@ import { setCurrentUser, useTauriEvent } from "@/lib/tauri";
 export const profileQueryKey = (userId: string) => ["profile", userId] as const;
 
 export async function fetchProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -33,7 +37,11 @@ export function useAuth(): AuthContextValue {
 }
 
 /** Like useAuth() but guarantees a signed-in user (only render below RequireAuth). */
-export function useUser(): { userId: string; session: Session; profile: Profile | null | undefined } {
+export function useUser(): {
+  userId: string;
+  session: Session;
+  profile: Profile | null | undefined;
+} {
   const { session, profile } = useAuth();
   if (!session) throw new Error("useUser() rendered without a session");
   return { userId: session.user.id, session, profile };

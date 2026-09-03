@@ -40,7 +40,11 @@ export function SessionsPage() {
 function SessionItem({ session }: { session: SessionRow }) {
   const problems = session.session_problems;
   const post = session.posts;
-  const postLink = post ? (post.status === "draft" ? `/drafts/${post.id}` : `/posts/${post.id}`) : null;
+  const postLink = post
+    ? post.status === "draft"
+      ? `/drafts/${post.id}`
+      : `/posts/${post.id}`
+    : null;
 
   return (
     <div className="flex flex-wrap items-center gap-3 p-4">

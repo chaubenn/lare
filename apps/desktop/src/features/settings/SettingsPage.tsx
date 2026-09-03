@@ -140,9 +140,7 @@ function ExtensionPanel() {
   return (
     <Card>
       <SectionTitle
-        action={
-          connected ? <Badge tone="emerald">connected</Badge> : <Badge>not connected</Badge>
-        }
+        action={connected ? <Badge tone="emerald">connected</Badge> : <Badge>not connected</Badge>}
       >
         Extension
       </SectionTitle>
@@ -166,9 +164,7 @@ function ExtensionPanel() {
         </div>
         <div>
           <dt className="text-xs text-zinc-500">Local server</dt>
-          <dd className="mt-1 font-mono text-xs text-zinc-200">
-            ws://127.0.0.1:{port || WS_PORT}
-          </dd>
+          <dd className="mt-1 font-mono text-xs text-zinc-200">ws://127.0.0.1:{port || WS_PORT}</dd>
         </div>
       </dl>
       <p className="mt-3 text-xs text-zinc-500">

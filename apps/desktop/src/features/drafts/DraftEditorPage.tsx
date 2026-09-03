@@ -67,7 +67,12 @@ function defaultTitle(draft: Draft): string {
 async function confirmDelete(): Promise<boolean> {
   const message = "Delete this draft? The session data stays; only the post is removed.";
   if (inTauri) {
-    return ask(message, { title: "Delete draft", kind: "warning", okLabel: "Delete", cancelLabel: "Keep" });
+    return ask(message, {
+      title: "Delete draft",
+      kind: "warning",
+      okLabel: "Delete",
+      cancelLabel: "Keep",
+    });
   }
   return window.confirm(message);
 }
@@ -133,7 +138,10 @@ function DraftEditor({ draft }: { draft: Draft }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <Link to="/drafts" className="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200">
+        <Link
+          to="/drafts"
+          className="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
+        >
           <ArrowLeft className="size-4" aria-hidden />
           Drafts
         </Link>

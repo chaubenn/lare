@@ -1,5 +1,10 @@
 import { cn } from "@lare/ui";
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type {
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 
 const CONTROL =
   "w-full rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 disabled:opacity-50";
@@ -70,6 +75,7 @@ export function Toggle({
         id={id}
         type="checkbox"
         role="switch"
+        aria-checked={checked}
         className="peer sr-only"
         checked={checked}
         disabled={disabled}

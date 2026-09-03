@@ -19,9 +19,16 @@ export function OnboardingPage() {
     (session.user.user_metadata as Record<string, unknown>)?.name;
 
   const [handle, setHandle] = useState(
-    typeof suggested === "string" ? suggested.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20) : "",
+    typeof suggested === "string"
+      ? suggested
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, "")
+          .slice(0, 20)
+      : "",
   );
-  const [displayName, setDisplayName] = useState(typeof suggestedName === "string" ? suggestedName : "");
+  const [displayName, setDisplayName] = useState(
+    typeof suggestedName === "string" ? suggestedName : "",
+  );
   const [isPrivate, setIsPrivate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -45,7 +45,9 @@ export function ProfilePage() {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-zinc-50">{name}</h2>
-            {profile?.handle ? <span className="text-sm text-zinc-500">@{profile.handle}</span> : null}
+            {profile?.handle ? (
+              <span className="text-sm text-zinc-500">@{profile.handle}</span>
+            ) : null}
             {profile?.is_private ? (
               <Badge>
                 <Lock className="size-3" aria-hidden />
@@ -54,7 +56,9 @@ export function ProfilePage() {
             ) : null}
           </div>
           {profile?.bio ? (
-            <p className="mt-2 select-text whitespace-pre-wrap text-sm text-zinc-300">{profile.bio}</p>
+            <p className="mt-2 select-text whitespace-pre-wrap text-sm text-zinc-300">
+              {profile.bio}
+            </p>
           ) : (
             <p className="mt-2 text-sm text-zinc-500">No bio yet.</p>
           )}
@@ -73,7 +77,10 @@ export function ProfilePage() {
             <Stat label="Following" value={stats.data.following} />
             <Stat label="Posts" value={stats.data.posts ?? 0} />
             <Stat label="Problems solved" value={stats.data.problems_solved ?? 0} />
-            <Stat label="Time practising" value={formatDurationHuman(stats.data.total_active_ms ?? 0)} />
+            <Stat
+              label="Time practising"
+              value={formatDurationHuman(stats.data.total_active_ms ?? 0)}
+            />
           </dl>
         ) : null}
       </div>

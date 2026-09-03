@@ -28,7 +28,8 @@ export default defineConfig({
   build: {
     // Tauri uses Chromium on Windows and WebKit on macOS/Linux.
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
-    minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
+    // Vite 8 minifies with oxc by default; skip it for debug bundles.
+    minify: !process.env.TAURI_ENV_DEBUG,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },
 });

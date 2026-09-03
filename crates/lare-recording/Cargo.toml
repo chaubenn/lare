@@ -1,0 +1,27 @@
+[package]
+name = "lare-recording"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Thin facade over the vendored Cap crates: devices, permissions, instant/studio recording and headless export."
+
+[dependencies]
+cap-recording = { path = "../cap/recording" }
+cap-project = { path = "../cap/project" }
+cap-export = { path = "../cap/export" }
+cap-camera = { path = "../cap/camera" }
+scap-targets = { path = "../cap/scap-targets" }
+kameo = "0.17.2"
+cpal = { workspace = true }
+flume = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+scap-screencapturekit = { path = "../cap/scap-screencapturekit" }
+cidre = { workspace = true }

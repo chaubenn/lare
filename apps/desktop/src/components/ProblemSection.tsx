@@ -35,7 +35,9 @@ export function ProblemSection({
             <DifficultyBadge difficulty={problem.difficulty} />
           </h3>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-            {problem.active_ms > 0 ? <span>{formatDurationHuman(problem.active_ms)} active</span> : null}
+            {problem.active_ms > 0 ? (
+              <span>{formatDurationHuman(problem.active_ms)} active</span>
+            ) : null}
             <span>
               {submissions.length} submission{submissions.length === 1 ? "" : "s"}
             </span>

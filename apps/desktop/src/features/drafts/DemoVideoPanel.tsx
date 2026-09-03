@@ -17,10 +17,18 @@ export function DemoVideoPanel() {
         Record a quick walkthrough of your solution and attach it to the post.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button disabled icon={<Video className="size-4" aria-hidden />} title="Recording arrives in the next build">
+        <Button
+          disabled
+          icon={<Video className="size-4" aria-hidden />}
+          title="Recording arrives in the next build"
+        >
           Record (Instant)
         </Button>
-        <Button disabled icon={<Monitor className="size-4" aria-hidden />} title="Recording arrives in the next build">
+        <Button
+          disabled
+          icon={<Monitor className="size-4" aria-hidden />}
+          title="Recording arrives in the next build"
+        >
           Record (Studio)
         </Button>
       </div>

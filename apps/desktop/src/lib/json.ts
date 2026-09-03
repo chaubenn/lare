@@ -53,9 +53,9 @@ export function parseAiReview(row: {
 }
 
 /** Accepted submissions first (fastest first), then the rest newest-first. */
-export function sortSubmissions<T extends Pick<Submission, "accepted" | "runtime_ms" | "submitted_at">>(
-  subs: readonly T[],
-): T[] {
+export function sortSubmissions<
+  T extends Pick<Submission, "accepted" | "runtime_ms" | "submitted_at">,
+>(subs: readonly T[]): T[] {
   return [...subs].sort((a, b) => {
     if (a.accepted !== b.accepted) return a.accepted ? -1 : 1;
     if (a.accepted && b.accepted) {
@@ -68,8 +68,8 @@ export function sortSubmissions<T extends Pick<Submission, "accepted" | "runtime
 }
 
 /** Best (fastest) accepted submission, if any. */
-export function bestAccepted<T extends Pick<Submission, "accepted" | "runtime_ms" | "submitted_at">>(
-  subs: readonly T[],
-): T | null {
+export function bestAccepted<
+  T extends Pick<Submission, "accepted" | "runtime_ms" | "submitted_at">,
+>(subs: readonly T[]): T | null {
   return sortSubmissions(subs).find((s) => s.accepted) ?? null;
 }

@@ -1,4 +1,9 @@
-import { excerptFromHtml, formatBeats, formatDurationHuman, formatRelativeTime } from "@lare/shared";
+import {
+  excerptFromHtml,
+  formatBeats,
+  formatDurationHuman,
+  formatRelativeTime,
+} from "@lare/shared";
 import { DifficultyBadge } from "@lare/ui";
 import { Video } from "lucide-react";
 import { Link } from "react-router";
@@ -25,7 +30,9 @@ export function PostCard({ post }: { post: FeedPost }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-sm">
             <span className="truncate font-medium text-zinc-100">{name}</span>
-            {author?.handle ? <span className="truncate text-zinc-500">@{author.handle}</span> : null}
+            {author?.handle ? (
+              <span className="truncate text-zinc-500">@{author.handle}</span>
+            ) : null}
           </div>
           <div className="flex items-center gap-2 text-xs text-zinc-500">
             <span>{formatRelativeTime(when)}</span>
@@ -46,7 +53,9 @@ export function PostCard({ post }: { post: FeedPost }) {
         </div>
       </div>
 
-      {post.title ? <h3 className="mt-3 text-base font-semibold text-zinc-100">{post.title}</h3> : null}
+      {post.title ? (
+        <h3 className="mt-3 text-base font-semibold text-zinc-100">{post.title}</h3>
+      ) : null}
       {excerpt ? <p className="mt-1 text-sm leading-relaxed text-zinc-400">{excerpt}</p> : null}
 
       {problems.length > 0 ? (
@@ -60,7 +69,8 @@ export function PostCard({ post }: { post: FeedPost }) {
                 <DifficultyBadge difficulty={p.difficulty} />
                 {best ? (
                   <span className="ml-auto shrink-0 text-xs text-zinc-500">
-                    {best.runtime_display ?? (best.runtime_ms !== null ? `${best.runtime_ms} ms` : "")}
+                    {best.runtime_display ??
+                      (best.runtime_ms !== null ? `${best.runtime_ms} ms` : "")}
                     {beats ? ` · beats ${beats}` : ""}
                   </span>
                 ) : (

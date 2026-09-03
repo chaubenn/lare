@@ -4,12 +4,12 @@ import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
 import { useToast } from "@/components/toast/ToastProvider";
-import { VideoEmbed } from "@/components/VideoEmbed";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, KindBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
+import { VideoEmbed } from "@/components/VideoEmbed";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { copyText } from "@/lib/clipboard";
 import { postWebUrl } from "@/lib/env";
@@ -54,13 +54,20 @@ function PostView({ post }: { post: PostDetail }) {
 
   const copyLink = async () => {
     const ok = await copyText(webUrl);
-    toast(ok ? { title: "Link copied", variant: "success" } : { title: "Couldn't copy", variant: "error" });
+    toast(
+      ok
+        ? { title: "Link copied", variant: "success" }
+        : { title: "Couldn't copy", variant: "error" },
+    );
   };
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <Link to="/" className="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
+        >
           <ArrowLeft className="size-4" aria-hidden />
           Feed
         </Link>
@@ -72,7 +79,11 @@ function PostView({ post }: { post: PostDetail }) {
               Only me
             </Badge>
           ) : null}
-          <Button size="sm" icon={<Copy className="size-3.5" aria-hidden />} onClick={() => void copyLink()}>
+          <Button
+            size="sm"
+            icon={<Copy className="size-3.5" aria-hidden />}
+            onClick={() => void copyLink()}
+          >
             Copy link
           </Button>
           <Button
