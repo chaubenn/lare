@@ -1,7 +1,9 @@
 import { BUNNY_EMBED_BASE } from "@lare/shared";
 import type { Video } from "@lare/supabase-types";
-import { Video as VideoIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { LoaderCircle, Video as VideoIcon } from "lucide-react";
 import { env } from "@/lib/env";
+import { invokeFunction } from "@/lib/supabase";
 
 const STATUS_TEXT: Record<Video["status"], string> = {
   created: "Video is waiting to be uploaded.",
@@ -12,14 +14,42 @@ const STATUS_TEXT: Record<Video["status"], string> = {
   failed: "Video processing failed.",
 };
 
+interface PlaybackToken {
+  embedUrl: string;
+  token: string;
+  expires: number;
+}
+
+/** Signed embed URL from the `bunny-playback-token` function (library uses token auth). */
+export function usePlaybackUrl(video: Pick<Video, "id" | "status" | "bunny_video_id">) {
+  return useQuery({
+    queryKey: ["playback-url", video.id, video.status],
+    enabled: video.status === "ready" && !!video.bunny_video_id,
+    staleTime: 4 * 3600 * 1000,
+    retry: 1,
+    queryFn: () => invokeFunction<PlaybackToken>("bunny-playback-token", { videoId: video.id }),
+  });
+}
+
 /**
  * Bunny Stream player for a ready video; a status placeholder otherwise.
- * The iframe URL is `https://player.mediadelivery.net/embed/{libraryId}/{guid}`.
+ * The iframe URL is `https://player.mediadelivery.net/embed/{libraryId}/{guid}?token=…&expires=…`.
  */
 export function VideoEmbed({ video, title = "Demo video" }: { video: Video; title?: string }) {
   const libraryId = video.library_id || env.VITE_BUNNY_LIBRARY_ID;
+  const playback = usePlaybackUrl(video);
   if (video.status === "ready" && video.bunny_video_id) {
-    const src = `${BUNNY_EMBED_BASE}/${libraryId}/${video.bunny_video_id}?autoplay=false&preload=true`;
+    if (playback.isPending) {
+      return (
+        <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-zinc-800 bg-black">
+          <LoaderCircle className="size-5 animate-spin text-zinc-500" aria-label="Loading player" />
+        </div>
+      );
+    }
+    // Fall back to the plain embed if token minting fails (e.g. token auth disabled).
+    const src =
+      playback.data?.embedUrl ??
+      `${BUNNY_EMBED_BASE}/${libraryId}/${video.bunny_video_id}?autoplay=false&preload=true`;
     return (
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-black">
         <iframe

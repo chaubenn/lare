@@ -1,15 +1,26 @@
 import { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { useDraftsRealtime } from "@/features/drafts/queries";
+import { JobsTray } from "@/features/recording/JobsTray";
+import { useRecordingEvents } from "@/features/recording/useRecordingEvents";
 import { Sidebar } from "./Sidebar";
 import { StatusFooter } from "./StatusFooter";
 
 /** Cmd/Ctrl + digit jumps between sections (same order as the sidebar). */
-const SECTION_SHORTCUTS = ["/", "/drafts", "/sessions", "/profile", "/requests", "/settings"];
+const SECTION_SHORTCUTS = [
+  "/",
+  "/drafts",
+  "/sessions",
+  "/recordings",
+  "/profile",
+  "/requests",
+  "/settings",
+];
 
 export function AppShell() {
   const navigate = useNavigate();
   useDraftsRealtime();
+  useRecordingEvents();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -34,6 +45,7 @@ export function AppShell() {
           </div>
         </main>
       </div>
+      <JobsTray />
       <StatusFooter />
     </div>
   );

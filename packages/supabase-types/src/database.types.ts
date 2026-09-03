@@ -1,5 +1,3 @@
-// Generated from Supabase project jndqrvwkwoyvzoqcveev via the Supabase MCP
-// (generate_typescript_types). Regenerate after every migration; do not edit by hand.
 export type Json =
   | string
   | number
@@ -308,6 +306,7 @@ export type Database = {
           id: string
           kind: Database["public"]["Enums"]["session_kind"]
           recording_id: string | null
+          recording_started_at: string | null
           scope: Database["public"]["Enums"]["session_scope"]
           started_at: string
           status: Database["public"]["Enums"]["session_status"]
@@ -322,6 +321,7 @@ export type Database = {
           id?: string
           kind?: Database["public"]["Enums"]["session_kind"]
           recording_id?: string | null
+          recording_started_at?: string | null
           scope?: Database["public"]["Enums"]["session_scope"]
           started_at?: string
           status?: Database["public"]["Enums"]["session_status"]
@@ -336,6 +336,7 @@ export type Database = {
           id?: string
           kind?: Database["public"]["Enums"]["session_kind"]
           recording_id?: string | null
+          recording_started_at?: string | null
           scope?: Database["public"]["Enums"]["session_scope"]
           started_at?: string
           status?: Database["public"]["Enums"]["session_status"]
@@ -478,9 +479,11 @@ export type Database = {
           library_id: number
           mode: Database["public"]["Enums"]["video_mode"]
           ready_at: string | null
+          session_id: string | null
           size_bytes: number | null
           status: Database["public"]["Enums"]["video_status"]
           thumbnail_path: string | null
+          title: string | null
           updated_at: string
           user_id: string
           width: number | null
@@ -495,9 +498,11 @@ export type Database = {
           library_id: number
           mode?: Database["public"]["Enums"]["video_mode"]
           ready_at?: string | null
+          session_id?: string | null
           size_bytes?: number | null
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_path?: string | null
+          title?: string | null
           updated_at?: string
           user_id: string
           width?: number | null
@@ -512,14 +517,23 @@ export type Database = {
           library_id?: number
           mode?: Database["public"]["Enums"]["video_mode"]
           ready_at?: string | null
+          session_id?: string | null
           size_bytes?: number | null
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_path?: string | null
+          title?: string | null
           updated_at?: string
           user_id?: string
           width?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "videos_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "videos_user_id_fkey"
             columns: ["user_id"]

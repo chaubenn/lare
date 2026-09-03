@@ -1,5 +1,5 @@
 import { cn } from "@lare/ui";
-import { House, Inbox, Rss, Settings, SquarePen, User, UserPlus } from "lucide-react";
+import { Clapperboard, House, Inbox, Rss, Settings, SquarePen, User, UserPlus } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { NavLink } from "react-router";
 import { CountBadge } from "@/components/ui/Badge";
@@ -22,6 +22,7 @@ export function Sidebar() {
     { to: "/", label: "Feed", icon: Rss, end: true },
     { to: "/drafts", label: "Drafts", icon: SquarePen, count: drafts.data?.length ?? 0 },
     { to: "/sessions", label: "Sessions", icon: Inbox },
+    { to: "/recordings", label: "Recordings", icon: Clapperboard },
     { to: "/profile", label: "Profile", icon: User },
     { to: "/requests", label: "Requests", icon: UserPlus, count: requests.data?.length ?? 0 },
     { to: "/settings", label: "Settings", icon: Settings },

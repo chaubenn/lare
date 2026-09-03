@@ -236,7 +236,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
         </div>
 
         <aside className="space-y-4">
-          <DemoVideoPanel />
+          <DemoVideoPanel draft={draft} />
         </aside>
       </form>
     </div>

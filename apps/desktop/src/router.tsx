@@ -7,11 +7,14 @@ import { DraftsPage } from "@/features/drafts/DraftsPage";
 import { FeedPage } from "@/features/feed/FeedPage";
 import { PostPage } from "@/features/posts/PostPage";
 import { ProfilePage } from "@/features/profile/ProfilePage";
+import { RecordingsPage } from "@/features/recordings/RecordingsPage";
 import { RequestsPage } from "@/features/requests/RequestsPage";
+import { SessionReviewPage } from "@/features/sessions/SessionReviewPage";
 import { SessionsPage } from "@/features/sessions/SessionsPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { AppShell } from "@/features/shell/AppShell";
 import { RootLayout } from "@/features/shell/RootLayout";
+import { StudioEditorPage } from "@/features/studio/StudioEditorPage";
 
 function NotFound() {
   return (
@@ -44,6 +47,9 @@ export const router = createMemoryRouter([
               { path: "/drafts", element: <DraftsPage /> },
               { path: "/drafts/:id", element: <DraftEditorPage /> },
               { path: "/sessions", element: <SessionsPage /> },
+              { path: "/sessions/:id", element: <SessionReviewPage /> },
+              { path: "/recordings", element: <RecordingsPage /> },
+              { path: "/studio/:recordingId", element: <StudioEditorPage /> },
               { path: "/profile", element: <ProfilePage /> },
               { path: "/requests", element: <RequestsPage /> },
               { path: "/settings", element: <SettingsPage /> },
