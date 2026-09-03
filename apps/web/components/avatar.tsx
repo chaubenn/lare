@@ -1,5 +1,5 @@
-import { cn } from "@lare/ui/src/cn";
 import Image from "next/image";
+import { cn } from "@/lib/cn";
 
 const SIZES = {
   sm: { px: 28, className: "size-7 text-[11px]" },

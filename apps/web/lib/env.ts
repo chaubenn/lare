@@ -2,7 +2,9 @@ import { BUNNY_LIBRARY_ID } from "@lare/shared";
 
 function required(name: string, value: string | undefined): string {
   if (!value) {
-    throw new Error(`Missing environment variable ${name}. Copy apps/web/.env.example to .env.local.`);
+    throw new Error(
+      `Missing environment variable ${name}. Copy apps/web/.env.example to .env.local.`,
+    );
   }
   return value;
 }

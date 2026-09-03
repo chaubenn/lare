@@ -3,6 +3,7 @@ import "server-only";
 import type { Database } from "@lare/supabase-types";
 import type { QueryData, SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
+import { isUuid } from "@/lib/post-utils";
 import { createClient } from "@/lib/supabase/server";
 
 type Client = SupabaseClient<Database>;
@@ -87,7 +88,8 @@ export async function fetchFeedPage(
   const rows = data ?? [];
   const items = await attachThumbnails(supabase, rows);
   const last = rows.at(-1);
-  const nextCursor = rows.length === FEED_PAGE_SIZE && last?.published_at ? last.published_at : null;
+  const nextCursor =
+    rows.length === FEED_PAGE_SIZE && last?.published_at ? last.published_at : null;
   return { items, nextCursor };
 }
 
@@ -102,11 +104,6 @@ export async function fetchUserPosts(supabase: Client, userId: string): Promise<
   return attachThumbnails(supabase, data ?? []);
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export function isUuid(value: string): boolean {
-  return UUID_RE.test(value);
-}
-
 /** Full post for `/p/[id]`, deduped between `generateMetadata` and the page. Null = not visible. */
 export const getPostDetail = cache(async (id: string): Promise<PostDetail | null> => {
   if (!isUuid(id)) return null;
@@ -115,35 +112,3 @@ export const getPostDetail = cache(async (id: string): Promise<PostDetail | null
   if (error) throw new Error(`post failed: ${error.message}`);
   return data ?? null;
 });
-
-// ---------------------------------------------------------------------------
-// Derived helpers shared by cards and the detail page
-// ---------------------------------------------------------------------------
-export interface BestRun {
-  runtimeLabel: string;
-  beats: number | null;
-}
-
-export function bestAcceptedRun(
-  submissions: ReadonlyArray<{
-    accepted: boolean;
-    runtime_ms: number | null;
-    runtime_display: string | null;
-    runtime_percentile: number | null;
-  }>,
-): BestRun | null {
-  const accepted = submissions.filter((s) => s.accepted);
-  if (accepted.length === 0) return null;
-  const best = accepted.reduce((a, b) => {
-    const ra = a.runtime_ms ?? Number.POSITIVE_INFINITY;
-    const rb = b.runtime_ms ?? Number.POSITIVE_INFINITY;
-    return rb < ra ? b : a;
-  });
-  const runtimeLabel =
-    best.runtime_display ?? (best.runtime_ms !== null ? `${best.runtime_ms} ms` : "Accepted");
-  return { runtimeLabel, beats: best.runtime_percentile };
-}
-
-export function sessionKindLabel(kind: "practice" | "interview" | null | undefined): string {
-  return kind === "interview" ? "Mock interview" : "Practice session";
-}

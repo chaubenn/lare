@@ -1,0 +1,97 @@
+@import "tailwindcss";
+@source "../../../packages/ui/src";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-zinc-950 text-zinc-100;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  user-select: none;
+  cursor: default;
+}
+
+input,
+textarea,
+select,
+pre,
+code,
+.select-text {
+  user-select: text;
+  cursor: auto;
+}
+
+button,
+a,
+[role="button"] {
+  cursor: pointer;
+}
+
+/* Keyboard-first focus rings */
+:focus-visible {
+  @apply outline-none ring-2 ring-emerald-500/70 ring-offset-2 ring-offset-zinc-950;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-zinc-800;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Sanitised LeetCode problem descriptions */
+.lare-prose {
+  @apply text-sm leading-relaxed text-zinc-300;
+}
+.lare-prose p {
+  @apply my-2;
+}
+.lare-prose pre {
+  @apply my-2 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900 p-3 font-mono text-xs text-zinc-200;
+}
+.lare-prose code {
+  @apply rounded bg-zinc-800/80 px-1 py-0.5 font-mono text-[0.85em] text-zinc-100;
+}
+.lare-prose pre code {
+  @apply bg-transparent p-0;
+}
+.lare-prose ul {
+  @apply my-2 list-disc pl-5;
+}
+.lare-prose ol {
+  @apply my-2 list-decimal pl-5;
+}
+.lare-prose strong {
+  @apply font-semibold text-zinc-100;
+}
+.lare-prose img {
+  @apply my-2 max-w-full rounded-lg;
+}
+.lare-prose a {
+  @apply text-emerald-400 underline;
+}
+.lare-prose sup {
+  @apply text-[0.7em];
+}
