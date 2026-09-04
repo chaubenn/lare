@@ -45,6 +45,9 @@ lare-bunny = { path = "../../../crates/lare-bunny" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
+# `catch-all` turns Objective-C exceptions raised inside tao/wry/tauri calls into Rust panics
+# with the exception message, instead of an opaque "cannot catch foreign exceptions" abort.
+objc2 = { version = "0.6", features = ["catch-all"] }
 
 [dev-dependencies]
 tokio-tungstenite = "0.30"

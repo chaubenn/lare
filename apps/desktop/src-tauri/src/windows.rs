@@ -8,7 +8,9 @@
 //! already on the main thread to avoid deadlocking the event loop).
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::ThreadId;
+use std::time::Duration;
 
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -125,34 +127,106 @@ fn camera_position(wa: WorkArea, size: f64) -> (f64, f64) {
 /// Raise overlay windows above Chrome, the Dock, fullscreen spaces, and other apps, and make
 /// them follow the user across Spaces (like Zoom's floating controls).
 ///
-/// `NSFloatingWindowLevel` (3) sits *below* the Dock (20); `NSScreenSaverWindowLevel` (1000) is
-/// what recording tools use so the pill/facecam stay visible over everything except the lock
-/// screen.
+/// On macOS the tao `NSWindow` is turned into a non-activating `NSPanel`: since macOS 10.14 a
+/// plain window of a regular (Dock-icon) app is not allowed to float over *other apps'*
+/// fullscreen Spaces, and clicking it activates Lare, which yanks the user back to the Space the
+/// main window lives on. A non-activating panel has neither problem; it is what Cap, Loom and
+/// Screen Studio use for their recording controls. The class swap is safe because `NSPanel` adds
+/// no instance variables to `NSWindow` (this is the same trick `tauri-nspanel` relies on).
 ///
-/// On macOS this deliberately does not call Tauri's `set_always_on_top`: tao implements it as an
-/// *async* `setLevel: NSFloatingWindowLevel` dispatched to the main queue, which would land after
-/// our synchronous `setLevel:` and drag the window back under the Dock.
+/// `NSScreenSaverWindowLevel` (1000) keeps the pill/facecam above the Dock (20) and fullscreen
+/// windows. Tauri's `set_always_on_top` is deliberately not used here: tao implements it as an
+/// *async* `setLevel: NSFloatingWindowLevel` that would land after our synchronous `setLevel:`
+/// and drag the window back under the Dock.
 #[allow(unexpected_cfgs)] // objc 0.2's `msg_send!` expands `cfg(feature = "cargo-clippy")`
 fn promote_overlay(window: &tauri::WebviewWindow) {
+    if !window.is_visible().unwrap_or(false) {
+        return;
+    }
     #[cfg(target_os = "macos")]
     {
-        use objc::{msg_send, runtime::Object, sel, sel_impl};
         if let Ok(ptr) = window.ns_window() {
-            let ns = ptr as *mut Object;
-            unsafe {
-                let _: () = msg_send![ns, setLevel: 1000i64];
-                let _: () = msg_send![ns, setHidesOnDeactivate: false];
-                let _: () = msg_send![ns, setCanHide: false];
-                // CanJoinAllSpaces (1) | Stationary (16) | FullScreenAuxiliary (256)
-                let _: () = msg_send![ns, setCollectionBehavior: 273u64];
-                let _: () = msg_send![ns, orderFrontRegardless];
-            }
+            // SAFETY: called on the main thread with a live NSWindow owned by tao.
+            unsafe { macos::promote(ptr.cast()) };
         }
     }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = window.set_always_on_top(true);
         let _ = window.set_visible_on_all_workspaces(true);
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[allow(unexpected_cfgs)] // objc 0.2's `msg_send!` expands `cfg(feature = "cargo-clippy")`
+mod macos {
+    use objc::runtime::{BOOL, Class, NO, Object, YES};
+    use objc::{msg_send, sel, sel_impl};
+
+    unsafe extern "C" {
+        fn object_setClass(obj: *mut Object, cls: *const Class) -> *const Class;
+    }
+
+    const NS_SCREEN_SAVER_WINDOW_LEVEL: i64 = 1000;
+    /// `NSWindowStyleMaskNonactivatingPanel`: clicks reach the panel without activating the app.
+    const NON_ACTIVATING_PANEL: u64 = 1 << 7;
+
+    // NSWindowCollectionBehavior bits.
+    const CAN_JOIN_ALL_SPACES: u64 = 1 << 0;
+    const MOVE_TO_ACTIVE_SPACE: u64 = 1 << 1;
+    const STATIONARY: u64 = 1 << 4;
+    const IGNORES_CYCLE: u64 = 1 << 6;
+    const FULL_SCREEN_AUXILIARY: u64 = 1 << 8;
+    const OVERLAY_BEHAVIOR: u64 = CAN_JOIN_ALL_SPACES | STATIONARY | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY;
+    const MOVE_BEHAVIOR: u64 = MOVE_TO_ACTIVE_SPACE | STATIONARY | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY;
+
+    /// Idempotent: safe to call repeatedly (every focus change and once a second while recording).
+    pub unsafe fn promote(ns: *mut Object) {
+        if ns.is_null() {
+            return;
+        }
+        // A window that is closing (or not yet shown) must be left alone: `orderFrontRegardless`
+        // would resurrect a closed window right before AppKit deallocates it.
+        let visible: BOOL = msg_send![ns, isVisible];
+        if visible == NO {
+            return;
+        }
+        // 1. Become a non-activating NSPanel (the class swap happens once; later calls only see
+        //    an already-converted panel). Interacting with the pill must not activate Lare.
+        if let Some(panel) = Class::get("NSPanel") {
+            let is_panel: BOOL = msg_send![ns, isKindOfClass: panel];
+            if is_panel == NO {
+                // SAFETY: NSPanel adds no ivars over NSWindow, so the instance layout still fits.
+                unsafe { object_setClass(ns, panel) };
+            }
+            let mask: u64 = msg_send![ns, styleMask];
+            if mask & NON_ACTIVATING_PANEL == 0 {
+                let _: () = msg_send![ns, setStyleMask: mask | NON_ACTIVATING_PANEL];
+            }
+            let _: () = msg_send![ns, setBecomesKeyOnlyIfNeeded: YES];
+            let _: () = msg_send![ns, setWorksWhenModal: YES];
+        }
+        // 2. Level and visibility flags. NSPanel defaults to hidesOnDeactivate = YES, so this
+        //    must be re-asserted after the class swap.
+        let level: i64 = msg_send![ns, level];
+        if level != NS_SCREEN_SAVER_WINDOW_LEVEL {
+            let _: () = msg_send![ns, setLevel: NS_SCREEN_SAVER_WINDOW_LEVEL];
+        }
+        let _: () = msg_send![ns, setHidesOnDeactivate: NO];
+        let _: () = msg_send![ns, setCanHide: NO];
+        let behavior: u64 = msg_send![ns, collectionBehavior];
+        if behavior != OVERLAY_BEHAVIOR {
+            let _: () = msg_send![ns, setCollectionBehavior: OVERLAY_BEHAVIOR];
+        }
+        // 3. If the window is somehow still parked on another Space, drag it to the active one
+        //    (MoveToActiveSpace is honoured by orderFront), then restore the all-Spaces flags.
+        let on_active: BOOL = msg_send![ns, isOnActiveSpace];
+        if on_active == NO {
+            let _: () = msg_send![ns, setCollectionBehavior: MOVE_BEHAVIOR];
+            let _: () = msg_send![ns, orderFrontRegardless];
+            let _: () = msg_send![ns, setCollectionBehavior: OVERLAY_BEHAVIOR];
+        }
+        let _: () = msg_send![ns, orderFrontRegardless];
     }
 }
 
@@ -167,6 +241,31 @@ pub fn repromote_overlays(app: &AppHandle) {
     });
 }
 
+static WATCHDOG_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// While an overlay window exists, re-promote once a second. Focus events alone are not enough:
+/// switching Spaces or entering another app's fullscreen does not focus any of our windows, and
+/// macOS occasionally resets window levels when the display configuration changes.
+fn start_overlay_watchdog(app: &AppHandle) {
+    if WATCHDOG_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let any_open = [RECORDER_LABEL, CAMERA_LABEL]
+                .iter()
+                .any(|label| app.get_webview_window(label).is_some());
+            if !any_open {
+                break;
+            }
+            repromote_overlays(&app);
+        }
+        WATCHDOG_RUNNING.store(false, Ordering::SeqCst);
+    });
+}
+
 /// Show the recorder pill (bottom-centre of the recorded display, above the Dock).
 pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), String> {
     let display_id = display_id.map(str::to_owned);
@@ -176,7 +275,7 @@ pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), St
             let _ = w.set_position(LogicalPosition::new(x, y));
             w.show().map_err(|e| e.to_string())?;
             promote_overlay(&w);
-            w.set_focus().ok();
+            start_overlay_watchdog(app);
             return Ok(());
         }
         let (w, h) = RECORDER_SIZE;
@@ -187,13 +286,14 @@ pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), St
             .decorations(false)
             .transparent(true)
             .shadow(false)
-            .always_on_top(true)
             .resizable(false)
             .skip_taskbar(true)
+            .focused(false)
             .visible_on_all_workspaces(true)
             .build()
             .map_err(|e| format!("could not open recorder window: {e}"))?;
         promote_overlay(&window);
+        start_overlay_watchdog(app);
         Ok(())
     })
 }
@@ -223,6 +323,7 @@ pub fn open_camera(app: &AppHandle, display_id: Option<&str>) -> Result<(), Stri
             let _ = w.set_position(LogicalPosition::new(x, y));
             w.show().map_err(|e| e.to_string())?;
             promote_overlay(&w);
+            start_overlay_watchdog(app);
             return Ok(());
         }
         let size = CAMERA_SIZE;
@@ -234,13 +335,14 @@ pub fn open_camera(app: &AppHandle, display_id: Option<&str>) -> Result<(), Stri
             .decorations(false)
             .transparent(true)
             .shadow(false)
-            .always_on_top(true)
             .resizable(false)
             .skip_taskbar(true)
+            .focused(false)
             .visible_on_all_workspaces(true)
             .build()
             .map_err(|e| format!("could not open camera window: {e}"))?;
         promote_overlay(&window);
+        start_overlay_watchdog(app);
         Ok(())
     })
 }

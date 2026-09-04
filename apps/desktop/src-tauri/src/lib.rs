@@ -159,6 +159,7 @@ pub fn run() {
             commands::check_permissions,
             commands::request_permission,
             commands::permission_settings_url,
+            commands::open_permission_settings,
             commands::recorder_settings,
             commands::set_recorder_settings,
             commands::recorder_status,

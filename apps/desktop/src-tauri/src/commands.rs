@@ -16,6 +16,7 @@ use lare_recording::{ExportQuality, ExportRequest, ProjectConfiguration};
 use lare_transcribe::{ModelKind, Progress, Segment, TranscribeOptions};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_opener::OpenerExt;
 use tracing::{info, warn};
 
 use crate::recorder::{CompletedPayload, DemoStart, Recorder, RecorderSettings, StatePayload};
@@ -76,6 +77,17 @@ pub async fn request_permission(which: String) -> Result<PermissionStatus, Strin
 #[tauri::command]
 pub fn permission_settings_url(which: String) -> Option<String> {
     lare_recording::permissions::settings_url(&which).map(str::to_string)
+}
+
+/// Open the System Settings pane for a permission. Done from Rust because the opener plugin's
+/// URL scope only allows web/mail schemes and `x-apple.systempreferences:` links are rejected.
+#[tauri::command]
+pub fn open_permission_settings(app: AppHandle, which: String) -> Result<(), String> {
+    let url = lare_recording::permissions::settings_url(&which)
+        .ok_or_else(|| format!("no settings pane for {which}"))?;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| format!("could not open System Settings: {e}"))
 }
 
 #[tauri::command]
@@ -575,14 +587,16 @@ pub fn whisper_models(rec: Rec<'_>) -> Vec<WhisperModelStatus> {
             label: kind.label().to_string(),
             approx_mb: kind.approx_mb(),
             downloaded: std::fs::metadata(dir.join(kind.file_name()))
-                .map(|m| m.len() > 1_000_000)
+                .map(|m| m.len() == kind.size())
                 .unwrap_or(false),
         })
         .collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase", tag = "stage")]
+// `rename_all` only renames the variants; `rename_all_fields` is what turns `job_id` into the
+// `jobId` the frontend filters on. Without it no progress event ever matched a job.
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "stage")]
 pub enum TranscribeProgress {
     Download {
         job_id: String,
