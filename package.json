@@ -12,6 +12,7 @@
     "dev:web": "pnpm --filter @lare/web dev",
     "dev:extension": "pnpm --filter @lare/extension dev",
     "dev:desktop": "pnpm --filter @lare/desktop tauri dev",
+    "dev:bundle": "sh scripts/dev-bundle.sh",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",

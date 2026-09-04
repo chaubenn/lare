@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The app links the vendored ffmpeg (Spacedrive.framework) dylibs, which carry their own
+	     code signature. Under hardened runtime, dyld refuses to map libraries whose signing
+	     identity differs from the process unless this entitlement is present. Cap ships the
+	     same framework with the same entitlement. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+
+	<!-- Hardened runtime blocks camera/microphone access unless these are present: TCC then
+	     denies requestAccessForMediaType: immediately without ever showing the prompt, so the
+	     app never appears (or appears un-toggleable) in System Settings > Privacy & Security. -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

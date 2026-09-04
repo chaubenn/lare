@@ -72,9 +72,29 @@ fn take_initial_deeplink(state: State<'_, AppState>) -> Option<String> {
 }
 
 fn init_tracing() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,lare_desktop_lib=debug,lare_desktop=debug"));
-    let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
+    let registry = tracing_subscriber::registry().with(filter);
+    // Also mirror logs to a file: when the app is launched via Launch Services its stderr goes
+    // to the unified log, which is awkward to read; /tmp/lare-app.log is always available.
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/lare-app.log")
+        .ok();
+    match file {
+        Some(f) => registry
+            .with(tracing_subscriber::fmt::layer())
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_ansi(false)
+                    .with_writer(std::sync::Mutex::new(f)),
+            )
+            .init(),
+        None => registry.with(tracing_subscriber::fmt::layer()).init(),
+    }
 }
 
 pub fn focus_main_window(app: &AppHandle) {

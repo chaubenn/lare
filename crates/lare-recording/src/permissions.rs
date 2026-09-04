@@ -53,24 +53,33 @@ pub fn screen_recording() -> PermissionStatus {
 }
 
 #[cfg(target_os = "macos")]
-fn av_status(media: cidre::arc::R<cidre::av::MediaType>) -> PermissionStatus {
+fn av_status(media: cidre::arc::R<cidre::av::MediaType>, label: &str) -> PermissionStatus {
     use cidre::av;
-    match av::CaptureDevice::authorization_status_for_media_type(&media) {
+    let status = av::CaptureDevice::authorization_status_for_media_type(&media);
+    tracing::info!(target: "lare_permissions", "{label} raw authorization status: {status:?}");
+    match status {
         Ok(av::AuthorizationStatus::NotDetermined) => PermissionStatus::NotDetermined,
         Ok(av::AuthorizationStatus::Authorized) => PermissionStatus::Granted,
-        Ok(_) => PermissionStatus::Denied,
-        Err(_) => PermissionStatus::Denied,
+        Ok(other) => {
+            tracing::warn!(target: "lare_permissions", "{label} not authorized: {other:?}");
+            PermissionStatus::Denied
+        }
+        Err(e) => {
+            tracing::warn!(target: "lare_permissions", "{label} status query threw an exception");
+            let _ = e;
+            PermissionStatus::Denied
+        }
     }
 }
 
 #[cfg(target_os = "macos")]
 pub fn camera() -> PermissionStatus {
-    av_status(cidre::av::MediaType::video().retained())
+    av_status(cidre::av::MediaType::video().retained(), "camera")
 }
 
 #[cfg(target_os = "macos")]
 pub fn microphone() -> PermissionStatus {
-    av_status(cidre::av::MediaType::audio().retained())
+    av_status(cidre::av::MediaType::audio().retained(), "microphone")
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -97,7 +106,11 @@ pub fn request_screen_recording() -> PermissionStatus {
 pub async fn request_camera() -> PermissionStatus {
     #[cfg(target_os = "macos")]
     {
-        let _ = cidre::av::CaptureDevice::request_access_for_media_type(cidre::av::MediaType::video()).await;
+        tracing::info!(target: "lare_permissions", "requesting camera access");
+        match cidre::av::CaptureDevice::request_access_for_media_type(cidre::av::MediaType::video()).await {
+            Ok(granted) => tracing::info!(target: "lare_permissions", "camera requestAccess returned {granted}"),
+            Err(_) => tracing::warn!(target: "lare_permissions", "camera requestAccess threw an exception"),
+        }
     }
     camera()
 }
@@ -105,7 +118,11 @@ pub async fn request_camera() -> PermissionStatus {
 pub async fn request_microphone() -> PermissionStatus {
     #[cfg(target_os = "macos")]
     {
-        let _ = cidre::av::CaptureDevice::request_access_for_media_type(cidre::av::MediaType::audio()).await;
+        tracing::info!(target: "lare_permissions", "requesting microphone access");
+        match cidre::av::CaptureDevice::request_access_for_media_type(cidre::av::MediaType::audio()).await {
+            Ok(granted) => tracing::info!(target: "lare_permissions", "microphone requestAccess returned {granted}"),
+            Err(_) => tracing::warn!(target: "lare_permissions", "microphone requestAccess threw an exception"),
+        }
     }
     microphone()
 }

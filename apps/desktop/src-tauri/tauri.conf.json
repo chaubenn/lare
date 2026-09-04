@@ -52,6 +52,7 @@
     ],
     "macOS": {
       "minimumSystemVersion": "13.0",
+      "entitlements": "entitlements.plist",
       "frameworks": ["../../../target/native-deps/Spacedrive.framework"]
     },
     "windows": {
