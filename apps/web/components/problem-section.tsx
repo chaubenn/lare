@@ -83,7 +83,7 @@ export function ProblemSection({
           </summary>
           <div
             className="leetcode-html border-t border-zinc-800/80 px-4 py-3"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised with DOMPurify in sanitizeHtml()
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised in sanitizeHtml()
             dangerouslySetInnerHTML={{ __html: description }}
           />
         </details>
