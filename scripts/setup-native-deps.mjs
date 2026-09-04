@@ -172,7 +172,9 @@ async function setupWindows() {
       extra += `LIBCLANG_PATH = "${libclang.replaceAll("\\", "/")}"\n`;
       console.log(`Using Visual Studio libclang: ${libclang}`);
     } else {
-      console.warn(`Visual Studio LLVM component not found (${libclang}); falling back to the LLVM installer.`);
+      console.warn(
+        `Visual Studio LLVM component not found (${libclang}); falling back to the LLVM installer.`,
+      );
     }
   } catch {
     console.warn("vswhere failed; looking for a standalone LLVM install.");
@@ -190,7 +192,8 @@ async function setupWindows() {
         break;
       }
     }
-    if (!extra) console.warn("No libclang.dll found; set LIBCLANG_PATH manually (bindgen needs it).");
+    if (!extra)
+      console.warn("No libclang.dll found; set LIBCLANG_PATH manually (bindgen needs it).");
   }
   console.log("Windows native deps ready");
   return extra;
