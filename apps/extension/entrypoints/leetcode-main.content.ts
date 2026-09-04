@@ -198,8 +198,7 @@ export default defineContentScript({
           } catch {
             reqBody = null;
           }
-          const kind =
-            kindFromUrlAndRequest(abs, reqBody) ?? kindFromResponse(abs, text);
+          const kind = kindFromUrlAndRequest(abs, reqBody) ?? kindFromResponse(abs, text);
           if (!kind) return;
           try {
             consider(url, text, kind);

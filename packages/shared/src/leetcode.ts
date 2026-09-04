@@ -82,9 +82,8 @@ export function isSubmitGraphql(body: string): boolean {
 export function isCheckGraphql(body: string): boolean {
   if (isInterpretGraphql(body)) return false;
   return (
-    /checkSubmission|submissionCheck|submissionDetails|"operationName"\s*:\s*"check/i.test(
-      body,
-    ) || /(?:mutation|query)\s+checkSubmission/i.test(body)
+    /checkSubmission|submissionCheck|submissionDetails|"operationName"\s*:\s*"check/i.test(body) ||
+    /(?:mutation|query)\s+checkSubmission/i.test(body)
   );
 }
 
@@ -132,7 +131,11 @@ function looseNum(v: unknown): number | null | undefined {
 export function unwrapCheckPayload(body: unknown): unknown {
   if (!body || typeof body !== "object") return body;
   const o = body as Record<string, unknown>;
-  if (typeof o.state === "string" || typeof o.statusCode === "number" || typeof o.status_code === "number") {
+  if (
+    typeof o.state === "string" ||
+    typeof o.statusCode === "number" ||
+    typeof o.status_code === "number"
+  ) {
     return body;
   }
   if (o.data) return unwrapCheckPayload(o.data);
@@ -177,7 +180,9 @@ export function normalizeCheckPayload(body: unknown): unknown {
     status_msg: statusMsg ?? o.status_msg,
     submission_id: o.submission_id ?? o.submissionId,
     status_runtime:
-      o.status_runtime ?? o.statusRuntime ?? (typeof o.runtime === "string" ? o.runtime : undefined),
+      o.status_runtime ??
+      o.statusRuntime ??
+      (typeof o.runtime === "string" ? o.runtime : undefined),
     display_runtime: o.display_runtime ?? o.displayRuntime,
     status_memory:
       o.status_memory ?? o.statusMemory ?? (typeof o.memory === "string" ? o.memory : undefined),

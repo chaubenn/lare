@@ -9,6 +9,7 @@ import {
   isAccepted,
   isFinalCheck,
   isJudgeFailure,
+  normalizeCheckPayload,
   type ProblemInfo,
   parseMemoryMb,
   parseRuntimeMs,
@@ -17,7 +18,6 @@ import {
   SubmitResponseSchema,
   submissionIdFromPayload,
   submissionIdFromUrl,
-  normalizeCheckPayload,
 } from "@lare/shared";
 import { BRIDGE_MARK, isMainToIsolated, type MainToIsolated } from "./bridge";
 import { fetchQuestion, fetchSubmissionDetails, statusLabel } from "./leetcodeApi";
@@ -353,7 +353,11 @@ export class PageController {
       submissionIdFromPayload(check.submission_id) ??
       submissionIdFromPayload(checkPayload) ??
       submissionIdFromPayload(body);
-    if (id == null && this.lastSubmitId != null && this.pendingSubmissionIds.has(this.lastSubmitId)) {
+    if (
+      id == null &&
+      this.lastSubmitId != null &&
+      this.pendingSubmissionIds.has(this.lastSubmitId)
+    ) {
       id = this.lastSubmitId;
     } else if (id == null && this.pendingSubmissionIds.size === 1) {
       id = [...this.pendingSubmissionIds][0]!;

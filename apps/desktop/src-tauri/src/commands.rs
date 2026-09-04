@@ -298,12 +298,13 @@ pub async fn studio_project_info(project_path: PathBuf) -> Result<StudioProjectI
             .as_deref()
             .and_then(|p| lare_recording::thumbnail::probe(p).ok());
         let camera_path = lare_recording::find_camera_track(&project_path);
-        let mic_path = lare_recording::find_mic_track(&project_path).and_then(|p| {
+        // Falls back to the untranscoded track: a preview that may not play beats no preview.
+        let mic_path = lare_recording::find_mic_track(&project_path).map(|p| {
             match lare_recording::ensure_playable_audio(&p) {
-                Ok(playable) => Some(playable),
+                Ok(playable) => playable,
                 Err(e) => {
                     warn!(%e, path = %p.display(), "could not transcode mic for preview");
-                    Some(p)
+                    p
                 }
             }
         });

@@ -110,9 +110,7 @@ export async function sendRuntime(req: RuntimeRequest): Promise<RuntimeResponse>
       }
     });
     if (res.ok) return res;
-    const transient = /Receiving end does not exist|Extension context invalidated/i.test(
-      res.error,
-    );
+    const transient = /Receiving end does not exist|Extension context invalidated/i.test(res.error);
     if (!transient || attempt === 3) return res;
     await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
   }

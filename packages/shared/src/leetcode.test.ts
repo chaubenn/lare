@@ -50,9 +50,9 @@ describe("urls", () => {
     expect(submissionIdFromUrl("https://leetcode.com/submissions/detail/123456789/check/")).toBe(
       123456789,
     );
-    expect(
-      submissionIdFromUrl("https://leetcode.com/submissions/detail/123456789/v2/check/"),
-    ).toBe(123456789);
+    expect(submissionIdFromUrl("https://leetcode.com/submissions/detail/123456789/v2/check/")).toBe(
+      123456789,
+    );
     expect(submissionIdFromUrl("https://leetcode.com/problems/two-sum/submissions/42/")).toBe(42);
   });
 });
@@ -64,7 +64,9 @@ describe("graphql judge helpers", () => {
       true,
     );
     expect(
-      isSubmitGraphql('{"query":"mutation submitCode($code: String!) { submitCode(code: $code) }"}'),
+      isSubmitGraphql(
+        '{"query":"mutation submitCode($code: String!) { submitCode(code: $code) }"}',
+      ),
     ).toBe(true);
     expect(isSubmitGraphql('{"operationName":"interpretSolution"}')).toBe(false);
     expect(submissionIdFromPayload({ submission_id: "99" })).toBe(99);
