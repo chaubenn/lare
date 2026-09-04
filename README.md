@@ -74,18 +74,6 @@ Tag `vX.Y.Z` (or run the Release workflow manually) to build unsigned installers
 (Apple Silicon + Intel) and Windows x64 plus the extension zip, attached to a draft GitHub release.
 Signing/notarisation needs the usual `APPLE_*` / `TAURI_SIGNING_*` secrets.
 
-## Things that need a human
-
-- **Supabase Auth providers**: enable GitHub (create a GitHub OAuth App with callback
-  `https://jndqrvwkwoyvzoqcveev.supabase.co/auth/v1/callback`) in Authentication -> Providers, and
-  add the redirect URLs `https://koplffaeeahehnfikinmldhhmmldghhl.chromiumapp.org/auth/callback`,
-  `http://127.0.0.1:47831/auth/callback`, `https://lare.vercel.app/auth/callback` and
-  `http://localhost:3000/auth/callback` under URL Configuration.
-- **Web deploy**: `vercel login`, then `vercel --cwd apps/web` and set `NEXT_PUBLIC_*` from
-  `.env.example` (the CI already builds the site).
-- **Chrome Web Store** listing (the extension currently loads unpacked or from the release zip).
-- Delete the retired `diag` Edge Function from the Supabase dashboard (it now answers 410).
-- Windows smoke test of the installer produced by CI.
 
 ## License
 
