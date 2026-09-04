@@ -226,6 +226,8 @@ export const recorder = {
     invoke<PermissionStatus>("request_permission", { which }),
   permissionSettingsUrl: (which: "screen_recording" | "camera" | "microphone") =>
     invoke<string | null>("permission_settings_url", { which }),
+  openPermissionSettings: (which: "screen_recording" | "camera" | "microphone") =>
+    invoke<void>("open_permission_settings", { which }),
   settings: () => invoke<RecorderSettings>("recorder_settings"),
   setSettings: (settings: RecorderSettings) => invoke<void>("set_recorder_settings", { settings }),
 

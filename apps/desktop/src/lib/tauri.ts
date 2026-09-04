@@ -77,9 +77,18 @@ export function useTauriEvent<K extends keyof TauriEvents>(
     const callback: EventCallback<TauriEvents[K]> = (event) => {
       handlerRef.current(event.payload);
     };
+    // Unlistening can throw inside @tauri-apps/api when the listener was already dropped
+    // (StrictMode double effects, or a window being torn down); that is harmless.
+    const safeUnlisten = (fn: () => void) => {
+      try {
+        fn();
+      } catch {
+        /* listener already gone */
+      }
+    };
     listen<TauriEvents[K]>(name, callback)
       .then((fn) => {
-        if (cancelled) fn();
+        if (cancelled) safeUnlisten(fn);
         else unlisten = fn;
       })
       .catch((err: unknown) => {
@@ -87,7 +96,7 @@ export function useTauriEvent<K extends keyof TauriEvents>(
       });
     return () => {
       cancelled = true;
-      unlisten?.();
+      if (unlisten) safeUnlisten(unlisten);
     };
   }, [name]);
 }

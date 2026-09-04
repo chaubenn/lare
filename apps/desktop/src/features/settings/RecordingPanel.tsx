@@ -5,7 +5,6 @@
 
 import { cn } from "@lare/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Camera,
   Check,
@@ -173,7 +172,17 @@ function PermissionRow({
     mutationFn: () => recorder.requestPermission(row.which),
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: permissionsKey });
-      if (result === "granted") toast({ title: `${row.label} allowed`, variant: "success" });
+      if (result === "granted") {
+        toast({ title: `${row.label} allowed`, variant: "success" });
+      } else if (row.which === "screen_recording") {
+        // macOS only shows the screen-recording prompt once and reports "denied" until the app is
+        // switched on in System Settings; the request above is what adds Lare to that list.
+        toast({
+          title: "Turn on Lare in System Settings",
+          description:
+            "Lare is now listed under Privacy & Security → Screen & System Audio Recording. Switch it on, then quit and reopen Lare.",
+        });
+      }
     },
     onError: (e) =>
       toast({
@@ -187,7 +196,7 @@ function PermissionRow({
     const url = settingsUrl.data;
     if (!url) return;
     try {
-      await openUrl(url);
+      await recorder.openPermissionSettings(row.which);
     } catch (e) {
       toast({
         title: "Couldn't open System Settings",
@@ -199,6 +208,10 @@ function PermissionRow({
 
   // macOS only prompts once; afterwards the user has to flip the switch in System Settings.
   const showSettings = !!settingsUrl.data && (status === "denied" || status === "not_determined");
+  // Screen recording has no "not determined" state on macOS: it reads as denied until the app has
+  // asked once and been switched on, so the request button must be available while denied too.
+  const showAllow =
+    status === "not_determined" || (row.which === "screen_recording" && status === "denied");
 
   return (
     <li className="flex flex-wrap items-center gap-3 px-3 py-2.5">
@@ -208,7 +221,7 @@ function PermissionRow({
         <div className="text-xs text-zinc-500">{row.description}</div>
       </div>
       <PermissionBadge status={status} />
-      {status === "not_determined" ? (
+      {showAllow ? (
         <Button
           size="sm"
           variant="primary"
