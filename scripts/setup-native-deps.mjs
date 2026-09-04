@@ -96,6 +96,24 @@ async function setupMac() {
       recursive: true,
     });
   }
+  // The dylibs are referenced as @executable_path/../Frameworks/…, which resolves to
+  // target/Frameworks for target/debug/<bin> but not for test/example binaries in
+  // target/debug/deps, target/debug/examples or target/<triple>/debug. Link those too.
+  const shared = path.join(targetDir, "Frameworks");
+  const profileDirs = [path.join(targetDir, "debug"), path.join(targetDir, "release")];
+  const triple = process.env.RUST_TARGET_TRIPLE;
+  if (triple) {
+    profileDirs.push(
+      path.join(targetDir, triple, "debug"),
+      path.join(targetDir, triple, "release"),
+    );
+  }
+  for (const dir of profileDirs) {
+    await fs.mkdir(dir, { recursive: true });
+    const link = path.join(dir, "Frameworks");
+    await fs.rm(link, { recursive: true, force: true });
+    await fs.symlink(path.relative(dir, shared), link, "dir");
+  }
 
   // Copy dylibs next to debug binaries so `cargo run`/tests find them.
   const libDir = path.join(depsDir, "lib");
