@@ -13,7 +13,11 @@ Deno.serve(
     const ok = await verifyWebhookSignature(raw, req.headers.get("X-BunnyStream-Signature"));
     if (!ok) return json({ error: "invalid signature" }, 401);
 
-    const payload = JSON.parse(raw) as { VideoLibraryId?: number; VideoGuid?: string; Status?: number };
+    const payload = JSON.parse(raw) as {
+      VideoLibraryId?: number;
+      VideoGuid?: string;
+      Status?: number;
+    };
     if (Number(payload.VideoLibraryId) !== libraryId() || !payload.VideoGuid) {
       return json({ ignored: true });
     }

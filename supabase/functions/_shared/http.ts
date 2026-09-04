@@ -12,7 +12,11 @@ export function json(body: unknown, status = 200, headers: Record<string, string
   });
 }
 
-export function error(message: string, status = 400, extra: Record<string, unknown> = {}): Response {
+export function error(
+  message: string,
+  status = 400,
+  extra: Record<string, unknown> = {},
+): Response {
   return json({ error: message, ...extra }, status);
 }
 
@@ -118,7 +122,9 @@ export class HttpError extends Error {
 }
 
 /** Wrap a handler with CORS preflight, configuration loading and uniform error handling. */
-export function handler(fn: (req: Request) => Promise<Response>): (req: Request) => Promise<Response> {
+export function handler(
+  fn: (req: Request) => Promise<Response>,
+): (req: Request) => Promise<Response> {
   return async (req) => {
     const pre = preflight(req);
     if (pre) return pre;

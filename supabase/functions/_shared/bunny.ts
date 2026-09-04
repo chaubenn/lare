@@ -51,13 +51,21 @@ export async function deleteVideo(guid: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error(`Bunny delete video failed: ${res.status}`);
 }
 
-export async function uploadCaptions(guid: string, lang: string, label: string, vtt: string): Promise<void> {
+export async function uploadCaptions(
+  guid: string,
+  lang: string,
+  label: string,
+  vtt: string,
+): Promise<void> {
   const captionsFile = btoa(unescape(encodeURIComponent(vtt)));
-  const res = await fetch(`${BUNNY_VIDEO_API}/library/${libraryId()}/videos/${guid}/captions/${lang}`, {
-    method: "POST",
-    headers: { ...streamHeaders(), "content-type": "application/json" },
-    body: JSON.stringify({ srclang: lang, label, captionsFile }),
-  });
+  const res = await fetch(
+    `${BUNNY_VIDEO_API}/library/${libraryId()}/videos/${guid}/captions/${lang}`,
+    {
+      method: "POST",
+      headers: { ...streamHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ srclang: lang, label, captionsFile }),
+    },
+  );
   if (!res.ok) throw new Error(`Bunny captions upload failed: ${res.status} ${await res.text()}`);
 }
 
@@ -86,7 +94,10 @@ export function embedUrl(guid: string, params: Record<string, string | number> =
 }
 
 /** Verify Bunny's webhook HMAC-SHA256 (key = library read-only API key). */
-export async function verifyWebhookSignature(rawBody: string, signatureHex: string | null): Promise<boolean> {
+export async function verifyWebhookSignature(
+  rawBody: string,
+  signatureHex: string | null,
+): Promise<boolean> {
   if (!signatureHex) return false;
   const key = await crypto.subtle.importKey(
     "raw",
@@ -108,7 +119,9 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 /** Bunny webhook status enum -> videos.status */
-export function mapWebhookStatus(status: number): "uploading" | "uploaded" | "processing" | "ready" | "failed" | null {
+export function mapWebhookStatus(
+  status: number,
+): "uploading" | "uploaded" | "processing" | "ready" | "failed" | null {
   switch (status) {
     case 0: // Queued
     case 1: // Processing

@@ -12,9 +12,11 @@ Deno.serve(
   handler(async (req) => {
     if (req.method !== "POST") throw new HttpError("Method not allowed", 405);
     const { id: userId } = await requireUser(req);
-    const body = await readJson<{ videoId?: string; vtt?: string; lang?: string; label?: string }>(req);
+    const body = await readJson<{ videoId?: string; vtt?: string; lang?: string; label?: string }>(
+      req,
+    );
     if (!body.videoId) throw new HttpError("videoId required");
-    if (!body.vtt || !body.vtt.startsWith("WEBVTT")) throw new HttpError("vtt must be WebVTT text");
+    if (!body.vtt?.startsWith("WEBVTT")) throw new HttpError("vtt must be WebVTT text");
     if (body.vtt.length > MAX_VTT_BYTES) throw new HttpError("captions too large", 413);
     const lang = body.lang ?? "en";
     if (!LANG_RE.test(lang)) throw new HttpError("invalid lang");

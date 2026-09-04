@@ -19,7 +19,7 @@ Deno.serve(
       .eq("id", body.videoId)
       .maybeSingle();
     if (error) throw new HttpError(error.message, 500);
-    if (!video || !video.bunny_video_id) throw new HttpError("Video not found", 404);
+    if (!video?.bunny_video_id) throw new HttpError("Video not found", 404);
 
     const expires = Math.floor(Date.now() / 1000) + 6 * 3600;
     const token = await embedToken(video.bunny_video_id, expires);

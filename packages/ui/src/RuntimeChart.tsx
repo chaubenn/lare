@@ -14,7 +14,13 @@ export interface RuntimeChartProps {
  * LeetCode-style runtime/memory distribution histogram: percentage of accepted
  * submissions per bin, with the user's bin highlighted.
  */
-export function RuntimeChart({ distribution, userValue, unit, height = 160, className }: RuntimeChartProps) {
+export function RuntimeChart({
+  distribution,
+  userValue,
+  unit,
+  height = 160,
+  className,
+}: RuntimeChartProps) {
   const highlight =
     userValue === null || userValue === undefined ? -1 : userBinIndex(distribution, userValue);
   const data = distribution.bins.map((b, i) => ({ ...b, i }));
@@ -23,7 +29,11 @@ export function RuntimeChart({ distribution, userValue, unit, height = 160, clas
   return (
     <div className={className} style={{ width: "100%", height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }} barCategoryGap={1}>
+        <BarChart
+          data={data}
+          margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+          barCategoryGap={1}
+        >
           <XAxis
             dataKey="value"
             tickLine={false}

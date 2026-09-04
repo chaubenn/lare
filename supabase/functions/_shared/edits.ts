@@ -29,7 +29,8 @@ export function checkpoints(events: EditEvent[], pauseMs = 20_000): { t: number;
   const out: { t: number; code: string }[] = [];
   let text = "";
   for (let i = 0; i < events.length; i++) {
-    const e = events[i]!;
+    const e = events[i];
+    if (!e) continue;
     text = applyEvent(text, e);
     const next = events[i + 1];
     if (!next || next.t - e.t >= pauseMs) {
@@ -75,7 +76,10 @@ export interface PauseInterval {
   end: number;
 }
 
-export function pausedIntervals(events: { t: number; type: string }[], now: number): PauseInterval[] {
+export function pausedIntervals(
+  events: { t: number; type: string }[],
+  now: number,
+): PauseInterval[] {
   const out: PauseInterval[] = [];
   let pausedSince: number | null = null;
   for (const e of [...events].sort((a, b) => a.t - b.t)) {

@@ -24,7 +24,8 @@ export function CodeBlock({
   maxHeight?: number;
 }) {
   const [html, setHtml] = useState<string | null>(null);
-  const language = (lang ? (LANG_ALIASES[lang.toLowerCase()] ?? lang.toLowerCase()) : "text") || "text";
+  const language =
+    (lang ? (LANG_ALIASES[lang.toLowerCase()] ?? lang.toLowerCase()) : "text") || "text";
 
   useEffect(() => {
     let cancelled = false;

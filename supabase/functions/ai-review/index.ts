@@ -2,9 +2,20 @@
 // Builds a timeline from the whisper transcript, Monaco edit checkpoints and LeetCode
 // submissions, then asks OpenAI (Responses API, strict JSON schema) for a graded debrief.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { AI_REVIEW_SCHEMA_NAME, type AiReview, aiReviewJsonSchema } from "../_shared/aiReviewSchema.ts";
-import { type EditLog, checkpoints, gunzipJson, lineDiff, pausedIntervals, toMediaMs } from "../_shared/edits.ts";
-import { HttpError, env, envOptional, handler, json, readJson } from "../_shared/http.ts";
+import {
+  AI_REVIEW_SCHEMA_NAME,
+  type AiReview,
+  aiReviewJsonSchema,
+} from "../_shared/aiReviewSchema.ts";
+import {
+  checkpoints,
+  type EditLog,
+  gunzipJson,
+  lineDiff,
+  pausedIntervals,
+  toMediaMs,
+} from "../_shared/edits.ts";
+import { env, envOptional, HttpError, handler, json, readJson } from "../_shared/http.ts";
 import { adminClient, requireUser } from "../_shared/supabase.ts";
 
 const DAILY_LIMIT = 5;
@@ -85,22 +96,36 @@ Deno.serve(
     const [{ data: problems }, { data: transcript }, { data: events }] = await Promise.all([
       admin
         .from("session_problems")
-        .select("id, slug, title, difficulty, description_html, edits_path, opened_at, submissions(*)")
+        .select(
+          "id, slug, title, difficulty, description_html, edits_path, opened_at, submissions(*)",
+        )
         .eq("session_id", session.id)
         .order("opened_at"),
-      admin.from("transcripts").select("segments, language").eq("session_id", session.id).maybeSingle(),
+      admin
+        .from("transcripts")
+        .select("segments, language")
+        .eq("session_id", session.id)
+        .maybeSingle(),
       admin.from("session_events").select("t, type").eq("session_id", session.id).order("t"),
     ]);
     // The recording (and therefore the transcript) skips paused stretches; map wall-clock
     // timestamps of edits and submissions onto the same media clock.
     const pauses = pausedIntervals(
-      ((events as { t: string; type: string }[] | null) ?? []).map((e) => ({ t: new Date(e.t).getTime(), type: e.type })),
+      ((events as { t: string; type: string }[] | null) ?? []).map((e) => ({
+        t: new Date(e.t).getTime(),
+        type: e.type,
+      })),
       session.ended_at ? new Date(session.ended_at).getTime() : Date.now(),
     );
     const media = (epochMs: number) => toMediaMs(epochMs, t0, pauses);
 
-    const segments = ((transcript?.segments as Segment[] | null) ?? []).filter((s) => s.text?.trim());
-    const timeline: TimelineItem[] = segments.map((s) => ({ t: s.s, text: `[${mmss(s.s)}] SAID: ${s.text.trim()}` }));
+    const segments = ((transcript?.segments as Segment[] | null) ?? []).filter((s) =>
+      s.text?.trim(),
+    );
+    const timeline: TimelineItem[] = segments.map((s) => ({
+      t: s.s,
+      text: `[${mmss(s.s)}] SAID: ${s.text.trim()}`,
+    }));
 
     let finalCode = "";
     let finalLang = "";
@@ -123,7 +148,10 @@ Deno.serve(
               ...removed.slice(0, 40).map((l) => `- ${l}`),
               ...added.slice(0, 60).map((l) => `+ ${l}`),
             ].join("\n");
-            timeline.push({ t: rel, text: `[${mmss(rel)}] CODE CHECKPOINT (${p.slug}) diff vs previous:\n${diffText || "(no line changes)"}` });
+            timeline.push({
+              t: rel,
+              text: `[${mmss(rel)}] CODE CHECKPOINT (${p.slug}) diff vs previous:\n${diffText || "(no line changes)"}`,
+            });
             prev = cp.code;
           }
           finalCode = prev || finalCode;
@@ -147,7 +175,10 @@ Deno.serve(
         const stats = s.accepted
           ? `runtime ${s.runtime_ms ?? "?"} ms (beats ${s.runtime_percentile?.toFixed(2) ?? "?"}%), memory ${s.memory_mb ?? "?"} MB (beats ${s.memory_percentile?.toFixed(2) ?? "?"}%)`
           : `${s.total_correct ?? "?"}/${s.total_testcases ?? "?"} testcases passed`;
-        timeline.push({ t: rel, text: `[${mmss(rel)}] SUBMITTED (${p.slug}): ${s.status_display ?? (s.accepted ? "Accepted" : "Rejected")} — ${stats}` });
+        timeline.push({
+          t: rel,
+          text: `[${mmss(rel)}] SUBMITTED (${p.slug}): ${s.status_display ?? (s.accepted ? "Accepted" : "Rejected")} — ${stats}`,
+        });
         if (s.code && s.accepted) {
           finalCode = s.code;
           finalLang = s.lang ?? finalLang;
@@ -160,7 +191,8 @@ Deno.serve(
     if (timelineText.length > MAX_INPUT_CHARS) {
       timelineText = `${timelineText.slice(0, MAX_INPUT_CHARS)}\n…(timeline truncated)`;
     }
-    const durationMs = session.active_ms || (session.ended_at ? media(new Date(session.ended_at).getTime()) : 0);
+    const durationMs =
+      session.active_ms || (session.ended_at ? media(new Date(session.ended_at).getTime()) : 0);
 
     const system = [
       "You are a senior software engineer running the debrief of a mock coding interview.",
@@ -190,19 +222,30 @@ Deno.serve(
     const model = envOptional("OPENAI_MODEL") ?? "gpt-5-mini";
     const res = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
-      headers: { authorization: `Bearer ${env("OPENAI_API_KEY")}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${env("OPENAI_API_KEY")}`,
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         model,
         input: [
           { role: "system", content: system },
           { role: "user", content: user },
         ],
-        text: { format: { type: "json_schema", name: AI_REVIEW_SCHEMA_NAME, strict: true, schema: aiReviewJsonSchema } },
+        text: {
+          format: {
+            type: "json_schema",
+            name: AI_REVIEW_SCHEMA_NAME,
+            strict: true,
+            schema: aiReviewJsonSchema,
+          },
+        },
         reasoning: { effort: "medium" },
         max_output_tokens: 6000,
       }),
     });
-    if (!res.ok) throw new HttpError(`OpenAI error ${res.status}: ${(await res.text()).slice(0, 500)}`, 502);
+    if (!res.ok)
+      throw new HttpError(`OpenAI error ${res.status}: ${(await res.text()).slice(0, 500)}`, 502);
     const out = (await res.json()) as {
       status?: string;
       output?: { type: string; content?: { type: string; text?: string }[] }[];
@@ -213,8 +256,11 @@ Deno.serve(
     if (!text) throw new HttpError(`OpenAI returned no output (status ${out.status ?? "?"})`, 502);
     const review = JSON.parse(text) as AiReview;
     // Clamp timestamps into the session.
-    const clamp = (t: number) => Math.max(0, Math.min(Math.round(t), Math.max(durationMs, 0) || Number.MAX_SAFE_INTEGER));
-    review.moments = review.moments.map((m) => ({ ...m, t_ms: clamp(m.t_ms) })).sort((a, b) => a.t_ms - b.t_ms);
+    const clamp = (t: number) =>
+      Math.max(0, Math.min(Math.round(t), Math.max(durationMs, 0) || Number.MAX_SAFE_INTEGER));
+    review.moments = review.moments
+      .map((m) => ({ ...m, t_ms: clamp(m.t_ms) }))
+      .sort((a, b) => a.t_ms - b.t_ms);
     review.code_iterations = review.code_iterations.map((c) => ({ ...c, t_ms: clamp(c.t_ms) }));
 
     const row = {

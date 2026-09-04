@@ -1,5 +1,5 @@
-import { type SupabaseClient, createClient } from "npm:@supabase/supabase-js@2";
-import { HttpError, env } from "./http.ts";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { env, HttpError } from "./http.ts";
 
 // deno-lint-ignore no-explicit-any
 export type AnyClient = SupabaseClient<any, "public", any>;
@@ -37,7 +37,9 @@ export async function requireUser(req: Request): Promise<{ id: string; client: A
   return { id: data.user.id, client };
 }
 
-export async function optionalUser(req: Request): Promise<{ id: string | null; client: AnyClient }> {
+export async function optionalUser(
+  req: Request,
+): Promise<{ id: string | null; client: AnyClient }> {
   const jwt = bearerJwt(req);
   const client = userClient(req);
   if (!jwt) return { id: null, client };

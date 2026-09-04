@@ -22,9 +22,15 @@ Deno.serve(
 
     if (video.bunny_video_id) await deleteVideo(video.bunny_video_id);
     if (video.thumbnail_path) {
-      await admin.storage.from("thumbnails").remove([video.thumbnail_path]).catch(() => undefined);
+      await admin.storage
+        .from("thumbnails")
+        .remove([video.thumbnail_path])
+        .catch(() => undefined);
     }
-    await admin.from("posts").update({ video_id: null, video_kind: "none" }).eq("video_id", video.id);
+    await admin
+      .from("posts")
+      .update({ video_id: null, video_kind: "none" })
+      .eq("video_id", video.id);
     const { error } = await admin.from("videos").delete().eq("id", video.id);
     if (error) throw new HttpError(error.message, 500);
     return json({ ok: true });

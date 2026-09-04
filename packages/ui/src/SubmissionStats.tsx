@@ -1,7 +1,7 @@
 import { type Distribution, formatBeats } from "@lare/shared";
 import { useState } from "react";
-import { RuntimeChart } from "./RuntimeChart";
 import { cn } from "./cn";
+import { RuntimeChart } from "./RuntimeChart";
 
 export interface SubmissionStatsProps {
   runtimeMs: number | null;
