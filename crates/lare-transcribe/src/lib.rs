@@ -199,12 +199,23 @@ where
     if is_complete_model(&path, kind).await {
         return Ok(path);
     }
-    let result = download_model(&path, kind, &mut |p| {
+    let mut result = download_model(&path, kind, &mut |p| {
         publish_download(p);
         on_progress(p);
     })
-    .await
-    .with_context(|| format!("downloading {}", kind.file_name()));
+    .await;
+    if let Err(e) = &result {
+        // One automatic retry before surfacing an error. A checksum failure has already
+        // discarded its partial file and any other failure left resumable state behind, so
+        // the retry starts from the best possible position at no cost to the user.
+        tracing::warn!(error = %e, "model download failed; retrying");
+        result = download_model(&path, kind, &mut |p| {
+            publish_download(p);
+            on_progress(p);
+        })
+        .await;
+    }
+    let result = result.with_context(|| format!("downloading {}", kind.file_name()));
     if let Ok(mut latest) = LATEST_DOWNLOAD.lock() {
         *latest = None;
     }
@@ -396,11 +407,17 @@ where
     let tmp = path.with_file_name(format!("{}.part", kind.file_name()));
     let state_path = path.with_file_name(format!("{}.part.json", kind.file_name()));
 
-    // Work out which chunks an earlier attempt already wrote.
+    // Work out which chunks an earlier attempt already wrote. A `.part` is only resumable when
+    // the state file written by this downloader vouches for it and the file is the full
+    // preallocated size. Anything else — a legacy sequential `.part`, a different model's file,
+    // a preallocation from a run that died before writing state — is unverifiable, and resuming
+    // over bad bytes guarantees a whole-file checksum failure after a long download.
     let mut done = vec![false; n_chunks];
     if let Ok(meta) = tokio::fs::metadata(&tmp).await {
-        match tokio::fs::read_to_string(&state_path).await {
-            Ok(text) => {
+        let part_len = meta.len();
+        let mut resumable = false;
+        if part_len == size {
+            if let Ok(text) = tokio::fs::read_to_string(&state_path).await {
                 if let Ok(state) = serde_json::from_str::<PartState>(&text) {
                     if state.chunk_bytes == CHUNK_BYTES && state.size == size {
                         for i in state.done {
@@ -408,19 +425,15 @@ where
                                 *d = true;
                             }
                         }
+                        resumable = true;
                     }
                 }
             }
-            Err(_) if meta.len() < size => {
-                // A `.part` from the old sequential downloader: its first `len` bytes are valid.
-                // (A full-size `.part` without state is a preallocated file from an attempt of
-                // this downloader that died before writing its state; it holds no usable data.)
-                let len = meta.len();
-                for (i, d) in done.iter_mut().enumerate() {
-                    *d = chunk_bounds(i, size).1 < len;
-                }
-            }
-            Err(_) => {}
+        }
+        if !resumable {
+            tracing::warn!(bytes = part_len, "discarding unverifiable partial model download");
+            let _ = tokio::fs::remove_file(&tmp).await;
+            let _ = tokio::fs::remove_file(&state_path).await;
         }
     }
 
