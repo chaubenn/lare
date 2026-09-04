@@ -168,11 +168,29 @@ async function setupWindows() {
       "installationPath",
     ]);
     const libclang = path.join(stdout.trim(), "VC/Tools/LLVM/x64/bin/libclang.dll");
-    if (await exists(libclang)) extra += `LIBCLANG_PATH = "${libclang.replaceAll("\\", "/")}"\n`;
-  } catch {
-    if (!process.env.LIBCLANG_PATH) {
-      console.warn("Could not locate libclang.dll via vswhere; set LIBCLANG_PATH manually.");
+    if (await exists(libclang)) {
+      extra += `LIBCLANG_PATH = "${libclang.replaceAll("\\", "/")}"\n`;
+      console.log(`Using Visual Studio libclang: ${libclang}`);
+    } else {
+      console.warn(`Visual Studio LLVM component not found (${libclang}); falling back to the LLVM installer.`);
     }
+  } catch {
+    console.warn("vswhere failed; looking for a standalone LLVM install.");
+  }
+  if (!extra) {
+    // Standalone LLVM (e.g. GitHub runners): bindgen needs the directory that holds libclang.dll.
+    const candidates = [
+      process.env.LIBCLANG_PATH,
+      path.join(process.env.ProgramFiles ?? "C:\\Program Files", "LLVM", "bin"),
+    ].filter(Boolean);
+    for (const dir of candidates) {
+      if (await exists(path.join(dir, "libclang.dll"))) {
+        extra += `LIBCLANG_PATH = "${dir.replaceAll("\\", "/")}"\n`;
+        console.log(`Using libclang from ${dir}`);
+        break;
+      }
+    }
+    if (!extra) console.warn("No libclang.dll found; set LIBCLANG_PATH manually (bindgen needs it).");
   }
   console.log("Windows native deps ready");
   return extra;

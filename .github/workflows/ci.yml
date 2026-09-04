@@ -21,8 +21,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -65,27 +63,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-latest]
+        # windows-2022 ships the Visual Studio LLVM component bindgen needs (same runner Cap uses).
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.88.0
+          targets: ${{ matrix.target }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          key: ${{ matrix.target }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Native deps (prebuilt ffmpeg, cargo env)
+        env:
+          RUST_TARGET_TRIPLE: ${{ matrix.target }}
         run: node scripts/setup-native-deps.mjs
       - name: cmake (macOS)
         if: runner.os == 'macOS'
         run: brew install cmake || true
       - name: Check
-        run: cargo check --workspace --all-targets
+        run: cargo check --workspace --all-targets --target ${{ matrix.target }}
       - name: Test (portable crates)
-        run: cargo test -p lare-core -p lare-bunny -p lare-transcribe
+        run: cargo test -p lare-core -p lare-bunny -p lare-transcribe --target ${{ matrix.target }}
       - name: Clippy (Lare crates)
-        run: cargo clippy -p lare-core -p lare-bunny -p lare-recording -p lare-transcribe -- -D warnings
+        run: cargo clippy -p lare-core -p lare-bunny -p lare-recording -p lare-transcribe -p lare-desktop --target ${{ matrix.target }} -- -D warnings
