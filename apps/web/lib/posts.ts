@@ -72,16 +72,27 @@ export async function attachThumbnails(
   }));
 }
 
+/** "all" is every post the viewer is allowed to see; "following" narrows it to accepted followees. */
+export const FEED_SCOPES = ["all", "following"] as const;
+export type FeedScope = (typeof FEED_SCOPES)[number];
+
+export function parseFeedScope(raw: string | string[] | undefined): FeedScope {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return FEED_SCOPES.includes(value as FeedScope) ? (value as FeedScope) : "all";
+}
+
 /**
- * One page of the viewer's feed (own posts + accepted followees), newest first.
- * `before` is the `published_at` cursor of the last item of the previous page.
+ * One page of the viewer's feed, newest first. `before` is the `published_at` cursor of the
+ * last item of the previous page. Visibility is enforced by RLS, not here: the RPC only
+ * chooses the slice ("all" vs. accounts the viewer follows).
  */
 export async function fetchFeedPage(
   supabase: Client,
   before: string | null,
+  scope: FeedScope = "all",
 ): Promise<{ items: PostCardData[]; nextCursor: string | null }> {
   const { data, error } = await supabase
-    .rpc("feed", before ? { before, page_size: FEED_PAGE_SIZE } : { page_size: FEED_PAGE_SIZE })
+    .rpc("feed", { ...(before ? { before } : {}), page_size: FEED_PAGE_SIZE, scope })
     .select(POST_CARD_SELECT)
     .overrideTypes<PostCardRow[], { merge: false }>();
   if (error) throw new Error(`feed failed: ${error.message}`);

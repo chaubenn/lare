@@ -13,6 +13,7 @@
     "./protocol": "./src/protocol.ts",
     "./session": "./src/session.ts",
     "./ai-review": "./src/ai-review.ts",
+    "./activity": "./src/activity.ts",
     "./format": "./src/format.ts",
     "./constants": "./src/constants.ts"
   },

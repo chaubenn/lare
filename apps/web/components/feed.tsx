@@ -3,16 +3,18 @@
 import { LoaderCircle } from "lucide-react";
 import { useState, useTransition } from "react";
 import { loadFeedPage } from "@/app/feed-actions";
-import type { PostCardData } from "@/lib/posts";
+import type { FeedScope, PostCardData } from "@/lib/posts";
 import { buttonSecondary } from "@/lib/styles";
 import { PostCard } from "./post-card";
 
 export function Feed({
   initialItems,
   initialCursor,
+  scope,
 }: {
   initialItems: PostCardData[];
   initialCursor: string | null;
+  scope: FeedScope;
 }) {
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
@@ -24,7 +26,7 @@ export function Feed({
     setError(null);
     startTransition(async () => {
       try {
-        const page = await loadFeedPage(cursor);
+        const page = await loadFeedPage(cursor, scope);
         setItems((prev) => {
           const seen = new Set(prev.map((p) => p.id));
           return [...prev, ...page.items.filter((p) => !seen.has(p.id))];

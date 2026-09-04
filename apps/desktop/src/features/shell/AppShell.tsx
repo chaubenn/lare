@@ -13,7 +13,7 @@ const SECTION_SHORTCUTS = [
   "/sessions",
   "/recordings",
   "/profile",
-  "/requests",
+  "/friends",
   "/settings",
 ];
 

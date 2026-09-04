@@ -11,20 +11,23 @@ export const FEED_PAGE_SIZE = 20;
 const FEED_SELECT =
   "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(id, kind, active_ms, started_at, session_problems(id, slug, title, difficulty, submissions(accepted, runtime_ms, runtime_display, runtime_percentile, submitted_at))), videos(id, status)" as const;
 
-function feedQuery(before?: string) {
+/** "all" is every post the viewer may see; "following" narrows it to accepted followees. */
+export type FeedScope = "all" | "following";
+
+function feedQuery(scope: FeedScope, before?: string) {
   return supabase
-    .rpc("feed", before ? { page_size: FEED_PAGE_SIZE, before } : { page_size: FEED_PAGE_SIZE })
+    .rpc("feed", { ...(before ? { before } : {}), page_size: FEED_PAGE_SIZE, scope })
     .select(FEED_SELECT);
 }
 
 export type FeedPost = QueryData<ReturnType<typeof feedQuery>>[number];
 
-export function useFeed() {
+export function useFeed(scope: FeedScope = "all") {
   return useInfiniteQuery({
-    queryKey: ["feed"],
+    queryKey: ["feed", scope],
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
-      const { data, error } = await feedQuery(pageParam);
+      const { data, error } = await feedQuery(scope, pageParam);
       if (error) throw error;
       return data;
     },

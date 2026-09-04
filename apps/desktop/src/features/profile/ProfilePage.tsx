@@ -1,6 +1,7 @@
 import { formatDurationHuman } from "@lare/shared";
 import { ExternalLink, Lock } from "lucide-react";
 import { Link } from "react-router";
+import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -9,11 +10,12 @@ import { ErrorState, Spinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { profileWebUrl } from "@/lib/env";
 import { openExternal } from "@/lib/open";
-import { useProfileStats } from "./queries";
+import { useProfileStats, useSolvedActivity } from "./queries";
 
 export function ProfilePage() {
   const { profile, session } = useUser();
   const stats = useProfileStats(profile?.handle);
+  const activity = useSolvedActivity(profile?.handle);
   const name = profile?.display_name ?? profile?.handle ?? session.user.email ?? "You";
 
   return (
@@ -84,6 +86,12 @@ export function ProfilePage() {
           </dl>
         ) : null}
       </div>
+
+      {activity.data?.visible ? (
+        <div className="mt-4">
+          <ActivityGrid activity={activity.data} />
+        </div>
+      ) : null}
     </>
   );
 }

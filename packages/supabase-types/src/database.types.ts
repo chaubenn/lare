@@ -551,7 +551,7 @@ export type Database = {
       accept_follow: { Args: { follower: string }; Returns: undefined }
       decline_follow: { Args: { follower: string }; Returns: undefined }
       feed: {
-        Args: { before?: string; page_size?: number }
+        Args: { before?: string; page_size?: number; scope?: string }
         Returns: {
           body: string | null
           created_at: string
@@ -575,6 +575,7 @@ export type Database = {
         }
       }
       profile_stats: { Args: { target_handle: string }; Returns: Json }
+      solved_activity: { Args: { target_handle: string; days?: number }; Returns: Json }
       request_follow: {
         Args: { target_handle: string }
         Returns: Database["public"]["Enums"]["follow_status"]

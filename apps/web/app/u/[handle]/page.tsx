@@ -1,9 +1,10 @@
-import { formatDurationHuman } from "@lare/shared";
+import { formatDurationHuman, parseSolvedActivity } from "@lare/shared";
 import type { Profile } from "@lare/supabase-types";
 import { Lock } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { ActivityGrid } from "@/components/activity-grid";
 import { Avatar } from "@/components/avatar";
 import { FollowButton, type FollowState } from "@/components/follow-button";
 import { PostCard } from "@/components/post-card";
@@ -56,8 +57,9 @@ export default async function ProfilePage({ params }: Params) {
 
   const supabase = await createClient();
   const isSelf = viewer?.id === profile.id;
-  const [statsRes, followRes] = await Promise.all([
+  const [statsRes, activityRes, followRes] = await Promise.all([
     supabase.rpc("profile_stats", { target_handle: profile.handle }),
+    supabase.rpc("solved_activity", { target_handle: profile.handle }),
     viewer && !isSelf
       ? supabase
           .from("follows")
@@ -68,6 +70,7 @@ export default async function ProfilePage({ params }: Params) {
       : Promise.resolve(null),
   ]);
   const stats = parseProfileStats(statsRes.data);
+  const activity = parseSolvedActivity(activityRes.data);
   const followState: FollowState = followRes?.data?.status ?? "none";
   const visible = stats?.visible ?? isSelf;
   const name = profile.display_name || `@${profile.handle}`;
@@ -110,6 +113,8 @@ export default async function ProfilePage({ params }: Params) {
         <Stats stats={stats} />
       </header>
 
+      {visible && activity?.visible && <ActivityGrid activity={activity} />}
+
       <section aria-label="Posts">
         {visible ? (
           <Suspense
@@ -129,7 +134,7 @@ export default async function ProfilePage({ params }: Params) {
             <p className="mt-1 text-sm text-zinc-400">
               {followState === "pending"
                 ? "Your follow request is waiting for approval."
-                : "Follow this account to see their sessions once they accept."}
+                : "Request to follow, and their sessions and solved-problem activity appear here once they accept."}
             </p>
           </div>
         )}

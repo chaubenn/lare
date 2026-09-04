@@ -1,14 +1,15 @@
-import { createMemoryRouter, Link } from "react-router";
+import { createMemoryRouter, Link, Navigate } from "react-router";
 import { EmptyState } from "@/components/ui/States";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RequireAuth } from "@/features/auth/RequireAuth";
 import { DraftEditorPage } from "@/features/drafts/DraftEditorPage";
 import { DraftsPage } from "@/features/drafts/DraftsPage";
 import { FeedPage } from "@/features/feed/FeedPage";
+import { FriendsPage } from "@/features/friends/FriendsPage";
 import { PostPage } from "@/features/posts/PostPage";
 import { ProfilePage } from "@/features/profile/ProfilePage";
+import { UserProfilePage } from "@/features/profile/UserProfilePage";
 import { RecordingsPage } from "@/features/recordings/RecordingsPage";
-import { RequestsPage } from "@/features/requests/RequestsPage";
 import { SessionReviewPage } from "@/features/sessions/SessionReviewPage";
 import { SessionsPage } from "@/features/sessions/SessionsPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
@@ -51,7 +52,10 @@ export const router = createMemoryRouter([
               { path: "/recordings", element: <RecordingsPage /> },
               { path: "/studio/:recordingId", element: <StudioEditorPage /> },
               { path: "/profile", element: <ProfilePage /> },
-              { path: "/requests", element: <RequestsPage /> },
+              { path: "/u/:handle", element: <UserProfilePage /> },
+              { path: "/friends", element: <FriendsPage /> },
+              // Follow requests moved into the friends tab.
+              { path: "/requests", element: <Navigate to="/friends?tab=requests" replace /> },
               { path: "/settings", element: <SettingsPage /> },
               { path: "*", element: <NotFound /> },
             ],

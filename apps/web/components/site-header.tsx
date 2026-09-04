@@ -19,10 +19,10 @@ export async function SiteHeader() {
                 Feed
               </Link>
               <Link
-                href="/requests"
+                href="/friends"
                 className="inline-flex items-center gap-1.5 hover:text-zinc-100"
               >
-                Requests
+                Friends
                 {pending > 0 && (
                   <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-zinc-950">
                     {pending > 99 ? "99+" : pending}
