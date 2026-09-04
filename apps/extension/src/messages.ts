@@ -91,18 +91,30 @@ export interface StateBroadcast extends RuntimeSnapshot {
   toast?: { kind: "info" | "success" | "error"; text: string } | undefined;
 }
 
-export function sendRuntime(req: RuntimeRequest): Promise<RuntimeResponse> {
-  return new Promise((resolve) => {
-    try {
-      chrome.runtime.sendMessage(req, (res: RuntimeResponse | undefined) => {
-        if (chrome.runtime.lastError || !res) {
-          resolve({ ok: false, error: chrome.runtime.lastError?.message ?? "No response" });
-        } else {
-          resolve(res);
-        }
-      });
-    } catch (e) {
-      resolve({ ok: false, error: e instanceof Error ? e.message : String(e) });
-    }
-  });
+export async function sendRuntime(req: RuntimeRequest): Promise<RuntimeResponse> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await new Promise<RuntimeResponse>((resolve) => {
+      try {
+        chrome.runtime.sendMessage(req, (raw: RuntimeResponse | undefined) => {
+          if (chrome.runtime.lastError || !raw) {
+            resolve({
+              ok: false,
+              error: chrome.runtime.lastError?.message ?? "No response",
+            });
+          } else {
+            resolve(raw);
+          }
+        });
+      } catch (e) {
+        resolve({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      }
+    });
+    if (res.ok) return res;
+    const transient = /Receiving end does not exist|Extension context invalidated/i.test(
+      res.error,
+    );
+    if (!transient || attempt === 3) return res;
+    await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+  }
+  return { ok: false, error: "No response" };
 }

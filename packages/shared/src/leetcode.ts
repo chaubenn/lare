@@ -21,18 +21,198 @@ export function problemUrl(slug: string): string {
   return `https://leetcode.com/problems/${slug}/`;
 }
 
-/** Submission id from "/submissions/detail/123456/check/" or "/problems/x/submissions/123456/" */
+/**
+ * Submission id from "/submissions/detail/123456/check/",
+ * "/submissions/detail/123456/v2/check/" or "/problems/x/submissions/123456/".
+ */
 export function submissionIdFromUrl(url: string): number | null {
   const m = /\/submissions\/(?:detail\/)?(\d+)\/?/.exec(url);
   return m?.[1] ? Number(m[1]) : null;
 }
 
-export function isSubmitUrl(url: string): boolean {
-  return /\/problems\/[a-z0-9-]+\/submit\/?(\?|$)/i.test(url);
+function pathnameOf(url: string): string | null {
+  try {
+    return new URL(url, "https://leetcode.com").pathname;
+  } catch {
+    return null;
+  }
 }
 
+/** POST /problems/{slug}/submit/ (REST). Query strings are ignored. */
+export function isSubmitUrl(url: string): boolean {
+  const path = pathnameOf(url) ?? url;
+  return /\/problems\/[^/]+\/submit\/?$/i.test(path);
+}
+
+/**
+ * Judge result polls. LeetCode's current client polls
+ * `/submissions/detail/{id}/v2/check/` for Submit (`submitResultV2`) and
+ * `/submissions/detail/{id}/check/` for Run (`runcodeResult`); older clients used the
+ * un-versioned path for both. Accept any `/vN/` segment so future bumps still match.
+ */
 export function isCheckUrl(url: string): boolean {
-  return /\/submissions\/detail\/\d+\/check\/?(\?|$)/i.test(url);
+  const path = pathnameOf(url) ?? url;
+  return /\/submissions\/(?:detail\/)?\d+\/(?:v\d+\/)?check\/?$/i.test(path);
+}
+
+export function isGraphqlUrl(url: string): boolean {
+  const path = pathnameOf(url) ?? url;
+  return /\/graphql\/?$/i.test(path);
+}
+
+/** True when a GraphQL POST body is LeetCode's "Run" (interpret), not Submit. */
+function isInterpretGraphql(body: string): boolean {
+  return /interpret_solution|interpretSolution/i.test(body);
+}
+
+/**
+ * GraphQL bodies that are a real Submit (not "Run"/interpret). LeetCode's Next.js
+ * client sometimes sends judge traffic through /graphql instead of the REST paths.
+ * Operation name may be omitted; the mutation name in `query` is matched too.
+ */
+export function isSubmitGraphql(body: string): boolean {
+  if (isInterpretGraphql(body)) return false;
+  return (
+    /submitCode|submitProblem|submitSolution|"operationName"\s*:\s*"submit/i.test(body) ||
+    /mutation\s+submit\w*/i.test(body)
+  );
+}
+
+/** GraphQL poll for a submission's judge result (as opposed to interpret/"Run"). */
+export function isCheckGraphql(body: string): boolean {
+  if (isInterpretGraphql(body)) return false;
+  return (
+    /checkSubmission|submissionCheck|submissionDetails|"operationName"\s*:\s*"check/i.test(
+      body,
+    ) || /(?:mutation|query)\s+checkSubmission/i.test(body)
+  );
+}
+
+/** True when a JSON value looks like LeetCode's `/check/` payload (possibly nested under `data`). */
+export function looksLikeCheckPayload(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const o = body as Record<string, unknown>;
+  if (checkShapeSignals(o)) return true;
+  if (o.data && typeof o.data === "object") {
+    return Object.values(o.data as Record<string, unknown>).some(looksLikeCheckPayload);
+  }
+  return false;
+}
+
+function checkShapeSignals(o: Record<string, unknown>): boolean {
+  if (
+    typeof o.state === "string" &&
+    (o.status_code != null ||
+      o.statusCode != null ||
+      o.status_msg != null ||
+      o.statusMsg != null ||
+      o.total_testcases != null ||
+      o.totalTestcases != null)
+  ) {
+    return true;
+  }
+  return (
+    o.statusCode != null &&
+    (o.statusDisplay != null ||
+      o.statusMsg != null ||
+      o.totalTestcases != null ||
+      o.total_testcases != null ||
+      o.finished === true)
+  );
+}
+
+function looseNum(v: unknown): number | null | undefined {
+  if (v == null || v === "") return v === "" ? null : undefined;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim())) return Number(v);
+  return undefined;
+}
+
+/** Peel GraphQL `{ data: { op: { state, ... } } }` down to the check object. */
+export function unwrapCheckPayload(body: unknown): unknown {
+  if (!body || typeof body !== "object") return body;
+  const o = body as Record<string, unknown>;
+  if (typeof o.state === "string" || typeof o.statusCode === "number" || typeof o.status_code === "number") {
+    return body;
+  }
+  if (o.data) return unwrapCheckPayload(o.data);
+  for (const v of Object.values(o)) {
+    if (!v || typeof v !== "object") continue;
+    const r = v as Record<string, unknown>;
+    if (
+      typeof r.state === "string" ||
+      typeof r.statusCode === "number" ||
+      typeof r.status_code === "number"
+    ) {
+      return v;
+    }
+  }
+  return body;
+}
+
+/**
+ * Normalize REST and GraphQL judge payloads into the snake_case shape our schema
+ * expects (LeetCode's Next.js client often returns camelCase and string numbers).
+ */
+export function normalizeCheckPayload(body: unknown): unknown {
+  const raw = unwrapCheckPayload(body);
+  if (!raw || typeof raw !== "object") return raw;
+  const o = raw as Record<string, unknown>;
+  const statusCode = looseNum(o.status_code ?? o.statusCode);
+  const statusMsg =
+    (typeof o.status_msg === "string" ? o.status_msg : null) ??
+    (typeof o.statusMsg === "string" ? o.statusMsg : null) ??
+    (typeof o.statusDisplay === "string" ? o.statusDisplay : null);
+  let state = typeof o.state === "string" ? o.state : undefined;
+  if (!state) {
+    if (o.finished === true || statusCode != null) state = "SUCCESS";
+    else if (statusMsg === "Accepted") state = "SUCCESS";
+  }
+  const lang =
+    typeof o.lang === "string" ? o.lang : (o.lang as { name?: string } | undefined)?.name;
+  return {
+    ...o,
+    state: state ?? "PENDING",
+    status_code: statusCode ?? o.status_code,
+    status_msg: statusMsg ?? o.status_msg,
+    submission_id: o.submission_id ?? o.submissionId,
+    status_runtime:
+      o.status_runtime ?? o.statusRuntime ?? (typeof o.runtime === "string" ? o.runtime : undefined),
+    display_runtime: o.display_runtime ?? o.displayRuntime,
+    status_memory:
+      o.status_memory ?? o.statusMemory ?? (typeof o.memory === "string" ? o.memory : undefined),
+    pretty_lang: o.pretty_lang ?? o.prettyLang,
+    run_success: o.run_success ?? o.runSuccess,
+    total_correct: looseNum(o.total_correct ?? o.totalCorrect) ?? o.total_correct,
+    total_testcases: looseNum(o.total_testcases ?? o.totalTestcases) ?? o.total_testcases,
+    runtime_percentile: looseNum(o.runtime_percentile ?? o.runtimePercentile),
+    memory_percentile: looseNum(o.memory_percentile ?? o.memoryPercentile),
+    memory: typeof o.memory === "number" ? o.memory : looseNum(o.memory),
+    lang,
+    finished: o.finished ?? (o.isPending === false ? true : undefined),
+  };
+}
+
+/** Pull a numeric submission id out of REST or GraphQL JSON. */
+export function submissionIdFromPayload(body: unknown): number | null {
+  if (body == null) return null;
+  if (typeof body === "number" && Number.isFinite(body)) return body;
+  if (typeof body === "string" && /^\d+$/.test(body)) return Number(body);
+  if (typeof body !== "object") return null;
+  const o = body as Record<string, unknown>;
+  const direct = o.submission_id ?? o.submissionId;
+  if (direct != null) {
+    const n = Number(direct);
+    if (Number.isFinite(n)) return n;
+  }
+  const data = o.data;
+  if (data && typeof data === "object") {
+    for (const v of Object.values(data as Record<string, unknown>)) {
+      const nested = submissionIdFromPayload(v);
+      if (nested != null) return nested;
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +313,7 @@ export const LEETCODE_STATUS: Record<number, string> = {
 
 export const CheckResponseSchema = z.looseObject({
   state: z.string(),
-  status_code: z.number().optional(),
+  status_code: z.coerce.number().optional(),
   status_msg: z.string().optional(),
   submission_id: z.union([z.string(), z.number()]).optional(),
   lang: z.string().optional(),
@@ -142,14 +322,20 @@ export const CheckResponseSchema = z.looseObject({
   status_runtime: z.string().optional(),
   display_runtime: z.string().optional(),
   status_memory: z.string().optional(),
-  memory: z.number().optional(),
-  runtime_percentile: z.number().nullable().optional(),
-  memory_percentile: z.number().nullable().optional(),
-  total_correct: z.number().nullable().optional(),
-  total_testcases: z.number().nullable().optional(),
+  memory: z.coerce.number().optional(),
+  runtime_percentile: z.coerce.number().nullable().optional(),
+  memory_percentile: z.coerce.number().nullable().optional(),
+  total_correct: z.coerce.number().nullable().optional(),
+  total_testcases: z.coerce.number().nullable().optional(),
   question_id: z.union([z.string(), z.number()]).optional(),
   finished: z.boolean().optional(),
-  task_finish_time: z.number().optional(),
+  task_finish_time: z.coerce.number().optional(),
+  compare_result: z.string().optional(),
+  // v2/check only: an AI-judge pass runs after the classic judge. LeetCode keeps
+  // showing "Judging" until this settles, so we must too.
+  ai_state: z.string().nullable().optional(),
+  ai_judge_message: z.string().nullable().optional(),
+  judger_status_code: z.coerce.number().nullable().optional(),
 });
 export type CheckResponse = z.infer<typeof CheckResponseSchema>;
 
@@ -157,11 +343,35 @@ export const SubmitResponseSchema = z.looseObject({
   submission_id: z.union([z.string(), z.number()]),
 });
 
+const SETTLED_STATES = new Set(["SUCCESS", "FAILURE", "REVOKED"]);
+
+/**
+ * True once the judge has stopped working on a submission. Mirrors LeetCode's own
+ * polling predicate: `state` must be SUCCESS/FAILURE (PENDING, STARTED, PREPARING,
+ * COMPILING and RUNNING_TESTS are all in-flight) and, when the v2 endpoint reports an
+ * `ai_state`, that must be settled as well.
+ */
 export function isFinalCheck(c: CheckResponse): boolean {
-  return c.state === "SUCCESS" || c.state === "FAILURE";
+  if (c.finished === true) return true;
+  if (!SETTLED_STATES.has(c.state)) return false;
+  if (c.ai_state != null && !SETTLED_STATES.has(c.ai_state)) return false;
+  return true;
 }
 
-export function isAccepted(c: Pick<CheckResponse, "status_code" | "status_msg">): boolean {
+/** A settled check that carries no verdict (judge/server failure, revoked task). */
+export function isJudgeFailure(c: CheckResponse): boolean {
+  return (
+    isFinalCheck(c) &&
+    (c.state === "FAILURE" || c.state === "REVOKED" || c.ai_state === "FAILURE") &&
+    c.status_code == null
+  );
+}
+
+export function isAccepted(
+  c: Pick<CheckResponse, "status_code" | "status_msg" | "compare_result">,
+): boolean {
+  // LeetCode downgrades AC to WA when any testcase in compare_result failed.
+  if (c.compare_result?.includes("0")) return false;
   return c.status_code === 10 || c.status_msg === "Accepted";
 }
 

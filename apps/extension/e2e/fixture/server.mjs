@@ -170,12 +170,26 @@ const server = createServer(async (req, res) => {
     submissionIdForRun = ++submitCounter;
     return json(res, 200, { interpret_id: `runcode_${submissionIdForRun}` });
   }
-  const check = /^\/submissions\/detail\/([^/]+)\/check\/?$/.exec(path);
+  const check = /^\/submissions\/detail\/([^/]+)\/(v2\/)?check\/?$/.exec(path);
   if (check && method === "GET") {
     const key = check[1];
+    const isV2 = Boolean(check[2]);
     const n = (checkCalls.get(key) ?? 0) + 1;
     checkCalls.set(key, n);
     if (n === 1) return json(res, 200, { state: "PENDING" });
+    if (isV2 && n === 2) return json(res, 200, { state: "STARTED" });
+    if (isV2 && n === 3) {
+      // Classic judge done, AI judge still running: LeetCode keeps showing "Judging".
+      return json(res, 200, {
+        state: "SUCCESS",
+        ai_state: "STARTED",
+        status_code: 10,
+        status_msg: "Accepted",
+        submission_id: key,
+        total_correct: 57,
+        total_testcases: 57,
+      });
+    }
     if (key.startsWith("runcode_")) {
       // "Run" results carry no judge totals.
       return json(res, 200, {
@@ -206,6 +220,8 @@ const server = createServer(async (req, res) => {
       total_testcases: 57,
       question_id: "1",
       finished: true,
+      compare_result: "1".repeat(57),
+      ...(isV2 ? { ai_state: "SUCCESS", ai_judge_message: null, judger_status_code: 10 } : {}),
     });
   }
   if (method === "POST" && path === "/graphql") {

@@ -43,5 +43,8 @@ lare-recording = { path = "../../../crates/lare-recording" }
 lare-transcribe = { path = "../../../crates/lare-transcribe" }
 lare-bunny = { path = "../../../crates/lare-bunny" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+
 [dev-dependencies]
 tokio-tungstenite = "0.30"

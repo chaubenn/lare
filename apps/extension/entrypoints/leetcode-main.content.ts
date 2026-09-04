@@ -3,7 +3,17 @@
  * `window.monaco` and observe the judge endpoints. It has no chrome.* access and
  * forwards everything to the isolated content script via window.postMessage.
  */
-import { isCheckUrl, isSubmitUrl, SNAPSHOT_EVERY_EVENTS, SNAPSHOT_EVERY_MS } from "@lare/shared";
+import {
+  isCheckGraphql,
+  isCheckUrl,
+  isGraphqlUrl,
+  isSubmitGraphql,
+  isSubmitUrl,
+  looksLikeCheckPayload,
+  SNAPSHOT_EVERY_EVENTS,
+  SNAPSHOT_EVERY_MS,
+  submissionIdFromPayload,
+} from "@lare/shared";
 import {
   BRIDGE_MARK,
   type DistributiveOmit,
@@ -45,10 +55,19 @@ if (import.meta.env.MODE !== "production" && fixtureOrigin) MATCHES.push(`${fixt
 export default defineContentScript({
   matches: MATCHES,
   world: "MAIN",
+  allFrames: true,
   runAt: "document_start",
   main() {
     const post = (msg: DistributiveOmit<MainToIsolated, typeof BRIDGE_MARK>) => {
-      window.postMessage({ [BRIDGE_MARK]: 1, ...msg }, window.location.origin);
+      const payload = { [BRIDGE_MARK]: 1, ...msg };
+      window.postMessage(payload, window.location.origin);
+      if (window.top && window.top !== window) {
+        try {
+          window.top.postMessage(payload, window.location.origin);
+        } catch {
+          // Cross-origin iframe; the isolated script will not see this tap.
+        }
+      }
     };
 
     // ---- judge endpoint taps ------------------------------------------------
@@ -59,15 +78,58 @@ export default defineContentScript({
         return u;
       }
     };
-    const consider = (url: string, bodyText: string) => {
+    const consider = (url: string, bodyText: string, kind: "submit" | "check") => {
       const abs = absolute(url);
-      const kind = isSubmitUrl(abs) ? "submit" : isCheckUrl(abs) ? "check" : null;
-      if (!kind) return;
       try {
         post({ kind, url: abs, body: JSON.parse(bodyText) });
       } catch {
         // non-JSON body; ignore
       }
+    };
+
+    const peekRequestBody = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<string | null> => {
+      try {
+        const body = init?.body;
+        if (typeof body === "string") return body;
+        if (body instanceof Blob) return await body.text();
+        if (body instanceof ArrayBuffer) return new TextDecoder().decode(body);
+        if (body instanceof URLSearchParams) return body.toString();
+        if (input instanceof Request) {
+          const req = init ? new Request(input, init) : input;
+          return await req.clone().text();
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    };
+
+    const kindFromUrlAndRequest = (
+      abs: string,
+      reqBody: string | null,
+    ): "submit" | "check" | null => {
+      if (isSubmitUrl(abs)) return "submit";
+      if (isCheckUrl(abs)) return "check";
+      if (isGraphqlUrl(abs) && reqBody) {
+        if (isSubmitGraphql(reqBody)) return "submit";
+        if (isCheckGraphql(reqBody)) return "check";
+      }
+      return null;
+    };
+
+    const kindFromResponse = (abs: string, bodyText: string): "submit" | "check" | null => {
+      if (!isGraphqlUrl(abs)) return null;
+      try {
+        const body: unknown = JSON.parse(bodyText);
+        if (looksLikeCheckPayload(body)) return "check";
+        if (submissionIdFromPayload(body) != null) return "submit";
+      } catch {
+        return null;
+      }
+      return null;
     };
 
     const originalFetch = window.fetch;
@@ -76,20 +138,31 @@ export default defineContentScript({
       input: RequestInfo | URL,
       init?: RequestInit,
     ) {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      const abs = absolute(url);
+      const reqBody = await peekRequestBody(input, init);
       const res = await originalFetch.call(this, input, init);
       try {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.href
-              : (input as Request).url;
-        const abs = absolute(url);
-        if (isSubmitUrl(abs) || isCheckUrl(abs)) {
+        const hinted = kindFromUrlAndRequest(abs, reqBody);
+        if (hinted) {
           res
             .clone()
             .text()
-            .then((t) => consider(url, t))
+            .then((t) => consider(url, t, hinted))
+            .catch(() => undefined);
+        } else if (isGraphqlUrl(abs)) {
+          res
+            .clone()
+            .text()
+            .then((t) => {
+              const kind = kindFromResponse(abs, t);
+              if (kind) consider(url, t, kind);
+            })
             .catch(() => undefined);
         }
       } catch {
@@ -111,17 +184,29 @@ export default defineContentScript({
       this: XMLHttpRequest & { __lareUrl?: string },
       body?: Document | XMLHttpRequestBodyInit | null,
     ) {
+      const bodyForKind = body;
       this.addEventListener("load", () => {
-        const url = this.__lareUrl;
-        if (!url) return;
-        const abs = absolute(url);
-        if (isSubmitUrl(abs) || isCheckUrl(abs)) {
+        void (async () => {
+          const url = this.__lareUrl;
+          if (!url) return;
+          const abs = absolute(url);
+          const text = typeof this.responseText === "string" ? this.responseText : "";
+          let reqBody: string | null = null;
           try {
-            consider(url, typeof this.responseText === "string" ? this.responseText : "");
+            if (typeof bodyForKind === "string") reqBody = bodyForKind;
+            else if (bodyForKind instanceof Blob) reqBody = await bodyForKind.text();
+          } catch {
+            reqBody = null;
+          }
+          const kind =
+            kindFromUrlAndRequest(abs, reqBody) ?? kindFromResponse(abs, text);
+          if (!kind) return;
+          try {
+            consider(url, text, kind);
           } catch {
             // ignore
           }
-        }
+        })();
       });
       return xhrSend.call(this, body);
     };

@@ -8,13 +8,16 @@ import {
   type EditEvent,
   isAccepted,
   isFinalCheck,
+  isJudgeFailure,
   type ProblemInfo,
   parseMemoryMb,
   parseRuntimeMs,
   problemSlugFromUrl,
   problemUrl,
   SubmitResponseSchema,
+  submissionIdFromPayload,
   submissionIdFromUrl,
+  normalizeCheckPayload,
 } from "@lare/shared";
 import { BRIDGE_MARK, isMainToIsolated, type MainToIsolated } from "./bridge";
 import { fetchQuestion, fetchSubmissionDetails, statusLabel } from "./leetcodeApi";
@@ -74,6 +77,9 @@ export class PageController {
   // Judge bookkeeping
   private pendingSubmissionIds = new Set<number>();
   private handledSubmissionIds = new Set<number>();
+  private lastSubmitId: number | null = null;
+  private warnedCapture = false;
+  private warnedReload = false;
 
   private currentUrl = "";
   private disposed = false;
@@ -145,6 +151,15 @@ export class PageController {
           appConnected: res.appConnected ?? false,
         },
       });
+      return;
+    }
+    if (
+      !res.ok &&
+      !this.warnedReload &&
+      /Receiving end does not exist|Extension context invalidated/i.test(res.error)
+    ) {
+      this.warnedReload = true;
+      this.toast("error", "Reload this LeetCode tab — the Lare extension restarted");
     }
   }
 
@@ -247,7 +262,7 @@ export class PageController {
 
   // ---- MAIN-world bridge ---------------------------------------------------
   private onWindowMessage = (ev: MessageEvent) => {
-    if (ev.source !== window || !isMainToIsolated(ev.data)) return;
+    if (ev.origin !== window.location.origin || !isMainToIsolated(ev.data)) return;
     const msg: MainToIsolated = ev.data;
     switch (msg.kind) {
       case "monaco-ready":
@@ -317,17 +332,33 @@ export class PageController {
 
   private onSubmit(body: unknown) {
     const parsed = SubmitResponseSchema.safeParse(body);
-    if (!parsed.success) return;
-    const id = Number(parsed.data.submission_id);
-    if (Number.isFinite(id)) this.pendingSubmissionIds.add(id);
+    const id = parsed.success
+      ? Number(parsed.data.submission_id)
+      : (submissionIdFromPayload(body) ?? Number.NaN);
+    if (!Number.isFinite(id)) return;
+    this.lastSubmitId = id;
+    this.pendingSubmissionIds.add(id);
+    if (this.state.snapshot?.state.session) {
+      this.toast("info", "Submission sent — waiting for the judge");
+    }
   }
 
   private async onCheck(url: string, body: unknown) {
-    const parsed = CheckResponseSchema.safeParse(body);
+    const checkPayload = normalizeCheckPayload(body);
+    const parsed = CheckResponseSchema.safeParse(checkPayload);
     if (!parsed.success || !isFinalCheck(parsed.data)) return;
     const check = parsed.data;
-    const id = submissionIdFromUrl(url) ?? Number(check.submission_id ?? Number.NaN);
-    if (!Number.isFinite(id) || this.handledSubmissionIds.has(id)) return;
+    let id =
+      submissionIdFromUrl(url) ??
+      submissionIdFromPayload(check.submission_id) ??
+      submissionIdFromPayload(checkPayload) ??
+      submissionIdFromPayload(body);
+    if (id == null && this.lastSubmitId != null && this.pendingSubmissionIds.has(this.lastSubmitId)) {
+      id = this.lastSubmitId;
+    } else if (id == null && this.pendingSubmissionIds.size === 1) {
+      id = [...this.pendingSubmissionIds][0]!;
+    }
+    if (id == null || this.handledSubmissionIds.has(id)) return;
     // Only capture real submissions (not "Run" interpretations) when we saw the submit call,
     // or when the check payload carries judge totals (submissions do, test runs don't).
     const looksLikeSubmission =
@@ -335,14 +366,36 @@ export class PageController {
     if (!looksLikeSubmission) return;
     this.handledSubmissionIds.add(id);
     this.pendingSubmissionIds.delete(id);
+    if (isJudgeFailure(check)) {
+      // Judge/server error: LeetCode shows no verdict, so there is nothing to capture.
+      if (this.state.snapshot?.state.session) {
+        this.toast("error", "LeetCode's judge failed — submission not captured");
+      }
+      return;
+    }
     const slug = this.state.problem?.slug ?? problemSlugFromUrl(window.location.href);
-    if (!slug || !this.state.snapshot?.state.session) return;
+    if (!slug) return;
+    if (!this.state.snapshot?.state.session) {
+      if (!this.warnedCapture) {
+        this.warnedCapture = true;
+        this.toast("info", "Start a Lare session to capture submissions");
+      }
+      return;
+    }
 
     this.flush();
     const accepted = isAccepted(check);
-    const { details, runtimeDistribution, memoryDistribution } = await fetchSubmissionDetails(id, {
-      retries: accepted ? 6 : 1,
-    });
+    // Percentile histograms are computed asynchronously by LeetCode after the verdict;
+    // give them a few seconds, but never hold the capture hostage to them.
+    const { details, runtimeDistribution, memoryDistribution } = await Promise.race([
+      fetchSubmissionDetails(id, { retries: accepted ? 4 : 1, delayMs: 800 }),
+      new Promise<Awaited<ReturnType<typeof fetchSubmissionDetails>>>((resolve) => {
+        setTimeout(
+          () => resolve({ details: null, runtimeDistribution: null, memoryDistribution: null }),
+          8000,
+        );
+      }),
+    ]);
 
     const submission: CapturedSubmission = {
       leetcodeSubmissionId: id,
@@ -367,7 +420,10 @@ export class PageController {
       runtimeDistribution,
       memoryDistribution,
     };
-    await sendRuntime({ type: "SUBMISSION", slug, submission });
+    const res = await sendRuntime({ type: "SUBMISSION", slug, submission });
+    if (!res.ok) {
+      this.toast("error", res.error ?? "Could not save submission");
+    }
   }
 }
 

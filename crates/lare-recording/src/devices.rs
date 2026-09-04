@@ -51,6 +51,26 @@ pub fn list_displays() -> Vec<DisplayInfo> {
         .collect()
 }
 
+/// Logical (points) bounds `(x, y, width, height)` of a display in global top-left-origin
+/// coordinates; `None` id = the primary display. Used to place overlay windows on the display
+/// that is being recorded.
+pub fn display_logical_bounds(display_id: Option<&str>) -> Option<(f64, f64, f64, f64)> {
+    let display = match display_id {
+        Some(id) => Display::from_id(&id.parse().ok()?)?,
+        None => Display::primary(),
+    };
+    #[cfg(target_os = "macos")]
+    {
+        let b = display.raw_handle().logical_bounds()?;
+        Some((b.position().x(), b.position().y(), b.size().width(), b.size().height()))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let s = display.logical_size()?;
+        Some((0.0, 0.0, s.width(), s.height()))
+    }
+}
+
 pub fn list_cameras() -> Vec<CameraInfo> {
     cap_camera::list_cameras()
         .map(|c| CameraInfo {

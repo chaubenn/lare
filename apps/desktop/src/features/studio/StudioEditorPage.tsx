@@ -11,7 +11,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   ArrowLeft,
-  Camera,
   Clapperboard,
   Film,
   Plus,
@@ -197,12 +196,16 @@ function StudioEditor({
 
   const duration = info.durationMs / 1000;
   const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraRef = useRef<HTMLVideoElement>(null);
+  const micRef = useRef<HTMLAudioElement>(null);
   const [current, setCurrent] = useState(0);
   const [markIn, setMarkIn] = useState<number | null>(null);
   const [edit, setEdit] = useState<StudioEdit>(() => ({
     ...DEFAULT_EDIT,
     camera: { ...DEFAULT_EDIT.camera, hide: !info.cameraPath },
   }));
+  const [cameraFailed, setCameraFailed] = useState(false);
+  const [micFailed, setMicFailed] = useState(false);
   const [title, setTitle] = useState(
     recording.purpose === "interview" ? "Mock interview" : "Demo video",
   );
@@ -229,6 +232,18 @@ function StudioEditor({
     const onTime = () => {
       const clip = clips[clipIndex];
       if (clip) setCurrent(clip.offsetMs / 1000 + v.currentTime);
+      for (const other of [cameraRef.current, micRef.current]) {
+        if (!other) continue;
+        if (Math.abs(other.currentTime - v.currentTime) > 0.3) other.currentTime = v.currentTime;
+      }
+    };
+    const onPlay = () => {
+      void cameraRef.current?.play().catch(() => setCameraFailed(true));
+      void micRef.current?.play().catch(() => setMicFailed(true));
+    };
+    const onPause = () => {
+      cameraRef.current?.pause();
+      micRef.current?.pause();
     };
     const onEnded = () => {
       if (clipIndex + 1 < clips.length) {
@@ -247,10 +262,14 @@ function StudioEditor({
     v.addEventListener("timeupdate", onTime);
     v.addEventListener("ended", onEnded);
     v.addEventListener("loadedmetadata", onLoaded);
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
     return () => {
       v.removeEventListener("timeupdate", onTime);
       v.removeEventListener("ended", onEnded);
       v.removeEventListener("loadedmetadata", onLoaded);
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
     };
   }, [clips, clipIndex]);
 
@@ -265,6 +284,8 @@ function StudioEditor({
       setClipIndex(index);
     } else if (v) {
       v.currentTime = local;
+      if (cameraRef.current) cameraRef.current.currentTime = local;
+      if (micRef.current) micRef.current.currentTime = local;
     }
     setCurrent(clamped);
   };
@@ -395,6 +416,8 @@ function StudioEditor({
   };
 
   const previewSrc = activeClip ? convertFileSrc(activeClip.displayPath) : null;
+  const cameraSrc = info.cameraPath ? convertFileSrc(info.cameraPath) : null;
+  const micSrc = info.micPath ? convertFileSrc(info.micPath) : null;
 
   return (
     <div className="space-y-5">
@@ -465,12 +488,12 @@ function StudioEditor({
           <Card className="space-y-3">
             {previewSrc ? (
               <div className="relative overflow-hidden rounded-lg bg-black">
-                {/* biome-ignore lint/a11y/useMediaCaption: raw preview of the user's own recording */}
                 <video
                   key={activeClip?.displayPath}
                   ref={videoRef}
                   src={previewSrc}
                   controls
+                  muted={!!micSrc}
                   className="aspect-video w-full"
                 />
                 {clips.length > 1 ? (
@@ -478,12 +501,19 @@ function StudioEditor({
                     Take {clipIndex + 1} of {clips.length}
                   </span>
                 ) : null}
-                {!edit.camera.hide && info.cameraPath ? (
-                  <div
+                {cameraSrc && !edit.camera.hide ? (
+                  <video
+                    ref={cameraRef}
+                    src={cameraSrc}
+                    muted
+                    playsInline
+                    preload="auto"
                     aria-hidden
+                    onError={() => setCameraFailed(true)}
                     className={cn(
-                      "pointer-events-none absolute flex items-center justify-center border-2 border-emerald-400/80 bg-emerald-500/20 text-[10px] text-emerald-100",
+                      "pointer-events-none absolute object-cover border-2 border-zinc-700/80 bg-zinc-950",
                       edit.camera.keepAspect ? "aspect-video" : "aspect-square",
+                      edit.camera.mirror && "-scale-x-100",
                       edit.camera.position.startsWith("top") ? "top-3" : "bottom-14",
                       edit.camera.position.endsWith("left") ? "left-3" : "right-3",
                     )}
@@ -491,9 +521,28 @@ function StudioEditor({
                       width: `${Math.round(edit.camera.size * 0.6)}%`,
                       borderRadius: `${edit.camera.rounding / 2}%`,
                     }}
+                  />
+                ) : !edit.camera.hide && info.cameraPath === null ? (
+                  <div
+                    aria-hidden
+                    className={cn(
+                      "pointer-events-none absolute flex items-center justify-center border-2 border-zinc-700 bg-zinc-900/80 px-2 text-center text-[10px] text-zinc-400",
+                      edit.camera.position.startsWith("top") ? "top-3" : "bottom-14",
+                      edit.camera.position.endsWith("left") ? "left-3" : "right-3",
+                    )}
+                    style={{ width: "22%", aspectRatio: "1" }}
                   >
-                    <Camera className="size-4" aria-hidden />
+                    No camera track — turn on facecam before recording
                   </div>
+                ) : null}
+                {micSrc ? (
+                  // biome-ignore lint/a11y/useMediaCaption: user's own mic track, mixed under the display player
+                  <audio
+                    ref={micRef}
+                    src={micSrc}
+                    preload="auto"
+                    onError={() => setMicFailed(true)}
+                  />
                 ) : null}
               </div>
             ) : (
@@ -703,8 +752,20 @@ function StudioEditor({
                 </div>
               </>
             ) : (
-              <p className="text-sm text-zinc-500">No camera track was recorded.</p>
+              <p className="text-sm text-zinc-500">
+                No camera track was recorded. Turn on facecam before you start the next take.
+              </p>
             )}
+            {cameraFailed ? (
+              <p className="text-xs text-rose-400">Could not play the camera file in preview.</p>
+            ) : null}
+            {micFailed ? (
+              <p className="text-xs text-rose-400">Could not play the microphone track.</p>
+            ) : !info.micPath ? (
+              <p className="text-xs text-zinc-500">
+                No microphone track — leave mic on when you record, or this preview stays silent.
+              </p>
+            ) : null}
           </Card>
 
           <Card className="space-y-3">

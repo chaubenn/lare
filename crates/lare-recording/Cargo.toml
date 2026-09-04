@@ -11,6 +11,8 @@ cap-recording = { path = "../cap/recording" }
 cap-project = { path = "../cap/project" }
 cap-export = { path = "../cap/export" }
 cap-camera = { path = "../cap/camera" }
+cap-enc-ffmpeg = { path = "../cap/enc-ffmpeg" }
+cap-media-info = { path = "../cap/media-info" }
 scap-targets = { path = "../cap/scap-targets" }
 kameo = "0.17.2"
 cpal = { workspace = true }

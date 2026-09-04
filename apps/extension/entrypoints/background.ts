@@ -42,6 +42,11 @@ export default defineBackground(() => {
   });
   void resumeAfterRestart();
 
+  chrome.runtime.onConnect.addListener((_port) => {
+    // Content scripts keep a `lare-keepalive` port open so the MV3 worker is not
+    // killed mid-submit. Other ports (WXT HMR) must be left alone.
+  });
+
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === TICK_ALARM) void refreshBadge();
   });

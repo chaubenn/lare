@@ -60,7 +60,12 @@ pub fn clip_tracks(project_path: &Path) -> Vec<(PathBuf, f64)> {
 
 /// Path of the camera track of a studio project (first segment), if a camera was recorded.
 pub fn find_camera_track(project_path: &Path) -> Option<PathBuf> {
-    first_segment_file(project_path, &["camera.mp4", "camera.mov"])
+    first_segment_file(project_path, &["camera.mp4", "camera.mov"]).or_else(|| {
+        ["content/camera.mp4", "content/camera.mov"]
+            .iter()
+            .map(|n| project_path.join(n))
+            .find(|p| p.exists())
+    })
 }
 
 fn first_segment_file(project_path: &Path, names: &[&str]) -> Option<PathBuf> {
@@ -436,27 +441,92 @@ impl ActiveRecording {
 
 /// Locate the microphone track of a studio project (first segment).
 pub fn find_mic_track(project_path: &Path) -> Option<PathBuf> {
-    let segments = project_path.join("content").join("segments");
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(&segments)
-        .ok()?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.is_dir())
-        .collect();
-    dirs.sort();
-    for dir in dirs {
-        for name in [
-            "audio-input.m4a",
-            "audio-input.ogg",
-            "audio-input.mp3",
-            "audio-input.wav",
-        ] {
-            let p = dir.join(name);
-            if p.exists() {
-                return Some(p);
+    let names = [
+        "audio-input.m4a",
+        "audio-input.preview.m4a",
+        "audio-input.ogg",
+        "audio-input.mp3",
+        "audio-input.wav",
+        "audio.ogg",
+        "microphone.m4a",
+        "mic.m4a",
+    ];
+    first_segment_file(project_path, &names).or_else(|| {
+        names
+            .iter()
+            .map(|n| project_path.join("content").join(n))
+            .find(|p| p.exists())
+    })
+}
+
+/// WKWebView cannot play Cap's `audio-input.ogg` (Opus). Transcode to AAC/M4A for the editor preview.
+pub fn ensure_playable_audio(path: &Path) -> anyhow::Result<PathBuf> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if matches!(ext.as_str(), "m4a" | "mp3" | "wav" | "aac" | "mp4" | "caf") {
+        return Ok(path.to_path_buf());
+    }
+    let dest = path.with_extension("preview.m4a");
+    if dest.exists() {
+        if let Ok(meta) = dest.metadata() {
+            if meta.len() > 64 {
+                return Ok(dest);
             }
         }
     }
-    None
+    transcode_audio_to_m4a(path, &dest)?;
+    Ok(dest)
+}
+
+fn transcode_audio_to_m4a(input: &Path, output: &Path) -> anyhow::Result<()> {
+    use cap_enc_ffmpeg::{AudioEncoder, aac::AACEncoder};
+    use cap_media_info::AudioInfo;
+    use ffmpeg::ChannelLayout;
+
+    ffmpeg::init().ok();
+    let mut ictx = ffmpeg::format::input(input)
+        .with_context(|| format!("opening {}", input.display()))?;
+    let input_stream = ictx
+        .streams()
+        .best(ffmpeg::media::Type::Audio)
+        .ok_or_else(|| anyhow!("no audio stream in {}", input.display()))?;
+    let input_stream_index = input_stream.index();
+    let input_time_base = input_stream.time_base();
+    let decoder_ctx = ffmpeg::codec::context::Context::from_parameters(input_stream.parameters())?;
+    let mut decoder = decoder_ctx.decoder().audio()?;
+    if decoder.channel_layout().is_empty() {
+        decoder.set_channel_layout(ChannelLayout::default(decoder.channels() as i32));
+    }
+    decoder.set_packet_time_base(input_time_base);
+    let input_audio_info = AudioInfo::from_decoder(&decoder)?;
+    if let Some(parent) = output.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut octx = ffmpeg::format::output(output)
+        .with_context(|| format!("creating {}", output.display()))?;
+    let mut encoder = AACEncoder::init(input_audio_info, &mut octx)
+        .map_err(|e| anyhow!("aac encoder: {e}"))?;
+    octx.write_header()?;
+    let mut decoded_frame = ffmpeg::frame::Audio::empty();
+    for (stream, packet) in ictx.packets() {
+        if stream.index() != input_stream_index {
+            continue;
+        }
+        decoder.send_packet(&packet)?;
+        while decoder.receive_frame(&mut decoded_frame).is_ok() {
+            AudioEncoder::try_send_frame(&mut encoder, decoded_frame.clone(), &mut octx)?;
+        }
+    }
+    decoder.send_eof()?;
+    while decoder.receive_frame(&mut decoded_frame).is_ok() {
+        AudioEncoder::try_send_frame(&mut encoder, decoded_frame.clone(), &mut octx)?;
+    }
+    encoder.flush(&mut octx)?;
+    octx.write_trailer()?;
+    Ok(())
 }
 
 /// Remux a studio project's DASH display fragments into `display.mp4` files if Cap marked it

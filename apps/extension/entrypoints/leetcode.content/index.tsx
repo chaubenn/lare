@@ -9,9 +9,23 @@ if (import.meta.env.MODE !== "production" && fixtureOrigin) MATCHES.push(`${fixt
 
 export default defineContentScript({
   matches: MATCHES,
+  allFrames: true,
   runAt: "document_idle",
   cssInjectionMode: "ui",
   async main(ctx) {
+    let dead = false;
+    const keepAlive = () => {
+      if (dead) return;
+      try {
+        const port = chrome.runtime.connect({ name: "lare-keepalive" });
+        port.onDisconnect.addListener(() => {
+          if (!dead) window.setTimeout(keepAlive, 1000);
+        });
+      } catch {
+        if (!dead) window.setTimeout(keepAlive, 1500);
+      }
+    };
+    keepAlive();
     const controller = new PageController();
     let root: Root | null = null;
     const ui = await createShadowRootUi(ctx, {
@@ -30,6 +44,9 @@ export default defineContentScript({
       },
     });
     ui.mount();
-    ctx.onInvalidated(() => controller.dispose());
+    ctx.onInvalidated(() => {
+      dead = true;
+      controller.dispose();
+    });
   },
 });

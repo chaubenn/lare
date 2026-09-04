@@ -276,8 +276,9 @@ impl Recorder {
         }
         // Instant mode has no camera track: the facecam preview window is captured as part
         // of the screen, so it must be on screen before capture starts.
+        let display_id = self.settings().display_id;
         if facecam && mode == RecordingMode::Instant {
-            if let Err(e) = crate::windows::open_camera(&self.app) {
+            if let Err(e) = crate::windows::open_camera(&self.app, display_id.as_deref()) {
                 warn!(%e, "camera preview window failed to open");
             }
         }
@@ -286,7 +287,7 @@ impl Recorder {
         match &result {
             Ok(payload) => {
                 self.emit_state(payload);
-                if let Err(e) = crate::windows::open_recorder(&self.app) {
+                if let Err(e) = crate::windows::open_recorder(&self.app, display_id.as_deref()) {
                     warn!(%e, "recorder window failed to open");
                 }
             }

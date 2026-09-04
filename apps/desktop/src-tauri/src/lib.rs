@@ -190,6 +190,9 @@ pub fn run() {
             commands::path_exists,
         ])
         .setup(move |app| {
+            // Track the UI thread so overlay helpers can run AppKit work safely from Tokio.
+            crate::windows::mark_main_thread();
+
             // Recorder (Cap capture stack) shared by commands and the extension bridge.
             let recorder = recorder::Recorder::new(app.handle().clone());
             backend_ctx.set_recording_backend(Some(Arc::new(recorder::CapRecordingBackend::new(
@@ -226,6 +229,11 @@ pub fn run() {
             tauri::async_runtime::spawn(forward_server_events(app.handle().clone(), events));
             tauri::async_runtime::spawn(ws_server::run_forever(server_ctx));
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Focused(_)) {
+                crate::windows::repromote_overlays(window.app_handle());
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running Lare");

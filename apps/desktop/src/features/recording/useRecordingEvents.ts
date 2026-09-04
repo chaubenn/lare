@@ -48,7 +48,13 @@ export function useRecordingEvents(): void {
         title: "Demo video",
         queryClient,
       })
-        .then(() => toast({ title: "Demo video uploaded", variant: "success" }))
+        .then(() => {
+          toast({
+            title: "Demo video uploaded",
+            description: "Bunny is encoding it now; the player appears when that finishes.",
+            variant: "success",
+          });
+        })
         .catch((e: unknown) => {
           toast({
             title: "Upload failed",

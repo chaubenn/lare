@@ -4330,6 +4330,7 @@ dependencies = [
  "lare-core",
  "lare-recording",
  "lare-transcribe",
+ "objc",
  "reqwest 0.13.4",
  "serde",
  "serde_json",
@@ -4357,7 +4358,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cap-camera",
+ "cap-enc-ffmpeg",
  "cap-export",
+ "cap-media-info",
  "cap-project",
  "cap-recording",
  "cidre",

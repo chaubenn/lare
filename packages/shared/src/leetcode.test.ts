@@ -3,14 +3,22 @@ import {
   CheckResponseSchema,
   excerptFromHtml,
   isAccepted,
+  isCheckGraphql,
   isCheckUrl,
   isFinalCheck,
+  isGraphqlUrl,
+  isJudgeFailure,
+  isSubmitGraphql,
   isSubmitUrl,
+  looksLikeCheckPayload,
+  normalizeCheckPayload,
   parseDistribution,
   parseMemoryMb,
   parseRuntimeMs,
   problemSlugFromUrl,
+  submissionIdFromPayload,
   submissionIdFromUrl,
+  unwrapCheckPayload,
   userBinIndex,
 } from "./leetcode";
 
@@ -30,12 +38,51 @@ describe("urls", () => {
 
   it("detects judge endpoints", () => {
     expect(isSubmitUrl("https://leetcode.com/problems/two-sum/submit/")).toBe(true);
+    expect(isSubmitUrl("https://leetcode.com/problems/two-sum/submit")).toBe(true);
+    expect(isSubmitUrl("https://leetcode.com/problems/single-number/submit/?foo=1")).toBe(true);
     expect(isSubmitUrl("https://leetcode.com/problems/two-sum/interpret_solution/")).toBe(false);
     expect(isCheckUrl("https://leetcode.com/submissions/detail/123456789/check/")).toBe(true);
+    expect(isCheckUrl("https://leetcode.com/submissions/123456789/check/?t=1")).toBe(true);
+    // Current leetcode.com Submit flow polls `submitResultV2`.
+    expect(isCheckUrl("https://leetcode.com/submissions/detail/123456789/v2/check/")).toBe(true);
+    expect(isCheckUrl("https://leetcode.com/submissions/detail/123456789/v3/check")).toBe(true);
+    expect(isCheckUrl("https://leetcode.com/submissions/detail/123456789/")).toBe(false);
     expect(submissionIdFromUrl("https://leetcode.com/submissions/detail/123456789/check/")).toBe(
       123456789,
     );
+    expect(
+      submissionIdFromUrl("https://leetcode.com/submissions/detail/123456789/v2/check/"),
+    ).toBe(123456789);
     expect(submissionIdFromUrl("https://leetcode.com/problems/two-sum/submissions/42/")).toBe(42);
+  });
+});
+
+describe("graphql judge helpers", () => {
+  it("recognises graphql submit and extracts nested ids", () => {
+    expect(isGraphqlUrl("https://leetcode.com/graphql")).toBe(true);
+    expect(isSubmitGraphql('{"operationName":"submitCode","query":"mutation submitCode"}')).toBe(
+      true,
+    );
+    expect(
+      isSubmitGraphql('{"query":"mutation submitCode($code: String!) { submitCode(code: $code) }"}'),
+    ).toBe(true);
+    expect(isSubmitGraphql('{"operationName":"interpretSolution"}')).toBe(false);
+    expect(submissionIdFromPayload({ submission_id: "99" })).toBe(99);
+    expect(submissionIdFromPayload({ data: { submitCode: { submissionId: 42 } } })).toBe(42);
+    expect(isCheckGraphql('{"operationName":"checkSubmission"}')).toBe(true);
+    expect(
+      isCheckGraphql('{"query":"query checkSubmission($id: Int!) { checkSubmission(id: $id) }"}'),
+    ).toBe(true);
+    expect(
+      looksLikeCheckPayload({
+        data: { checkSubmission: { state: "SUCCESS", status_code: 10, total_testcases: 10 } },
+      }),
+    ).toBe(true);
+    expect(
+      unwrapCheckPayload({
+        data: { checkSubmission: { state: "SUCCESS", status_code: 10 } },
+      }),
+    ).toEqual({ state: "SUCCESS", status_code: 10 });
   });
 });
 
@@ -72,6 +119,61 @@ describe("check response", () => {
     const c = CheckResponseSchema.parse({ state: "PENDING" });
     expect(isFinalCheck(c)).toBe(false);
     expect(isAccepted(c)).toBe(false);
+  });
+
+  it("treats v2 in-flight judge states as non-final", () => {
+    for (const state of ["STARTED", "PREPARING", "COMPILING", "RUNNING_TESTS"]) {
+      expect(isFinalCheck(CheckResponseSchema.parse({ state }))).toBe(false);
+    }
+  });
+
+  it("waits for the v2 AI judge to settle", () => {
+    const judging = CheckResponseSchema.parse({
+      state: "SUCCESS",
+      ai_state: "STARTED",
+      status_code: 10,
+      total_testcases: 57,
+    });
+    expect(isFinalCheck(judging)).toBe(false);
+    const done = CheckResponseSchema.parse({ ...judging, ai_state: "SUCCESS" });
+    expect(isFinalCheck(done)).toBe(true);
+    expect(isJudgeFailure(done)).toBe(false);
+  });
+
+  it("flags settled checks without a verdict as judge failures", () => {
+    const c = CheckResponseSchema.parse({ state: "FAILURE" });
+    expect(isFinalCheck(c)).toBe(true);
+    expect(isJudgeFailure(c)).toBe(true);
+    const wa = CheckResponseSchema.parse({ state: "SUCCESS", status_code: 11 });
+    expect(isJudgeFailure(wa)).toBe(false);
+  });
+
+  it("downgrades AC to WA when compare_result has a failing case", () => {
+    const c = CheckResponseSchema.parse({
+      state: "SUCCESS",
+      status_code: 10,
+      compare_result: "1110111",
+    });
+    expect(isAccepted(c)).toBe(false);
+  });
+
+  it("normalizes camelCase graphql check payloads with string numbers", () => {
+    const normalized = normalizeCheckPayload({
+      data: {
+        checkSubmission: {
+          statusCode: 10,
+          statusDisplay: "Accepted",
+          totalTestcases: "57",
+          finished: true,
+        },
+      },
+    }) as Record<string, unknown>;
+    expect(normalized.state).toBe("SUCCESS");
+    expect(normalized.status_code).toBe(10);
+    const parsed = CheckResponseSchema.parse(normalized);
+    expect(isFinalCheck(parsed)).toBe(true);
+    expect(isAccepted(parsed)).toBe(true);
+    expect(parsed.total_testcases).toBe(57);
   });
 });
 

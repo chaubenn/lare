@@ -94,24 +94,24 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
     "videos update",
   );
 
-  // Thumbnail (best effort).
-  stage(job, "thumbnail", "Making a thumbnail");
-  let thumbnailPath: string | null = null;
-  try {
-    const at = Math.min(1000, Math.max(0, (info.durationMs ?? 2000) / 2));
-    const jpg = await recorder.makeThumbnail({ videoPath: filePath, atMs: at, maxWidth: 800 });
-    const bytes = await recorder.readFileBytes(jpg);
-    const objectPath = `${userId}/${created.videoId}.jpg`;
-    const { error } = await supabase.storage
-      .from("thumbnails")
-      .upload(objectPath, bytes, { contentType: "image/jpeg", upsert: true });
-    if (!error) thumbnailPath = objectPath;
-  } catch (e) {
-    console.warn("thumbnail failed", e);
-  }
-
-  // Upload.
+  // Thumbnail in parallel with the TUS upload — it should not block sending bytes.
   stage(job, "upload", "Uploading to Bunny", 0);
+  const thumbPromise = (async (): Promise<string | null> => {
+    try {
+      const at = Math.min(1000, Math.max(0, (info.durationMs ?? 2000) / 2));
+      const jpg = await recorder.makeThumbnail({ videoPath: filePath, atMs: at, maxWidth: 800 });
+      const bytes = await recorder.readFileBytes(jpg);
+      const objectPath = `${userId}/${created.videoId}.jpg`;
+      const { error } = await supabase.storage
+        .from("thumbnails")
+        .upload(objectPath, bytes, { contentType: "image/jpeg", upsert: true });
+      return error ? null : objectPath;
+    } catch (e) {
+      console.warn("thumbnail failed", e);
+      return null;
+    }
+  })();
+
   const unlisten = await onProgress("upload:progress", job.id, (p) => {
     const percent = p.total > 0 ? Math.round((p.uploaded / p.total) * 100) : null;
     updateJob(job.id, { percent, detail: `Uploading ${percent ?? 0}%` });
@@ -123,6 +123,7 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
   } finally {
     unlisten();
   }
+  const thumbnailPath = await thumbPromise;
 
   throwIf(
     (
@@ -161,7 +162,7 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
     );
   }
 
-  stage(job, "done", "Uploaded — Bunny is processing the video");
+  stage(job, "done", "Uploaded — Bunny is encoding (this is slower than Loom)");
   return created.videoId;
 }
 

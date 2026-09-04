@@ -54,8 +54,8 @@ export function CameraWindow() {
         <video
           ref={videoRef}
           muted
+          autoPlay
           playsInline
-          data-tauri-drag-region
           className={cn("size-full object-cover", mirror && "-scale-x-100")}
         />
         <button

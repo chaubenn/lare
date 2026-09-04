@@ -97,7 +97,9 @@ export function RecorderPillWindow() {
               : state === "starting"
                 ? "Starting…"
                 : state === "stopping"
-                  ? "Finishing…"
+                  ? status?.mode === "instant"
+                    ? "Muxing…"
+                    : "Finishing…"
                   : paused
                     ? "Paused"
                     : isInterview

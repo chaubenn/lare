@@ -164,8 +164,8 @@ fn safe_id(id: &str) -> Result<&str, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn open_recorder_window(app: AppHandle) -> Result<(), String> {
-    windows::open_recorder(&app)
+pub fn open_recorder_window(app: AppHandle, rec: Rec<'_>) -> Result<(), String> {
+    windows::open_recorder(&app, rec.settings().display_id.as_deref())
 }
 
 #[tauri::command]
@@ -174,8 +174,8 @@ pub fn close_recorder_window(app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn open_camera_window(app: AppHandle) -> Result<(), String> {
-    windows::open_camera(&app)
+pub fn open_camera_window(app: AppHandle, rec: Rec<'_>) -> Result<(), String> {
+    windows::open_camera(&app, rec.settings().display_id.as_deref())
 }
 
 #[tauri::command]
@@ -285,9 +285,19 @@ pub async fn studio_project_info(project_path: PathBuf) -> Result<StudioProjectI
         let info = display_path
             .as_deref()
             .and_then(|p| lare_recording::thumbnail::probe(p).ok());
+        let camera_path = lare_recording::find_camera_track(&project_path);
+        let mic_path = lare_recording::find_mic_track(&project_path).and_then(|p| {
+            match lare_recording::ensure_playable_audio(&p) {
+                Ok(playable) => Some(playable),
+                Err(e) => {
+                    warn!(%e, path = %p.display(), "could not transcode mic for preview");
+                    Some(p)
+                }
+            }
+        });
         Ok(StudioProjectInfo {
-            camera_path: lare_recording::find_camera_track(&project_path),
-            mic_path: lare_recording::find_mic_track(&project_path),
+            camera_path,
+            mic_path,
             duration_ms: offset,
             width: info.and_then(|i| i.width),
             height: info.and_then(|i| i.height),

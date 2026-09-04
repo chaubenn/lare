@@ -50,11 +50,19 @@
         });
         const json = await r.json();
         const id = json.submission_id ?? json.interpret_id;
+        // Mirrors leetcode.com: Submit polls `submitResultV2` (/v2/check/), Run polls
+        // `runcodeResult` (/check/).
+        const checkPath =
+          kind === "submit"
+            ? `/submissions/detail/${id}/v2/check/`
+            : `/submissions/detail/${id}/check/`;
+        const settled = (s) => s === "SUCCESS" || s === "FAILURE";
         let data;
         do {
           await new Promise((res) => setTimeout(res, 250));
-          data = await (await fetch(`/submissions/detail/${id}/check/`)).json();
-        } while (data.state !== "SUCCESS" && data.state !== "FAILURE");
+          data = await (await fetch(checkPath)).json();
+          // v2 keeps "Judging" until the AI judge settles too.
+        } while (!settled(data.state) || (data.ai_state != null && !settled(data.ai_state)));
         document.getElementById("result").textContent = `${kind}:${data.status_msg}`;
       }
       document.getElementById("submit").onclick = () => judge("submit");
