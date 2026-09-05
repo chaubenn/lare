@@ -74,8 +74,9 @@ jobs:
           https://github.com/chaubenn/lare#install
           EOF
           fi
-          ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq .id 2>/dev/null || \
-               gh api "repos/${GITHUB_REPOSITORY}/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id")
+          # Drafts are not resolvable via /releases/tags/{tag}; look the id up in the list.
+          ID=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          [ -n "$ID" ] || { echo "::error::could not resolve release id for $TAG"; exit 1; }
           echo "release_id=$ID" >> "$GITHUB_OUTPUT"
 
   desktop:
