@@ -46,33 +46,6 @@ run **Settings > Check for updates**.
 The extension talks to the desktop app over `127.0.0.1`, so the app must be running while you
 practise. Chrome Web Store listing is coming; until then the unpacked install is the supported path.
 
-## Parts
-
-| Path | What it is |
-| --- | --- |
-| `apps/extension` | Chrome extension (MV3, WXT). Session timer, LeetCode problem + Monaco edit capture, judge result capture, mock-interview trigger. |
-| `apps/desktop` | Tauri 2 desktop app. Drafts and publishing, recording (instant + studio), studio editor, transcription, Bunny uploads, recordings manager, interview review. |
-| `apps/web` | Next.js site. Public post pages, profiles, follower feed. |
-| `packages/shared` | Shared TypeScript contracts: edit-log replay, timer + media-time maths, LeetCode parsers, extension <-> desktop protocol, AI review schema. |
-| `packages/ui` | Shared React components (runtime chart, code block, badges). |
-| `packages/supabase-types` | Generated database types. |
-| `crates/lare-recording` | Facade over the vendored Cap crates: devices, permissions, instant/studio recording, remux, headless export, thumbnails, edit -> Cap project mapping. |
-| `crates/lare-transcribe` | whisper.cpp transcription (model download, ffmpeg decode, WebVTT). |
-| `crates/lare-bunny` | Resumable TUS uploads to Bunny Stream. |
-| `crates/lare-core` | Rust mirror of the protocol and edit-log types. |
-| `crates/cap` | Vendored crates from [Cap](https://github.com/CapSoftware/Cap) (see `NOTICE`). |
-| `supabase` | Migrations and Edge Functions (`bunny-create-upload`, `bunny-webhook`, `bunny-playback-token`, `bunny-captions`, `video-delete`, `ai-review`). |
-
-## Backend
-
-- Supabase project `lare` (`jndqrvwkwoyvzoqcveev`, Sydney): Postgres with RLS, Auth, Storage,
-  Realtime, Edge Functions. Function configuration (Bunny keys, OpenAI key) is stored in Supabase
-  Vault and read through `public.get_app_secrets` (service role only); values set in the Edge
-  Function secrets UI take precedence.
-- Bunny Stream library `lare` (id `743884`, replicated to Sydney): storage, encoding, delivery.
-  Embed token authentication is enabled; players get signed URLs from `bunny-playback-token`.
-- OpenAI Responses API (`gpt-5-mini` by default; `OPENAI_MODEL` overrides) grades mock interviews.
-
 ## Development
 
 Prerequisites (macOS): Node 22, pnpm 11, Rust 1.88 (pinned by `rust-toolchain.toml`), and
