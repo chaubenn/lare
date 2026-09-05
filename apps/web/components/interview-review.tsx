@@ -1,5 +1,13 @@
 import { formatDuration } from "@lare/shared";
-import { Bot, ChevronDown, CodeXml, Lightbulb, ListChecks, ThumbsUp, TriangleAlert } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  CodeXml,
+  Lightbulb,
+  ListChecks,
+  ThumbsUp,
+  TriangleAlert,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import type { ReviewView } from "@/lib/parse";
@@ -117,8 +125,7 @@ export function InterviewReview({ review }: { review: ReviewView }) {
                     .map((s) => (
                       <div key={s.key}>
                         <dt className="text-sm text-zinc-200">
-                          {s.label}{" "}
-                          <span className="tabular-nums text-zinc-500">{s.score}</span>
+                          {s.label} <span className="tabular-nums text-zinc-500">{s.score}</span>
                         </dt>
                         <dd className="mt-0.5 text-sm leading-relaxed text-zinc-400">
                           {s.rationale}
@@ -158,7 +165,10 @@ export function InterviewReview({ review }: { review: ReviewView }) {
             )}
 
             {review.code_iterations.length > 0 && (
-              <SubSection title="Code iterations" icon={<CodeXml className="size-4 text-zinc-500" />}>
+              <SubSection
+                title="Code iterations"
+                icon={<CodeXml className="size-4 text-zinc-500" />}
+              >
                 <ol className="space-y-3">
                   {iterations.map(({ key, item: c }) => (
                     <li key={key}>
@@ -166,7 +176,9 @@ export function InterviewReview({ review }: { review: ReviewView }) {
                         <span className="font-mono text-zinc-400">{formatDuration(c.t_ms)}</span>
                         <span className="text-sm text-zinc-100">{c.label}</span>
                         {c.complexity ? (
-                          <span className="font-mono text-[11px] text-zinc-500">{c.complexity}</span>
+                          <span className="font-mono text-[11px] text-zinc-500">
+                            {c.complexity}
+                          </span>
                         ) : null}
                       </div>
                       <p className="mt-1 text-sm leading-relaxed text-zinc-400">{c.assessment}</p>

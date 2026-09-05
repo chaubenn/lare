@@ -18,7 +18,7 @@
       "!**/playwright-report",
       "!**/test-results",
       "!packages/supabase-types/src/database.types.ts",
-      "!crates/cap/**",
+      "!crates/cap",
       "!**/*.gen.ts"
     ]
   },

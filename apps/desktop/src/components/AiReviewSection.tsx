@@ -82,114 +82,118 @@ export function AiReviewSection({
                 <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                   Score notes
                 </h3>
-            <dl className="mt-2 space-y-3">
-              {entries.map(([key, label]) => {
-                const s = review.scores[key];
-                if (!s.rationale) return null;
-                return (
-                  <div key={key}>
-                    <dt className="text-sm text-zinc-200">
-                      {label} <span className="tabular-nums text-zinc-500">{s.score}</span>
-                    </dt>
-                    <dd className="mt-0.5 text-sm leading-relaxed text-zinc-400">{s.rationale}</dd>
-                  </div>
-                );
-              })}
+                <dl className="mt-2 space-y-3">
+                  {entries.map(([key, label]) => {
+                    const s = review.scores[key];
+                    if (!s.rationale) return null;
+                    return (
+                      <div key={key}>
+                        <dt className="text-sm text-zinc-200">
+                          {label} <span className="tabular-nums text-zinc-500">{s.score}</span>
+                        </dt>
+                        <dd className="mt-0.5 text-sm leading-relaxed text-zinc-400">
+                          {s.rationale}
+                        </dd>
+                      </div>
+                    );
+                  })}
                 </dl>
               </div>
             ) : null}
 
-          {review.moments.length > 0 ? (
-            <div>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Moments</h3>
-              <ul className="mt-2 space-y-3">
-                {review.moments.map((m) => {
-                  const body = (
-                    <>
-                      <span className="flex items-center gap-2 text-xs text-zinc-500">
-                        <span
-                          className={cn("font-mono", onSeek && "text-zinc-300 underline")}
-                        >
-                          {formatDuration(m.t_ms)}
+            {review.moments.length > 0 ? (
+              <div>
+                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Moments
+                </h3>
+                <ul className="mt-2 space-y-3">
+                  {review.moments.map((m) => {
+                    const body = (
+                      <>
+                        <span className="flex items-center gap-2 text-xs text-zinc-500">
+                          <span className={cn("font-mono", onSeek && "text-zinc-300 underline")}>
+                            {formatDuration(m.t_ms)}
+                          </span>
+                          <span className="capitalize">{m.kind}</span>
                         </span>
-                        <span className="capitalize">{m.kind}</span>
-                      </span>
-                      {m.quote ? (
-                        <span className="mt-1 block border-l-2 border-zinc-700 pl-2 text-sm text-zinc-400">
-                          {m.quote}
-                        </span>
-                      ) : null}
-                      <span className="mt-1 block text-sm text-zinc-300">{m.comment}</span>
-                    </>
-                  );
-                  return (
-                    <li key={`${m.t_ms}-${m.kind}-${m.quote.slice(0, 24)}`}>
+                        {m.quote ? (
+                          <span className="mt-1 block border-l-2 border-zinc-700 pl-2 text-sm text-zinc-400">
+                            {m.quote}
+                          </span>
+                        ) : null}
+                        <span className="mt-1 block text-sm text-zinc-300">{m.comment}</span>
+                      </>
+                    );
+                    return (
+                      <li key={`${m.t_ms}-${m.kind}-${m.quote.slice(0, 24)}`}>
+                        {onSeek ? (
+                          <button
+                            type="button"
+                            onClick={() => onSeek(m.t_ms)}
+                            title={`Jump to ${formatDuration(m.t_ms)}`}
+                            className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
+                          >
+                            {body}
+                          </button>
+                        ) : (
+                          body
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+
+            {review.code_iterations.length > 0 ? (
+              <div>
+                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Code iterations
+                </h3>
+                <ol className="mt-2 space-y-2 text-sm">
+                  {review.code_iterations.map((it) => (
+                    <li key={`${it.t_ms}-${it.label}`} className="flex gap-3">
                       {onSeek ? (
                         <button
                           type="button"
-                          onClick={() => onSeek(m.t_ms)}
-                          title={`Jump to ${formatDuration(m.t_ms)}`}
-                          className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
+                          onClick={() => onSeek(it.t_ms)}
+                          title={`Jump to ${formatDuration(it.t_ms)}`}
+                          className="w-14 shrink-0 text-left font-mono text-xs text-zinc-400 underline hover:text-zinc-200"
                         >
-                          {body}
+                          {formatDuration(it.t_ms)}
                         </button>
                       ) : (
-                        body
+                        <span className="w-14 shrink-0 font-mono text-xs text-zinc-500">
+                          {formatDuration(it.t_ms)}
+                        </span>
                       )}
+                      <div>
+                        <span className="text-zinc-200">{it.label}</span>
+                        {it.complexity ? (
+                          <span className="ml-2 font-mono text-xs text-zinc-500">
+                            {it.complexity}
+                          </span>
+                        ) : null}
+                        <p className="text-sm text-zinc-400">{it.assessment}</p>
+                      </div>
                     </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ) : null}
+                  ))}
+                </ol>
+              </div>
+            ) : null}
 
-          {review.code_iterations.length > 0 ? (
-            <div>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                Code iterations
-              </h3>
-              <ol className="mt-2 space-y-2 text-sm">
-                {review.code_iterations.map((it) => (
-                  <li key={`${it.t_ms}-${it.label}`} className="flex gap-3">
-                    {onSeek ? (
-                      <button
-                        type="button"
-                        onClick={() => onSeek(it.t_ms)}
-                        title={`Jump to ${formatDuration(it.t_ms)}`}
-                        className="w-14 shrink-0 text-left font-mono text-xs text-zinc-400 underline hover:text-zinc-200"
-                      >
-                        {formatDuration(it.t_ms)}
-                      </button>
-                    ) : (
-                      <span className="w-14 shrink-0 font-mono text-xs text-zinc-500">
-                        {formatDuration(it.t_ms)}
-                      </span>
-                    )}
-                    <div>
-                      <span className="text-zinc-200">{it.label}</span>
-                      {it.complexity ? (
-                        <span className="ml-2 font-mono text-xs text-zinc-500">{it.complexity}</span>
-                      ) : null}
-                      <p className="text-sm text-zinc-400">{it.assessment}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
-
-          {review.next_steps.length > 0 ? (
-            <div>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                Next steps
-              </h3>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-300">
-                {review.next_steps.map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+            {review.next_steps.length > 0 ? (
+              <div>
+                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Next steps
+                </h3>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-300">
+                  {review.next_steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         </details>
       ) : null}

@@ -5,9 +5,7 @@ describe("formatLocalTimestamp", () => {
   const utc = "2026-09-12T00:50:00.000Z";
 
   it("renders the same instant in the viewer's timezone", () => {
-    expect(formatLocalTimestamp(utc, "Australia/Brisbane")).toBe(
-      "12th September 2026, 10:50am",
-    );
+    expect(formatLocalTimestamp(utc, "Australia/Brisbane")).toBe("12th September 2026, 10:50am");
     expect(formatLocalTimestamp(utc, "Australia/Perth")).toBe("12th September 2026, 8:50am");
   });
 

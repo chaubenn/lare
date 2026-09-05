@@ -1,7 +1,7 @@
 import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
 import { Link } from "react-router";
-import { plural } from "@/lib/format";
 import type { UserPost } from "@/features/profile/queries";
+import { plural } from "@/lib/format";
 import type { FeedPost } from "./queries";
 
 export function PostCard({ post }: { post: FeedPost | UserPost }) {

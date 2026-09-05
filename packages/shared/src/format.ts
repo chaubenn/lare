@@ -59,10 +59,7 @@ function ordinal(n: number): string {
  * `2026-09-12T00:50:00.000Z` → "12th September 2026, 10:50am" in Brisbane,
  * "12th September 2026, 8:50am" in Perth.
  */
-export function formatLocalTimestamp(
-  input: string | number | Date,
-  timeZone?: string,
-): string {
+export function formatLocalTimestamp(input: string | number | Date, timeZone?: string): string {
   const d = input instanceof Date ? input : new Date(input);
   if (Number.isNaN(d.getTime())) return "—";
   const parts = new Intl.DateTimeFormat("en-AU", {

@@ -1,6 +1,5 @@
 import { cn } from "@lare/ui";
 import { CircleAlert, CircleCheck, Info, X } from "lucide-react";
-import { Tooltip } from "@/components/ui/Tooltip";
 import {
   createContext,
   type ReactNode,
@@ -10,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export type ToastVariant = "info" | "success" | "error";
 
