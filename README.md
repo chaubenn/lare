@@ -13,6 +13,39 @@ followers, attach demo videos, and run AI-graded mock interviews.
 
 Docs: [architecture](docs/architecture.md) · [QA checklist](docs/qa.md) · [privacy](docs/privacy.md)
 
+## Install
+
+Two pieces: the desktop app and the Chrome extension. About two minutes.
+
+### 1. Desktop app
+
+| Platform | Download |
+| --- | --- |
+| macOS (Apple Silicon, M1 and later) | [Lare-macOS-AppleSilicon.dmg](https://github.com/chaubenn/lare/releases/latest/download/Lare-macOS-AppleSilicon.dmg) |
+| macOS (Intel) | [Lare-macOS-Intel.dmg](https://github.com/chaubenn/lare/releases/latest/download/Lare-macOS-Intel.dmg) |
+| Windows 10/11 (x64) | [Lare-Windows-x64-Setup.exe](https://github.com/chaubenn/lare/releases/latest/download/Lare-Windows-x64-Setup.exe) |
+
+All versions: [Releases](https://github.com/chaubenn/lare/releases).
+
+- **macOS**: open the DMG, drag Lare to Applications. The build is not notarised yet, so the
+  first launch needs right-click > **Open** (or `xattr -dr com.apple.quarantine /Applications/Lare.app`).
+  Grant Screen Recording / Camera / Microphone when asked (needed for demo videos and interviews).
+- **Windows**: run the installer. If SmartScreen appears, click **More info** > **Run anyway**.
+
+Lare checks GitHub Releases on every launch and installs updates in the background; you can also
+run **Settings > Check for updates**.
+
+### 2. Chrome extension
+
+1. Download [Lare-Chrome-Extension.zip](https://github.com/chaubenn/lare/releases/latest/download/Lare-Chrome-Extension.zip) and unzip it.
+2. Open `chrome://extensions`, turn on **Developer mode** (top right).
+3. Click **Load unpacked** and pick the unzipped folder.
+4. Pin the Lare icon, open the desktop app and sign in, then open any LeetCode problem. The
+   footer in the desktop app shows **Extension: connected**.
+
+The extension talks to the desktop app over `127.0.0.1`, so the app must be running while you
+practise. Chrome Web Store listing is coming; until then the unpacked install is the supported path.
+
 ## Parts
 
 | Path | What it is |
@@ -70,9 +103,22 @@ site URL and the Bunny library id. Server secrets never live in clients.
 
 ## Releasing
 
-Tag `vX.Y.Z` (or run the Release workflow manually) to build unsigned installers for macOS
-(Apple Silicon + Intel) and Windows x64 plus the extension zip, attached to a draft GitHub release.
-Signing/notarisation needs the usual `APPLE_*` / `TAURI_SIGNING_*` secrets.
+1. Bump the version in `apps/desktop/package.json`, `apps/desktop/src-tauri/tauri.conf.json` and
+   `apps/desktop/src-tauri/Cargo.toml` (they must match the tag).
+2. `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+The Release workflow builds installers for macOS (Apple Silicon + Intel) and Windows x64 and the
+extension zip, signs the updater bundles with `TAURI_SIGNING_PRIVATE_KEY`, writes `latest.json`
+and publishes the GitHub release as **latest**. Installed apps (tauri-plugin-updater) read
+`releases/latest/download/latest.json` on launch and self-update. Stable download names
+(`Lare-macOS-AppleSilicon.dmg`, `Lare-macOS-Intel.dmg`, `Lare-Windows-x64-Setup.exe`,
+`Lare-Chrome-Extension.zip`) are re-uploaded alongside the versioned files so the README links
+never change. Running the workflow manually produces a draft release that is never marked latest.
+
+The updater public key lives in `tauri.conf.json` (`plugins.updater.pubkey`); the private key is
+the `TAURI_SIGNING_PRIVATE_KEY` repository secret. Losing it means shipped apps can no longer
+verify updates, so keep a backup. Apple notarisation is optional and picked up from the usual
+`APPLE_*` secrets when present.
 
 
 ## License

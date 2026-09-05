@@ -26,6 +26,8 @@ tauri-plugin-fs = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-os = "2"
 tauri-plugin-process = "2"
+# Desktop-only (no mobile build for Lare); pulls updates from the GitHub release `latest.json`.
+tauri-plugin-updater = "2"
 
 axum = { version = "0.8", features = ["ws"] }
 tokio = { workspace = true }

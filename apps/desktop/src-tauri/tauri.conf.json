@@ -36,11 +36,19 @@
       "desktop": {
         "schemes": ["lare"]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0RkFDNEIxM0QyODY0OUUKUldTZVpDZzlzY1Q2aEdVQnQ2Y1d3Z3hNTkdheGhvMElqQVYrTFpEeTZ0SUZWcDFFUmJCT2hsRm4K",
+      "endpoints": ["https://github.com/chaubenn/lare/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "shortDescription": "Hevy for LeetCode",
     "icon": [
@@ -56,7 +64,9 @@
       "frameworks": ["../../../target/native-deps/Spacedrive.framework"]
     },
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper" }
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
     }
   }
 }

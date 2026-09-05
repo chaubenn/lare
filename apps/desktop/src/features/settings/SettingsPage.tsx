@@ -1,6 +1,6 @@
 import { WS_PORT } from "@lare/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { LogOut } from "lucide-react";
+import { LogOut, RefreshCw } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Badge } from "@/components/ui/Badge";
@@ -12,7 +12,8 @@ import { HANDLE_RE } from "@/features/auth/OnboardingPage";
 import { useExtensionStatus } from "@/features/shell/useExtensionStatus";
 import { copyText } from "@/lib/clipboard";
 import { errorMessage, supabase } from "@/lib/supabase";
-import { appVersion } from "@/lib/tauri";
+import { appVersion, inTauri } from "@/lib/tauri";
+import { checkForUpdate, installUpdate, useUpdateState } from "@/lib/updater";
 import { RecordingPanel } from "./RecordingPanel";
 
 const EXTENSION_ID = "koplffaeeahehnfikinmldhhmmldghhl";
@@ -216,16 +217,75 @@ function AccountPanel() {
           <div className="text-zinc-200">{session.user.email ?? session.user.id}</div>
           <div className="mt-0.5 text-xs text-zinc-500">Lare desktop v{version}</div>
         </div>
-        <Button
-          variant="danger"
-          size="sm"
-          icon={<LogOut className="size-3.5" aria-hidden />}
-          onClick={() => void doSignOut()}
-          loading={signingOut}
-        >
-          Sign out
-        </Button>
+        <div className="flex items-center gap-2">
+          <UpdateButton />
+          <Button
+            variant="danger"
+            size="sm"
+            icon={<LogOut className="size-3.5" aria-hidden />}
+            onClick={() => void doSignOut()}
+            loading={signingOut}
+          >
+            Sign out
+          </Button>
+        </div>
       </div>
+      <UpdateStatusLine />
     </Card>
   );
+}
+
+function UpdateButton() {
+  const state = useUpdateState();
+  if (!inTauri) return null;
+  const busy =
+    state.status === "checking" || state.status === "downloading" || state.status === "installing";
+  if (state.status === "available") {
+    return (
+      <Button variant="primary" size="sm" onClick={() => void installUpdate()}>
+        Install v{state.version}
+      </Button>
+    );
+  }
+  return (
+    <Button
+      size="sm"
+      icon={<RefreshCw className="size-3.5" aria-hidden />}
+      onClick={() => void checkForUpdate()}
+      loading={busy}
+    >
+      Check for updates
+    </Button>
+  );
+}
+
+function UpdateStatusLine() {
+  const state = useUpdateState();
+  let text: string | null = null;
+  let tone = "text-zinc-500";
+  switch (state.status) {
+    case "up-to-date":
+      text = "You're on the latest version.";
+      break;
+    case "available":
+      text = `Lare v${state.version} is available.`;
+      tone = "text-sky-300";
+      break;
+    case "downloading":
+      text =
+        state.progress === null
+          ? "Downloading update…"
+          : `Downloading update… ${Math.round(state.progress * 100)}%`;
+      break;
+    case "installing":
+      text = "Installing update… Lare will relaunch.";
+      break;
+    case "error":
+      text = `Update check failed: ${state.message}`;
+      tone = "text-rose-300";
+      break;
+    default:
+      return null;
+  }
+  return <p className={`mt-3 text-xs ${tone}`}>{text}</p>;
 }

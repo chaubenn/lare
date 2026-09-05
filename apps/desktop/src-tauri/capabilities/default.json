@@ -17,6 +17,7 @@
     "notification:default",
     "os:default",
     "process:default",
+    "updater:default",
     "shell:allow-open",
     "fs:default",
     "fs:allow-appdata-read-recursive",

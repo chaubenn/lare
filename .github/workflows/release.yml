@@ -1,7 +1,11 @@
 name: Release
 
-# Tag a commit `v0.1.0` (or run manually) to build installers for macOS (Apple Silicon + Intel)
-# and Windows x64 plus the Chrome extension zip, attached to a draft GitHub release.
+# Push a tag `vX.Y.Z` (matching apps/desktop/src-tauri/tauri.conf.json `version`) to build signed
+# updater bundles + installers for macOS (Apple Silicon + Intel) and Windows x64, plus the Chrome
+# extension zip, and publish them as the GitHub "latest" release. The desktop app polls
+# `releases/latest/download/latest.json` on launch and self-updates from it.
+#
+# `workflow_dispatch` builds everything into a draft release (never becomes "latest").
 on:
   push:
     tags: ["v*"]
@@ -20,8 +24,63 @@ env:
   VITE_BUNNY_LIBRARY_ID: "743884"
 
 jobs:
+  create-release:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve tag + version
+        id: meta
+        run: |
+          VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+            if [ "$TAG" != "v$VERSION" ]; then
+              echo "::error::Tag $TAG does not match tauri.conf.json version $VERSION. Bump the version (apps/desktop/package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml) and re-tag."
+              exit 1
+            fi
+          else
+            TAG="manual-${{ github.run_number }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Create draft release
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --title "Lare $TAG" --target "$GITHUB_SHA" --notes-file - <<'EOF'
+          ## Download
+
+          | Platform | File |
+          | --- | --- |
+          | macOS (Apple Silicon) | `Lare-macOS-AppleSilicon.dmg` |
+          | macOS (Intel) | `Lare-macOS-Intel.dmg` |
+          | Windows 10/11 (x64) | `Lare-Windows-x64-Setup.exe` |
+          | Chrome extension | `Lare-Chrome-Extension.zip` |
+
+          Builds are not notarised yet. macOS: right-click the app > Open the first time (or
+          `xattr -dr com.apple.quarantine /Applications/Lare.app`). Windows: choose "More info"
+          > "Run anyway" on the SmartScreen prompt.
+
+          Installed apps update themselves from this release on launch. Setup guide:
+          https://github.com/chaubenn/lare#install
+          EOF
+          fi
+          ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq .id 2>/dev/null || \
+               gh api "repos/${GITHUB_REPOSITORY}/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id")
+          echo "release_id=$ID" >> "$GITHUB_OUTPUT"
+
   desktop:
     name: Desktop (${{ matrix.name }})
+    needs: create-release
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
@@ -31,12 +90,18 @@ jobs:
           - name: macOS arm64
             os: macos-14
             target: aarch64-apple-darwin
+            asset: Lare-macOS-AppleSilicon.dmg
+            glob: "target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"
           - name: macOS x64
             os: macos-15-intel
             target: x86_64-apple-darwin
+            asset: Lare-macOS-Intel.dmg
+            glob: "target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"
           - name: Windows x64
             os: windows-2022
             target: x86_64-pc-windows-msvc
+            asset: Lare-Windows-x64-Setup.exe
+            glob: "target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -59,23 +124,42 @@ jobs:
         env:
           RUST_TARGET_TRIPLE: ${{ matrix.target }}
         run: node scripts/setup-native-deps.mjs
-      - name: Build and attach installers
+      - name: Build, sign updater bundles and attach installers
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Unsigned builds: set APPLE_* / TAURI_SIGNING_* secrets later to sign and notarise.
+          # Updater signing (minisign). The matching public key is in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Optional Apple code signing / notarisation. Unset = unsigned build.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('manual-{0}', github.run_number) }}
-          releaseName: Lare ${{ github.ref_type == 'tag' && github.ref_name || format('manual build {0}', github.run_number) }}
-          releaseBody: "Unsigned preview builds. macOS: right-click > Open the first time. See README for setup."
-          releaseDraft: true
-          prerelease: true
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+      - name: Attach stable-named installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          shopt -s nullglob
+          files=( ${{ matrix.glob }} )
+          if [ ${#files[@]} -eq 0 ]; then echo "::error::no installer matched ${{ matrix.glob }}"; exit 1; fi
+          cp "${files[0]}" "${{ matrix.asset }}"
+          gh release upload "$TAG" "${{ matrix.asset }}" --clobber
 
   extension:
     name: Chrome extension
+    needs: create-release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -98,7 +182,30 @@ jobs:
           name: extension-chrome-mv3
           path: apps/extension/.output/*.zip
       - name: Attach to release
-        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" apps/extension/.output/*.zip --clobber
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          zip=$(ls apps/extension/.output/*-chrome.zip | head -n1)
+          cp "$zip" Lare-Chrome-Extension.zip
+          gh release upload "$TAG" "$zip" Lare-Chrome-Extension.zip --clobber
+
+  publish:
+    name: Publish release
+    needs: [create-release, desktop, extension]
+    # Tag pushes become the public "latest" release (what the in-app updater reads).
+    # Manual runs stay as drafts for inspection.
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify updater manifest and undraft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | tee assets.txt
+          for required in latest.json Lare-macOS-AppleSilicon.dmg Lare-macOS-Intel.dmg Lare-Windows-x64-Setup.exe Lare-Chrome-Extension.zip; do
+            grep -qx "$required" assets.txt || { echo "::error::missing asset $required"; exit 1; }
+          done
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

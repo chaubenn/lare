@@ -5,6 +5,7 @@ import { JobsTray } from "@/features/recording/JobsTray";
 import { useRecordingEvents } from "@/features/recording/useRecordingEvents";
 import { Sidebar } from "./Sidebar";
 import { StatusFooter } from "./StatusFooter";
+import { UpdateBanner } from "./UpdateBanner";
 
 /** Cmd/Ctrl + digit jumps between sections (same order as the sidebar). */
 const SECTION_SHORTCUTS = [
@@ -37,6 +38,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-full flex-col">
+      <UpdateBanner />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
         <main className="min-w-0 flex-1 overflow-y-auto">
