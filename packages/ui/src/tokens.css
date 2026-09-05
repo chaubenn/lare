@@ -1,0 +1,33 @@
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R5 V4
+ * genre: modern-minimal · theme: custom (ink / bone)
+ * Locked brand tokens. Every colour and font in product UI references these names.
+ */
+
+:root {
+  --lare-ink: #0c0c0b;
+  --lare-ink-2: #161615;
+  --lare-ink-3: #1e1e1c;
+  --lare-line: #2a2a27;
+  --lare-line-strong: #3d3c39;
+  --lare-muted: #8a8780;
+  --lare-soft: #a8a49c;
+  --lare-bone: #f0ece4;
+  --lare-paper: #f7f4ee;
+  --lare-focus: #c8c2b6;
+  --lare-status-run: #6f8f6a;
+  --lare-status-pause: #c4a15a;
+  --lare-status-stop: #c45c5c;
+
+  /* Remap Tailwind zinc onto the brand neutrals so existing utilities restyle. */
+  --color-zinc-50: var(--lare-paper);
+  --color-zinc-100: var(--lare-bone);
+  --color-zinc-200: #e6e2da;
+  --color-zinc-300: #d4d0c8;
+  --color-zinc-400: var(--lare-soft);
+  --color-zinc-500: var(--lare-muted);
+  --color-zinc-600: #5c5a55;
+  --color-zinc-700: var(--lare-line-strong);
+  --color-zinc-800: var(--lare-line);
+  --color-zinc-900: var(--lare-ink-2);
+  --color-zinc-950: var(--lare-ink);
+}

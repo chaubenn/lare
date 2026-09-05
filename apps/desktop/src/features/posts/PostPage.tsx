@@ -1,4 +1,4 @@
-import { formatDurationHuman, formatRelativeTime } from "@lare/shared";
+import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
 import { ArrowLeft, Copy, ExternalLink, Lock } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
@@ -107,8 +107,8 @@ function PostView({ post }: { post: PostDetail }) {
             </div>
             <div className="text-xs text-zinc-500">
               {post.published_at
-                ? `Published ${formatRelativeTime(post.published_at)}`
-                : `Created ${formatRelativeTime(post.created_at)}`}
+                ? `Published ${formatLocalTimestamp(post.published_at)}`
+                : `Created ${formatLocalTimestamp(post.created_at)}`}
             </div>
           </div>
         </div>

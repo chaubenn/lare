@@ -170,8 +170,8 @@ function ExtensionPanel() {
         </div>
       </dl>
       <p className="mt-3 text-xs text-zinc-500">
-        The extension connects to this app over localhost when you start a session. Reload the
-        LeetCode tab if it shows "not connected".
+        The extension stays connected over localhost while a LeetCode tab is open. Reload the
+        extension on chrome://extensions and the LeetCode tab if this still says not connected.
       </p>
     </Card>
   );

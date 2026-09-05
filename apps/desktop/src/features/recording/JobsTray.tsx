@@ -6,6 +6,7 @@
 import { cn } from "@lare/ui";
 import { CircleAlert, CircleCheck, LoaderCircle, X } from "lucide-react";
 import { Link } from "react-router";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { clearFinishedJobs, isActive, removeJob, STAGE_LABEL, useJobs } from "./jobs";
 
 export function JobsTray() {
@@ -51,14 +52,16 @@ export function JobsTray() {
                 </Link>
               ) : null}
               {!active ? (
-                <button
-                  type="button"
-                  onClick={() => removeJob(job.id)}
-                  aria-label="Dismiss"
-                  className="ml-auto shrink-0 rounded p-0.5 text-zinc-500 hover:text-zinc-200"
-                >
-                  <X className="size-3.5" aria-hidden />
-                </button>
+                <Tooltip label="Dismiss" align="end" className="ml-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => removeJob(job.id)}
+                    aria-label="Dismiss"
+                    className="rounded p-0.5 text-zinc-500 hover:text-zinc-200"
+                  >
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                </Tooltip>
               ) : null}
             </div>
           );

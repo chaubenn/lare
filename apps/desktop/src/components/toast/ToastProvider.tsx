@@ -1,5 +1,6 @@
 import { cn } from "@lare/ui";
 import { CircleAlert, CircleCheck, Info, X } from "lucide-react";
+import { Tooltip } from "@/components/ui/Tooltip";
 import {
   createContext,
   type ReactNode,
@@ -42,7 +43,7 @@ export function useToast(): ToastApi {
 
 const ICONS: Record<ToastVariant, ReactNode> = {
   info: <Info className="size-4 text-sky-400" aria-hidden />,
-  success: <CircleCheck className="size-4 text-emerald-400" aria-hidden />,
+  success: <CircleCheck className="size-4 text-zinc-300" aria-hidden />,
   error: <CircleAlert className="size-4 text-rose-400" aria-hidden />,
 };
 
@@ -95,7 +96,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={item.id}
             role="status"
             className={cn(
-              "pointer-events-auto flex items-start gap-3 rounded-xl border bg-zinc-900 p-3 shadow-lg shadow-black/40",
+              "lare-toast-in pointer-events-auto flex items-start gap-3 rounded-xl border bg-zinc-900 p-3 shadow-lg shadow-black/40",
               item.variant === "error" ? "border-rose-500/30" : "border-zinc-800",
             )}
           >
@@ -106,14 +107,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <p className="mt-0.5 break-words text-xs text-zinc-400">{item.description}</p>
               ) : null}
             </div>
-            <button
-              type="button"
-              aria-label="Dismiss"
-              onClick={() => dismiss(item.id)}
-              className="rounded p-0.5 text-zinc-500 hover:text-zinc-200"
-            >
-              <X className="size-4" aria-hidden />
-            </button>
+            <Tooltip label="Dismiss" align="end">
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => dismiss(item.id)}
+                className="rounded p-0.5 text-zinc-500 hover:text-zinc-200"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </Tooltip>
           </div>
         ))}
       </div>

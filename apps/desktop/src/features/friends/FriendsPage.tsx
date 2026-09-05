@@ -1,4 +1,4 @@
-import { formatRelativeTime } from "@lare/shared";
+import { formatLocalTimestamp } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Check, Search, UserPlus, Users, X } from "lucide-react";
 import { useDeferredValue, useState } from "react";
@@ -112,7 +112,7 @@ function FollowingTab() {
               <UserRow
                 person={row.profiles}
                 state="accepted"
-                meta={`following since ${formatRelativeTime(row.created_at)}`}
+                meta={`following since ${formatLocalTimestamp(row.created_at)}`}
               />
             </li>
           ))}
@@ -130,7 +130,7 @@ function FollowingTab() {
                 <UserRow
                   person={row.profiles}
                   state="pending"
-                  meta={`requested ${formatRelativeTime(row.created_at)}`}
+                  meta={`requested ${formatLocalTimestamp(row.created_at)}`}
                 />
               </li>
             ))}
@@ -167,7 +167,7 @@ function FollowersTab() {
           <UserRow
             person={row.profiles}
             state={states.data?.[row.profiles.id] ?? "none"}
-            meta={`followed you ${formatRelativeTime(row.created_at)}`}
+            meta={`followed you ${formatLocalTimestamp(row.created_at)}`}
           />
         </li>
       ))}
@@ -225,7 +225,7 @@ function RequestRow({ request }: { request: FollowRequest }) {
   return (
     <UserRow
       person={person}
-      meta={`requested ${formatRelativeTime(request.created_at)}`}
+      meta={`requested ${formatLocalTimestamp(request.created_at)}`}
       action={
         <>
           <Button

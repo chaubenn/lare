@@ -211,7 +211,7 @@ export function Overlay({ controller }: { controller: PageController }) {
             onClick={() => setOpen((o) => !o)}
             aria-expanded={open}
           >
-            <span className="lare-fab-logo">L</span>
+            <img className="lare-fab-logo" src={chrome.runtime.getURL("emblem.png")} alt="" />
             <span>Lare</span>
           </button>
         </div>

@@ -48,7 +48,11 @@ export function PostCard({ post }: { post: PostCardData }) {
               <span className="truncate text-xs text-zinc-500">@{author.handle}</span>
             )}
             {author?.is_private && (
-              <Lock className="size-3 text-zinc-600" aria-label="Private account" />
+              <Lock
+                className="size-3 text-zinc-600"
+                aria-label="Private account"
+                title="Private account"
+              />
             )}
           </div>
           <div className="flex items-center gap-2 text-xs text-zinc-500">

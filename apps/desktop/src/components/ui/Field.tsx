@@ -83,7 +83,7 @@ export function Toggle({
       />
       <span
         aria-hidden
-        className="relative mt-0.5 inline-flex h-5 w-9 shrink-0 rounded-full bg-zinc-700 transition-colors peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/70 after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-4"
+        className="relative mt-0.5 inline-flex h-5 w-9 shrink-0 rounded-full bg-zinc-700 transition-colors duration-(--toggle-dur,350ms) ease-(--ease-smooth-out) peer-checked:bg-zinc-100 peer-focus-visible:ring-2 peer-focus-visible:ring-zinc-400/70 after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-zinc-950 after:transition-transform peer-checked:after:translate-x-4"
       />
     </label>
   );

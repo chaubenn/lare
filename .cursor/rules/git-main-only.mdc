@@ -1,0 +1,13 @@
+---
+description: Git workflow — always use main as the only branch
+alwaysApply: true
+---
+
+# Main-only git workflow
+
+- **Always work on `main`.** Never create feature branches unless the user explicitly asks.
+- **Always commit directly to `main`.** Do not commit to other branch names.
+- Before committing, confirm you are on `main`: `git branch --show-current` must print `main`.
+- If not on `main`, switch first: `git checkout main && git pull --rebase origin main`.
+- Push to `origin/main` only. Never push to or create other remote branches.
+- Do not rename the current branch away from `main`.

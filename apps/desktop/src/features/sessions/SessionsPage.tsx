@@ -1,11 +1,9 @@
-import { formatDurationHuman } from "@lare/shared";
-import { DifficultyBadge } from "@lare/ui";
-import { Inbox, Sparkles } from "lucide-react";
+import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
+import { ArrowRight, Inbox } from "lucide-react";
 import { Link } from "react-router";
-import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
-import { PageHeader } from "@/components/ui/Card";
+import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
-import { formatDateTime, plural } from "@/lib/format";
+import { plural } from "@/lib/format";
 import { type SessionRow, useSessions } from "./queries";
 
 export function SessionsPage() {
@@ -24,16 +22,13 @@ export function SessionsPage() {
           description="Start a session from the Lare overlay on LeetCode and it will show up here."
         />
       ) : (
-        <ul className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800">
+        <StackedList>
           {sessions.data.map((s) => (
-            <li
-              key={s.id}
-              className="transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-zinc-900/40"
-            >
+            <StackedListItem key={s.id}>
               <SessionItem session={s} />
-            </li>
+            </StackedListItem>
           ))}
-        </ul>
+        </StackedList>
       )}
     </>
   );
@@ -49,52 +44,62 @@ function SessionItem({ session }: { session: SessionRow }) {
     : null;
 
   const reviewLink = `/sessions/${session.id}`;
+  const kindLabel = session.kind === "interview" ? "Interview" : "Practice";
+  const title =
+    problems[0]?.title ?? (session.kind === "interview" ? "Mock interview" : "Practice session");
+  const extra = problems.length > 1 ? ` +${problems.length - 1}` : "";
+  const live = session.status === "active" || session.status === "paused";
 
   return (
-    <div className="flex flex-wrap items-center gap-3 p-4">
+    <div className="flex items-baseline gap-4 px-4 py-3.5">
       <Link
         to={reviewLink}
-        className="min-w-0 flex-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+        className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
       >
-        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-          <KindBadge kind={session.kind} />
-          <SessionStatusBadge status={session.status} />
-          <span>{formatDateTime(session.started_at)}</span>
-          <span aria-hidden>·</span>
-          <span>{formatDurationHuman(session.active_ms)}</span>
-          <span aria-hidden>·</span>
-          <span>{plural(problems.length, "problem")}</span>
-        </div>
-        {problems.length > 0 ? (
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-            {problems.slice(0, 4).map((p) => (
-              <span key={p.id} className="inline-flex items-center gap-1.5 text-sm text-zinc-300">
-                {p.title}
-                <DifficultyBadge difficulty={p.difficulty} />
-              </span>
-            ))}
-            {problems.length > 4 ? (
-              <span className="text-xs text-zinc-500">+{problems.length - 4} more</span>
-            ) : null}
-          </div>
-        ) : null}
+        <p className="truncate text-sm text-zinc-100">
+          {title}
+          {extra ? <span className="text-zinc-500">{extra}</span> : null}
+        </p>
+        <p className="mt-0.5 truncate text-xs text-zinc-500">
+          {kindLabel}
+          <span aria-hidden> · </span>
+          {formatLocalTimestamp(session.started_at)}
+          <span aria-hidden> · </span>
+          {formatDurationHuman(session.active_ms)}
+          <span aria-hidden> · </span>
+          {plural(problems.length, "problem")}
+          {live ? (
+            <>
+              <span aria-hidden> · </span>
+              <span className="text-zinc-300">{session.status}</span>
+            </>
+          ) : session.status === "abandoned" ? (
+            <>
+              <span aria-hidden> · </span>
+              <span className="text-rose-400">abandoned</span>
+            </>
+          ) : null}
+        </p>
       </Link>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-3 text-xs">
         {session.kind === "interview" ? (
-          <Link
-            to={reviewLink}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100 hover:bg-zinc-800"
-          >
-            <Sparkles className="size-3.5" aria-hidden />
+          <Link to={reviewLink} className="text-zinc-400 hover:text-zinc-100">
             Review
           </Link>
         ) : null}
         {postLink && post ? (
           <Link
             to={postLink}
-            className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 hover:bg-zinc-800"
+            className="inline-flex items-center gap-0.5 text-zinc-400 hover:text-zinc-100"
           >
-            {post.status === "draft" ? "Open draft" : "View post"}
+            {post.status === "draft" ? (
+              "Draft"
+            ) : (
+              <>
+                Posted
+                <ArrowRight className="size-3" aria-hidden />
+              </>
+            )}
           </Link>
         ) : null}
       </div>

@@ -3,7 +3,7 @@
  * locally (uploaded / transcribed / last error) and the actions to finish, inspect or remove it.
  */
 
-import { formatDurationHuman } from "@lare/shared";
+import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -25,23 +25,22 @@ import {
 } from "lucide-react";
 import { Link } from "react-router";
 import { useToast } from "@/components/toast/ToastProvider";
-import { Badge } from "@/components/ui/Badge";
 import { Button, type ButtonProps } from "@/components/ui/Button";
-import { PageHeader } from "@/components/ui/Card";
+import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { type RecordingWithMeta, recordingsKey, useRecordings } from "@/features/recording/hooks";
 import { isActive, type Job, STAGE_LABEL, useJobs } from "@/features/recording/jobs";
 import { processInterview, publishInstantDemo } from "@/features/recording/pipeline";
 import { forgetRecording } from "@/features/recording/recordingStore";
-import { formatDateTime } from "@/lib/format";
 import { baseName, recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 
 const IS_WINDOWS = typeof navigator !== "undefined" && navigator.platform.includes("Win");
 const FILE_MANAGER = IS_WINDOWS ? "Explorer" : "Finder";
-const SUBTITLE = `Recordings stay on this ${IS_WINDOWS ? "PC" : "Mac"} until you delete them. Upload, resume processing or open them in the editor from here.`;
+const SUBTITLE = `Kept on this ${IS_WINDOWS ? "PC" : "Mac"} until you delete them.`;
 
 export function RecordingsPage() {
   const queryClient = useQueryClient();
@@ -89,7 +88,7 @@ export function RecordingsPage() {
           description={
             <>
               Demo videos are recorded from a{" "}
-              <Link to="/drafts" className="text-emerald-400 hover:underline">
+              <Link to="/drafts" className="text-zinc-200 underline underline-offset-2">
                 draft
               </Link>{" "}
               (Instant or Studio). Mock interviews are recorded when you start one from the Chrome
@@ -98,18 +97,18 @@ export function RecordingsPage() {
           }
         />
       ) : (
-        <ul className="space-y-3">
+        <StackedList>
           {[...recordings.data]
             .sort((a, b) => b.endedAt - a.endedAt)
             .map((rec) => (
-              <li key={rec.recordingId}>
+              <StackedListItem key={rec.recordingId}>
                 <RecordingRow
                   recording={rec}
                   job={jobs.find((j) => j.recordingId === rec.recordingId && isActive(j))}
                 />
-              </li>
+              </StackedListItem>
             ))}
-        </ul>
+        </StackedList>
       )}
     </>
   );
@@ -221,129 +220,124 @@ function RecordingRow({
     processRecording.isPending ||
     deleteRecording.isPending;
 
+  const status = rec.error
+    ? rec.error
+    : !rec.uploaded
+      ? "Not uploaded"
+      : rec.transcribed
+        ? "Uploaded · transcribed"
+        : "Uploaded";
+
   return (
-    <article className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-        {isInterview ? <Badge tone="violet">Mock interview</Badge> : <Badge tone="sky">Demo</Badge>}
-        <Badge>{rec.mode}</Badge>
-        <span>{formatDateTime(new Date(rec.endedAt).toISOString())}</span>
-        <span aria-hidden>·</span>
-        <span>{formatDurationHuman(Math.max(0, rec.endedAt - rec.startedAt))}</span>
-        {rec.facecam ? (
-          <>
-            <span aria-hidden>·</span>
-            <span className="inline-flex items-center gap-1">
-              <Camera className="size-3.5" aria-hidden />
-              Facecam
-            </span>
-          </>
-        ) : null}
-        {rec.micTrack ? (
-          <>
-            <span aria-hidden>·</span>
-            <span className="inline-flex items-center gap-1">
-              <Mic className="size-3.5" aria-hidden />
-              Mic track
-            </span>
-          </>
-        ) : rec.mode === "studio" ? (
-          <>
-            <span aria-hidden>·</span>
-            <span className="inline-flex items-center gap-1">
-              <MicOff className="size-3.5" aria-hidden />
-              No mic
-            </span>
-          </>
-        ) : null}
-      </div>
+    <article className="px-4 py-3.5" title={baseName(path)}>
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm text-zinc-100">
+            {isInterview ? "Mock interview" : "Demo"}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-zinc-500">
+            {rec.mode}
+            <span aria-hidden> · </span>
+            {formatLocalTimestamp(rec.endedAt)}
+            <span aria-hidden> · </span>
+            {formatDurationHuman(Math.max(0, rec.endedAt - rec.startedAt))}
+            {rec.facecam ? (
+              <Tooltip label="Facecam" className="ml-2 align-[-2px]">
+                <Camera className="size-3" aria-label="Facecam" />
+              </Tooltip>
+            ) : null}
+            {rec.micTrack ? (
+              <Tooltip label="Microphone" className="ml-1.5 align-[-2px]">
+                <Mic className="size-3" aria-label="Microphone" />
+              </Tooltip>
+            ) : rec.mode === "studio" ? (
+              <Tooltip label="No microphone" className="ml-1.5 align-[-2px]">
+                <MicOff className="size-3" aria-label="No microphone" />
+              </Tooltip>
+            ) : null}
+            <span aria-hidden> · </span>
+            <span className={rec.error ? "text-rose-400" : undefined}>{status}</span>
+          </p>
+        </div>
 
-      <p className="mt-2 truncate font-mono text-xs text-zinc-400" title={path}>
-        {baseName(path)}
-      </p>
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        {rec.uploaded ? (
-          <Badge tone="emerald">Uploaded</Badge>
-        ) : (
-          <Badge tone="amber">Not uploaded</Badge>
-        )}
-        {rec.transcribed ? <Badge tone="sky">Transcribed</Badge> : null}
-        {rec.error ? <span className="break-words text-xs text-rose-400">{rec.error}</span> : null}
+        <div className="flex shrink-0 items-center gap-1">
+          {hasEditor ? (
+            <LinkButton
+              to={editorHref}
+              disabled={busy}
+              icon={<Scissors className="size-3.5" aria-hidden />}
+            >
+              Edit
+            </LinkButton>
+          ) : null}
+          {canUpload ? (
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Upload className="size-3.5" aria-hidden />}
+              disabled={busy}
+              loading={uploadDemo.isPending}
+              onClick={() => uploadDemo.mutate()}
+            >
+              Upload
+            </Button>
+          ) : null}
+          {canProcess ? (
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Play className="size-3.5" aria-hidden />}
+              disabled={busy}
+              loading={processRecording.isPending}
+              onClick={() => processRecording.mutate()}
+            >
+              {rec.transcribed || rec.exportPath || rec.error ? "Resume" : "Process"}
+            </Button>
+          ) : null}
+          {rec.postId ? (
+            <LinkButton
+              to={`/drafts/${rec.postId}`}
+              variant="ghost"
+              className="px-2"
+              aria-label="Open draft"
+              tooltipAlign="end"
+              icon={<SquarePen className="size-3.5" aria-hidden />}
+            />
+          ) : null}
+          {rec.sessionId ? (
+            <LinkButton
+              to={`/sessions/${rec.sessionId}`}
+              variant="ghost"
+              className="px-2"
+              aria-label="Open session"
+              tooltipAlign="end"
+              icon={<ListChecks className="size-3.5" aria-hidden />}
+            />
+          ) : null}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="px-2"
+            aria-label={`Show in ${FILE_MANAGER}`}
+            tooltipAlign="end"
+            icon={<FolderOpen className="size-3.5" aria-hidden />}
+            onClick={() => void reveal()}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            className="px-2 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+            aria-label="Delete recording"
+            tooltipAlign="end"
+            icon={<Trash2 className="size-3.5" aria-hidden />}
+            disabled={busy}
+            loading={deleteRecording.isPending}
+            onClick={() => void confirmDelete()}
+          />
+        </div>
       </div>
 
       {job ? <JobProgress job={job} /> : null}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {hasEditor ? (
-          <LinkButton
-            to={editorHref}
-            disabled={busy}
-            icon={<Scissors className="size-3.5" aria-hidden />}
-          >
-            Open in editor
-          </LinkButton>
-        ) : null}
-        {canUpload ? (
-          <Button
-            size="sm"
-            variant="primary"
-            icon={<Upload className="size-3.5" aria-hidden />}
-            disabled={busy}
-            loading={uploadDemo.isPending}
-            onClick={() => uploadDemo.mutate()}
-          >
-            Upload
-          </Button>
-        ) : null}
-        {canProcess ? (
-          <Button
-            size="sm"
-            variant="primary"
-            icon={<Play className="size-3.5" aria-hidden />}
-            disabled={busy}
-            loading={processRecording.isPending}
-            onClick={() => processRecording.mutate()}
-          >
-            {rec.transcribed || rec.exportPath || rec.error ? "Resume processing" : "Process"}
-          </Button>
-        ) : null}
-        {rec.postId ? (
-          <LinkButton
-            to={`/drafts/${rec.postId}`}
-            variant="ghost"
-            icon={<SquarePen className="size-3.5" aria-hidden />}
-          >
-            Open draft
-          </LinkButton>
-        ) : null}
-        {rec.sessionId ? (
-          <LinkButton
-            to={`/sessions/${rec.sessionId}`}
-            variant="ghost"
-            icon={<ListChecks className="size-3.5" aria-hidden />}
-          >
-            Session
-          </LinkButton>
-        ) : null}
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<FolderOpen className="size-3.5" aria-hidden />}
-          onClick={() => void reveal()}
-        >
-          Show in {FILE_MANAGER}
-        </Button>
-        <Button
-          size="sm"
-          variant="danger"
-          icon={<Trash2 className="size-3.5" aria-hidden />}
-          disabled={busy}
-          loading={deleteRecording.isPending}
-          onClick={() => void confirmDelete()}
-        >
-          Delete
-        </Button>
-      </div>
     </article>
   );
 }

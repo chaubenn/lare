@@ -1,3 +1,4 @@
+import { Wordmark } from "@lare/ui/brand";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { env } from "@/lib/env";
@@ -18,7 +19,8 @@ export default async function LoginPage({
 
   return (
     <div className="mx-auto max-w-sm py-8">
-      <h1 className="text-2xl font-semibold text-zinc-50">Sign in to Lare</h1>
+      <Wordmark className="text-xl text-zinc-50" markClassName="size-6" />
+      <h1 className="mt-6 text-2xl font-medium text-zinc-50">Sign in to Lare</h1>
       <p className="mt-1 text-sm text-zinc-400">
         Follow friends, share sessions and keep your LeetCode log in one place.
       </p>

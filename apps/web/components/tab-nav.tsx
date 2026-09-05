@@ -34,7 +34,7 @@ export function TabNav({
             href={item.href}
             aria-current={current ? "page" : undefined}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-[background-color,color] duration-(--tabs-dur) ease-(--tabs-ease)",
               current
                 ? "bg-zinc-100 text-zinc-950"
                 : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",
@@ -45,7 +45,9 @@ export function TabNav({
               <span
                 className={cn(
                   "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none",
-                  current ? "bg-zinc-900 text-zinc-100" : "bg-amber-500 text-zinc-950",
+                  current
+                    ? "bg-zinc-900 text-zinc-100"
+                    : "lare-badge-pop bg-zinc-100 text-zinc-950",
                 )}
               >
                 {item.badge > 99 ? "99+" : item.badge}

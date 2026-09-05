@@ -1,0 +1,144 @@
+/* transitions.dev motion tokens + the product-facing recipes we actually use. */
+
+:root {
+  --duration-stagger: 40ms;
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --duration-slow: 400ms;
+  --duration-very-slow: 500ms;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: ease-in-out;
+  --ease-out: ease-out;
+  --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --distance-base: 8px;
+  --distance-medium: 12px;
+  --scale-medium: 0.97;
+  --scale-small: 0.98;
+  --blur-small: 2px;
+  --blur-medium: 3px;
+  --dropdown-open-dur: 250ms;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --toast-open: 350ms;
+  --toast-distance: 16px;
+  --toast-blur: 2px;
+  --toast-scale: 0.97;
+  --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --stagger-dur: 500ms;
+  --stagger-distance: 12px;
+  --stagger-stagger: 40ms;
+  --stagger-blur: 3px;
+  --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tabs-dur: 250ms;
+  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --badge-pop-dur: 500ms;
+  --badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --learn-shift: 2px;
+  --learn-in: 350ms;
+  --learn-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-stagger: 0ms;
+    --duration-micro: 0ms;
+    --duration-quick: 0ms;
+    --duration-fast: 0ms;
+    --duration-medium: 0ms;
+    --duration-slow: 0ms;
+    --duration-very-slow: 0ms;
+    --dropdown-open-dur: 0ms;
+    --toast-open: 0ms;
+    --stagger-dur: 0ms;
+    --tabs-dur: 0ms;
+    --badge-pop-dur: 0ms;
+    --learn-in: 0ms;
+  }
+}
+
+.lare-reveal > * {
+  animation: lare-text-reveal var(--stagger-dur) var(--stagger-ease) both;
+}
+.lare-reveal > *:nth-child(2) {
+  animation-delay: var(--stagger-stagger);
+}
+.lare-reveal > *:nth-child(3) {
+  animation-delay: calc(var(--stagger-stagger) * 2);
+}
+.lare-reveal > *:nth-child(4) {
+  animation-delay: calc(var(--stagger-stagger) * 3);
+}
+
+@keyframes lare-text-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--stagger-distance));
+    filter: blur(var(--stagger-blur));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.lare-dropdown {
+  transform-origin: top right;
+  animation: lare-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) both;
+}
+
+@keyframes lare-dropdown-open {
+  from {
+    opacity: 0;
+    transform: scale(var(--scale-medium));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.lare-toast-in {
+  animation: lare-toast-in var(--toast-open) var(--toast-ease) both;
+}
+
+@keyframes lare-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--toast-distance)) scale(var(--toast-scale));
+    filter: blur(var(--toast-blur));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.lare-badge-pop {
+  animation: lare-badge-pop var(--badge-pop-dur) var(--badge-pop-ease) both;
+}
+
+@keyframes lare-badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.lare-learn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+.lare-learn svg {
+  transition: transform var(--learn-in) var(--learn-ease);
+}
+.lare-learn:hover svg {
+  transform: translateX(var(--learn-shift));
+}

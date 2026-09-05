@@ -2,7 +2,7 @@ import { cn } from "@lare/ui";
 import { Rss } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { PageHeader } from "@/components/ui/Card";
+import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { PostCard } from "./PostCard";
 import { type FeedScope, useFeed } from "./queries";
@@ -61,14 +61,14 @@ export function FeedPage() {
             scope === "following" ? (
               <>
                 Posts from the people you follow show up here.{" "}
-                <Link to="/friends?tab=find" className="text-emerald-400 hover:underline">
+                <Link to="/friends?tab=find" className="text-zinc-200 underline underline-offset-2">
                   Find people to follow
                 </Link>
               </>
             ) : (
               <>
                 Nobody has published a public session yet. Publish a draft to see it here.{" "}
-                <Link to="/drafts" className="text-emerald-400 hover:underline">
+                <Link to="/drafts" className="text-zinc-200 underline underline-offset-2">
                   Go to drafts
                 </Link>
               </>
@@ -76,12 +76,16 @@ export function FeedPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
+        <>
+          <StackedList>
+            {posts.map((post) => (
+              <StackedListItem key={post.id}>
+                <PostCard post={post} />
+              </StackedListItem>
+            ))}
+          </StackedList>
           {feed.hasNextPage ? (
-            <div className="flex justify-center pt-2">
+            <div className="flex justify-center pt-4">
               <Button
                 onClick={() => void feed.fetchNextPage()}
                 loading={feed.isFetchingNextPage}
@@ -91,7 +95,7 @@ export function FeedPage() {
               </Button>
             </div>
           ) : null}
-        </div>
+        </>
       )}
     </>
   );

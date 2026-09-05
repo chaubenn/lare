@@ -88,11 +88,15 @@ export class PageController {
     window.addEventListener("message", this.onWindowMessage);
     chrome.runtime.onMessage.addListener(this.onRuntimeMessage);
     void this.refresh();
+    void this.probeApp();
     void this.detectProblem(window.location.href);
     // Fallback for SPA navigations the MAIN script might miss.
     setInterval(() => {
       if (window.location.href !== this.currentUrl) void this.detectProblem(window.location.href);
     }, 1000);
+    setInterval(() => {
+      if (!this.disposed && !this.state.snapshot?.appConnected) void this.probeApp();
+    }, 8000);
   }
 
   dispose(): void {

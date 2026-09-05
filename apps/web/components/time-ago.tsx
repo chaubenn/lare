@@ -1,16 +1,10 @@
-import { formatRelativeTime } from "@lare/shared";
+import { formatLocalTimestamp } from "@lare/shared";
 
-/** Relative timestamp; hydration warnings are suppressed since "3m ago" drifts between renders. */
+/** Absolute time in the viewer's timezone. Hydration is suppressed because SSR is UTC. */
 export function TimeAgo({ iso, className }: { iso: string; className?: string }) {
-  const date = new Date(iso);
   return (
-    <time
-      dateTime={iso}
-      title={date.toLocaleString()}
-      className={className}
-      suppressHydrationWarning
-    >
-      {formatRelativeTime(iso)}
+    <time dateTime={iso} title={formatLocalTimestamp(iso)} className={className} suppressHydrationWarning>
+      {formatLocalTimestamp(iso)}
     </time>
   );
 }

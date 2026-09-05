@@ -17,8 +17,10 @@ type Listener = (msg: AppToExt) => void;
 export class DesktopClient {
   private ws: WebSocket | null = null;
   private listeners = new Set<Listener>();
+  private closeListeners = new Set<() => void>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private helloAck: HelloAck | null = null;
+  private connecting: Promise<HelloAck> | null = null;
 
   get connected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN && this.helloAck !== null;
@@ -33,8 +35,22 @@ export class DesktopClient {
     return () => this.listeners.delete(listener);
   }
 
+  onClose(listener: () => void): () => void {
+    this.closeListeners.add(listener);
+    return () => this.closeListeners.delete(listener);
+  }
+
   /** Connect and complete the hello handshake, or throw within `timeoutMs`. */
-  async connect(userId: string | null, timeoutMs = 1500): Promise<HelloAck> {
+  async connect(userId: string | null, timeoutMs = 3000): Promise<HelloAck> {
+    if (this.connected && this.helloAck) return this.helloAck;
+    if (this.connecting) return this.connecting;
+    this.connecting = this.open(userId, timeoutMs).finally(() => {
+      this.connecting = null;
+    });
+    return this.connecting;
+  }
+
+  private async open(userId: string | null, timeoutMs: number): Promise<HelloAck> {
     if (this.connected && this.helloAck) return this.helloAck;
     this.close();
     const ws = new WebSocket(WS_URL);
@@ -95,6 +111,7 @@ export class DesktopClient {
         this.ws = null;
         this.helloAck = null;
         this.stopPing();
+        for (const l of this.closeListeners) l();
       }
     });
     this.startPing();

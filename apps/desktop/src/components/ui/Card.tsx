@@ -27,6 +27,34 @@ export function SectionTitle({
   );
 }
 
+/** Shared list chrome for Sessions, Recordings, Drafts, and the feed. */
+export function StackedList({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <ul className={cn("divide-y divide-zinc-800/80 rounded-xl border border-zinc-800", className)}>
+      {children}
+    </ul>
+  );
+}
+
+export function StackedListItem({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <li
+      className={cn(
+        "transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-zinc-900/40",
+        className,
+      )}
+    >
+      {children}
+    </li>
+  );
+}
+
 export function PageHeader({
   title,
   subtitle,

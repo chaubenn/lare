@@ -1,23 +1,26 @@
 @import "tailwindcss";
+@import "@lare/ui/tokens.css";
+@import "@lare/ui/motion.css";
 
 /* Tailwind v4 only scans this app by default; pick up classes used by @lare/ui. */
 @source "../../../packages/ui/src";
 
 @theme {
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  --font-sans: var(--font-outfit), "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
 }
 
 :root {
   color-scheme: dark;
 }
 
+html,
+body {
+  overflow-x: clip;
+}
+
 html {
-  background-color: var(--color-zinc-950);
+  background-color: var(--lare-ink);
 }
 
 body {
@@ -25,7 +28,11 @@ body {
 }
 
 ::selection {
-  background-color: color-mix(in oklab, var(--color-amber-400) 40%, transparent);
+  background-color: color-mix(in oklab, var(--lare-bone) 35%, transparent);
+}
+
+:focus-visible {
+  @apply outline-none ring-2 ring-zinc-400/70 ring-offset-2 ring-offset-zinc-950;
 }
 
 /* Sanitised LeetCode problem descriptions. */
@@ -63,7 +70,7 @@ body {
   @apply my-3 max-w-full rounded-lg;
 }
 .leetcode-html a {
-  @apply text-amber-400 underline underline-offset-2;
+  @apply text-zinc-100 underline underline-offset-2;
 }
 .leetcode-html sup {
   @apply text-[0.7em];

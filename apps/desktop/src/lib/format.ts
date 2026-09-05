@@ -1,8 +1,8 @@
+import { formatLocalTimestamp } from "@lare/shared";
+
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return formatLocalTimestamp(iso);
 }
 
 export function formatDate(iso: string | null | undefined): string {

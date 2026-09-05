@@ -1,3 +1,4 @@
+import { Wordmark } from "@lare/ui/brand";
 import { GITHUB_REPO_URL } from "@/lib/env";
 import { GitHubIcon } from "./brand-icons";
 
@@ -5,8 +6,9 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-zinc-900">
       <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-zinc-500">
-        <p>
-          <span className="font-semibold text-zinc-400">Lare</span> · Hevy for LeetCode
+        <p className="inline-flex items-center gap-2">
+          <Wordmark markClassName="size-3.5 text-zinc-400" className="text-zinc-400" />
+          <span>· Hevy for LeetCode</span>
         </p>
         <a
           href={GITHUB_REPO_URL}

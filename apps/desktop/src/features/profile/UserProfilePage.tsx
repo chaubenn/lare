@@ -5,7 +5,7 @@ import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, PageHeader } from "@/components/ui/Card";
+import { Card, PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { PostCard } from "@/features/feed/PostCard";
@@ -138,11 +138,13 @@ export function UserProfilePage() {
               title="No published sessions yet"
             />
           ) : (
-            <div className="space-y-3">
+            <StackedList>
               {posts.data.map((post) => (
-                <PostCard key={post.id} post={post} />
+                <StackedListItem key={post.id}>
+                  <PostCard post={post} />
+                </StackedListItem>
               ))}
-            </div>
+            </StackedList>
           )}
         </div>
       )}

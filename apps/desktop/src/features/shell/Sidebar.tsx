@@ -1,4 +1,5 @@
 import { cn } from "@lare/ui";
+import { Wordmark } from "@lare/ui/brand";
 import { Clapperboard, House, Inbox, Rss, Settings, SquarePen, User, Users } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { NavLink } from "react-router";
@@ -30,11 +31,8 @@ export function Sidebar() {
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800/80 bg-zinc-950">
-      <div className="flex h-14 items-center gap-2 px-4">
-        <span className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 text-sm font-bold text-white">
-          L
-        </span>
-        <span className="font-semibold tracking-tight">Lare</span>
+      <div className="flex h-14 items-center px-4 text-zinc-50">
+        <Wordmark markClassName="size-5" />
       </div>
       <nav aria-label="Main" className="flex-1 space-y-0.5 px-2">
         {items.map((item) => (

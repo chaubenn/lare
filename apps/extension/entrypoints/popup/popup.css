@@ -1,9 +1,25 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap");
+
 :root {
   color-scheme: dark;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --lare-ink: #0c0c0b;
+  --lare-ink-2: #161615;
+  --lare-line: #2a2a27;
+  --lare-muted: #8a8780;
+  --lare-soft: #a8a49c;
+  --lare-bone: #f0ece4;
+  --duration-fast: 250ms;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dropdown-open-dur: 250ms;
+  --toast-open: 350ms;
+  --toast-distance: 16px;
+  --toast-blur: 2px;
+  --toast-scale: 0.97;
+  --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: Outfit, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
-  color: #e5e7eb;
-  background: #0f0f12;
+  color: var(--lare-bone);
+  background: var(--lare-ink);
 }
 * {
   box-sizing: border-box;
@@ -24,22 +40,19 @@ body {
   gap: 10px;
 }
 .logo {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #22c55e, #06b6d4);
-  color: #0b0b0d;
-  font-weight: 800;
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
 }
 .title {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 15px;
+  letter-spacing: -0.02em;
 }
 .subtitle,
 .muted {
-  color: #9ca3af;
+  color: var(--lare-muted);
   font-size: 12px;
 }
 .app-dot {
@@ -47,20 +60,20 @@ body {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #3f3f46;
+  background: var(--lare-line);
 }
 .app-dot.on {
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+  background: #6f8f6a;
+  box-shadow: 0 0 0 3px rgba(111, 143, 106, 0.2);
 }
 .card {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  border: 1px solid #23232a;
+  border: 1px solid var(--lare-line);
   border-radius: 12px;
-  background: #16161a;
+  background: var(--lare-ink-2);
 }
 .card-title {
   display: flex;
@@ -76,7 +89,7 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  background: #27272a;
+  background: var(--lare-line);
 }
 .grow {
   flex: 1;
@@ -89,8 +102,9 @@ body {
   white-space: nowrap;
 }
 .timer {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 .badge {
@@ -99,15 +113,15 @@ body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: #27272a;
+  background: var(--lare-line);
 }
 .badge.running {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  background: rgba(111, 143, 106, 0.15);
+  color: #9cba96;
 }
 .badge.paused {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
+  background: rgba(196, 161, 90, 0.15);
+  color: #d4b56e;
 }
 .problems {
   margin: 0;
@@ -129,23 +143,26 @@ body {
 .row input {
   flex: 1;
   padding: 8px 10px;
-  border: 1px solid #3f3f46;
+  border: 1px solid var(--lare-line-strong, #3d3c39);
   border-radius: 8px;
-  background: #0f0f12;
-  color: #e5e7eb;
+  background: var(--lare-ink);
+  color: var(--lare-bone);
+  font-family: inherit;
 }
 .btn {
   flex: 1;
   padding: 8px 10px;
-  border: 1px solid #3f3f46;
+  border: 1px solid var(--lare-line);
   border-radius: 8px;
-  background: #1f1f24;
-  color: #e5e7eb;
+  background: #1e1e1c;
+  color: var(--lare-bone);
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-smooth-out);
 }
 .btn:hover:not(:disabled) {
-  background: #26262c;
+  background: #262624;
 }
 .btn:disabled {
   opacity: 0.5;
@@ -155,23 +172,27 @@ body {
   flex: 0 0 auto;
 }
 .btn-primary {
-  border-color: #22c55e;
-  background: #14532d;
-  color: #dcfce7;
+  border-color: var(--lare-bone);
+  background: var(--lare-bone);
+  color: var(--lare-ink);
+}
+.btn-primary:hover:not(:disabled) {
+  background: #f7f4ee;
 }
 .divider {
   text-align: center;
-  color: #6b7280;
+  color: var(--lare-muted);
   font-size: 11px;
 }
 .link {
   border: 0;
   background: none;
-  color: #67e8f9;
+  color: var(--lare-soft);
   cursor: pointer;
   font-size: 12px;
   text-decoration: none;
   padding: 0;
+  font-family: inherit;
 }
 .link:disabled {
   opacity: 0.5;

@@ -66,6 +66,7 @@ export default defineBackground(() => {
   });
 
   desktop.onMessage((msg) => void onDesktopMessage(msg));
+  desktop.onClose(() => void broadcast());
 });
 
 // ---------------------------------------------------------------------------
@@ -101,6 +102,7 @@ async function handle(req: RuntimeRequest): Promise<RuntimeResponse> {
     case "PROBE_APP": {
       const userId = await currentUserId();
       const connected = await probeDesktop(userId);
+      await broadcast();
       return { ok: true, ...(await snapshot()), appConnected: connected };
     }
 
@@ -512,16 +514,7 @@ async function submission(slug: string, sub: CapturedSubmission): Promise<Runtim
 // ---------------------------------------------------------------------------
 async function probeDesktop(userId: string | null): Promise<boolean> {
   try {
-    await desktop.connect(userId, 1500);
-    const state = await loadState();
-    if (state.session?.kind !== "interview") {
-      // Don't hold a socket open when nothing needs it.
-      setTimeout(() => {
-        void loadState().then((s) => {
-          if (s.session?.kind !== "interview") desktop.close();
-        });
-      }, 5000);
-    }
+    await desktop.connect(userId, 3000);
     return true;
   } catch {
     return false;
@@ -538,12 +531,11 @@ async function resumeAfterRestart(): Promise<void> {
   const state = await loadState();
   if (state.session) {
     await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 0.5 });
-    if (state.session.kind === "interview") {
-      const userId = await currentUserId();
-      desktop.connect(userId, 2000).catch(() => undefined);
-    }
   }
+  const userId = await currentUserId();
+  await probeDesktop(userId);
   await refreshBadge();
+  await broadcast();
 }
 
 // ---------------------------------------------------------------------------

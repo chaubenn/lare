@@ -25,6 +25,7 @@ import { useToast } from "@/components/toast/ToastProvider";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, PageHeader, SectionTitle } from "@/components/ui/Card";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { Input, Label, Select, Toggle } from "@/components/ui/Field";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
@@ -630,14 +631,16 @@ function StudioEditor({
                       {mmss(r.start)} → {mmss(r.end)}
                     </button>
                     <span className="text-xs text-zinc-500">{mmss(r.end - r.start)}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeRange(i)}
-                      aria-label="Remove range"
-                      className="ml-auto rounded p-1 text-zinc-500 hover:text-rose-300"
-                    >
-                      <Trash2 className="size-3.5" aria-hidden />
-                    </button>
+                    <Tooltip label="Remove range" align="end" className="ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => removeRange(i)}
+                        aria-label="Remove range"
+                        className="rounded p-1 text-zinc-500 hover:text-rose-300"
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </button>
+                    </Tooltip>
                   </li>
                 ))}
                 <li className="pt-1 text-xs text-zinc-500">

@@ -1,3 +1,4 @@
+import { Wordmark } from "@lare/ui/brand";
 import { Globe, KeyRound, Mail } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Navigate } from "react-router";
@@ -18,10 +19,8 @@ export function LoginPage() {
     <div className="flex h-full items-center justify-center p-8">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 text-2xl font-bold text-white">
-            L
-          </div>
-          <h1 className="text-xl font-semibold">Sign in to Lare</h1>
+          <Wordmark className="justify-center text-xl text-zinc-50" markClassName="size-8" />
+          <h1 className="mt-6 text-xl font-medium">Sign in to Lare</h1>
           <p className="mt-1 text-sm text-zinc-400">
             Hevy for LeetCode. Log sessions, share what you learned.
           </p>
@@ -76,7 +75,7 @@ function LoginForm() {
         Continue with Google
       </Button>
       {waiting ? (
-        <output className="block rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-center text-xs text-emerald-200">
+        <output className="block rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 text-center text-xs text-zinc-300">
           Finish signing in with {waiting === "github" ? "GitHub" : "Google"} in your browser. This
           window updates automatically.
         </output>

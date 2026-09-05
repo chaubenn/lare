@@ -79,7 +79,7 @@ export function App() {
   return (
     <div className="popup">
       <header className="header">
-        <div className="logo">L</div>
+        <img className="logo" src={chrome.runtime.getURL("emblem.png")} alt="" />
         <div>
           <div className="title">Lare</div>
           <div className="subtitle">Hevy for LeetCode</div>

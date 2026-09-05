@@ -95,7 +95,11 @@ export default async function PostPage({ params }: Params) {
               )}
               {author.handle && <span className="text-sm text-zinc-500">@{author.handle}</span>}
               {author.is_private && (
-                <Lock className="size-3 text-zinc-600" aria-label="Private account" />
+                <Lock
+                  className="size-3 text-zinc-600"
+                  aria-label="Private account"
+                  title="Private account"
+                />
               )}
             </div>
             <p className="text-xs text-zinc-500">

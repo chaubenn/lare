@@ -24,9 +24,30 @@ export default defineConfig({
       // Local fixture page + mocked backend for e2e tests (dev/e2e builds only).
       ...(mode === "production" ? [] : ["http://localhost/*"]),
     ],
+    icons: {
+      16: "icon-16.png",
+      32: "icon-32.png",
+      48: "icon-48.png",
+      128: "icon-128.png",
+    },
     action: {
       default_title: "Lare",
+      default_icon: {
+        16: "icon-16.png",
+        32: "icon-32.png",
+        48: "icon-48.png",
+        128: "icon-128.png",
+      },
     },
+    web_accessible_resources: [
+      {
+        resources: ["emblem.png"],
+        matches: [
+          "https://leetcode.com/*",
+          ...(mode === "production" ? [] : ["http://localhost/*"]),
+        ],
+      },
+    ],
     minimum_chrome_version: "116",
   }),
   vite: () => ({

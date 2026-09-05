@@ -1,6 +1,6 @@
 {
   "name": "@lare/extension",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Lare for LeetCode: session timer, problem/submission capture, mock-interview trigger.",

@@ -1,8 +1,14 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { formatDurationHuman } from "@lare/shared";
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
 import { isUuid } from "@/lib/post-utils";
 import { createAnonClient } from "@/lib/supabase/anon";
+
+const emblemSrc = readFile(join(process.cwd(), "public/brand/emblem-512.png")).then(
+  (buf) => `data:image/png;base64,${buf.toString("base64")}`,
+);
 
 const SIZE = { width: 1200, height: 630 };
 
@@ -45,7 +51,7 @@ async function loadOgData(id: string): Promise<OgData | null> {
 
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const data = await loadOgData(id);
+  const [data, emblem] = await Promise.all([loadOgData(id), emblemSrc]);
 
   return new ImageResponse(
     <div
@@ -56,32 +62,18 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
         flexDirection: "column",
         justifyContent: "space-between",
         padding: 72,
-        background: "linear-gradient(135deg, #09090b 0%, #18181b 100%)",
-        color: "#fafafa",
+        background: "#0c0c0b",
+        color: "#f0ece4",
         fontFamily: "sans-serif",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: "#f59e0b",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#09090b",
-              fontSize: 28,
-              fontWeight: 800,
-            }}
-          >
-            L
-          </div>
-          <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5 }}>Lare</div>
+          {/* biome-ignore lint/performance/noImgElement: next/og ImageResponse only supports <img>. */}
+          <img src={emblem} width={44} height={44} alt="" />
+          <div style={{ fontSize: 30, fontWeight: 600, letterSpacing: -0.5 }}>Lare</div>
         </div>
-        <div style={{ fontSize: 22, color: "#a1a1aa" }}>Hevy for LeetCode</div>
+        <div style={{ fontSize: 22, color: "#8a8780" }}>Hevy for LeetCode</div>
       </div>
 
       {data ? (
@@ -91,7 +83,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
               fontSize: 20,
               textTransform: "uppercase",
               letterSpacing: 4,
-              color: "#f59e0b",
+              color: "#8a8780",
               display: "flex",
             }}
           >

@@ -39,21 +39,21 @@ export function RuntimeChart({
             tickLine={false}
             axisLine={false}
             interval={tickEvery - 1}
-            tick={{ fontSize: 10, fill: "#71717a" }}
+            tick={{ fontSize: 10, fill: "#8a8780" }}
             tickFormatter={(v: number) => `${v}${unit}`}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
             width={44}
-            tick={{ fontSize: 10, fill: "#71717a" }}
+            tick={{ fontSize: 10, fill: "#8a8780" }}
             tickFormatter={(v: number) => `${v}%`}
           />
           <Tooltip
             cursor={{ fill: "rgba(255,255,255,0.04)" }}
             contentStyle={{
-              background: "#18181b",
-              border: "1px solid #27272a",
+              background: "#161615",
+              border: "1px solid #2a2a27",
               borderRadius: 8,
               fontSize: 12,
             }}
@@ -62,7 +62,7 @@ export function RuntimeChart({
           />
           <Bar dataKey="pct" radius={[2, 2, 0, 0]} isAnimationActive={false}>
             {data.map((d) => (
-              <Cell key={d.i} fill={d.i === highlight ? "#f59e0b" : "#3b82f6"} />
+              <Cell key={d.i} fill={d.i === highlight ? "#f0ece4" : "#3d3c39"} />
             ))}
           </Bar>
         </BarChart>

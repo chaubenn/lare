@@ -38,3 +38,46 @@ export function formatRelativeTime(iso: string, now: Date = new Date()): string 
   if (days < 7) return `${days}d ago`;
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+
+function ordinal(n: number): string {
+  const mod = n % 100;
+  if (mod >= 11 && mod <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/**
+ * Absolute time in the viewer's timezone (or `timeZone` when given).
+ * `2026-09-12T00:50:00.000Z` → "12th September 2026, 10:50am" in Brisbane,
+ * "12th September 2026, 8:50am" in Perth.
+ */
+export function formatLocalTimestamp(
+  input: string | number | Date,
+  timeZone?: string,
+): string {
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return "—";
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone,
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(d);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  const day = Number(get("day"));
+  if (!Number.isFinite(day)) return "—";
+  const period = get("dayPeriod").toLowerCase().replace(/\./g, "");
+  return `${ordinal(day)} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")}${period}`;
+}
