@@ -1,8 +1,16 @@
-import { WS_PORT } from "@lare/shared";
+import {
+  AVATAR_BUCKET,
+  avatarPath,
+  rejectAvatarInput,
+  resizeAvatarImage,
+  WS_PORT,
+  withCacheBust,
+} from "@lare/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { LogOut, RefreshCw } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/toast/ToastProvider";
+import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, PageHeader, SectionTitle } from "@/components/ui/Card";
@@ -79,6 +87,7 @@ function ProfileForm() {
   return (
     <Card>
       <SectionTitle>Profile</SectionTitle>
+      <AvatarUploader />
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -134,6 +143,68 @@ function ProfileForm() {
         </div>
       </form>
     </Card>
+  );
+}
+
+function AvatarUploader() {
+  const { userId, profile } = useUser();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const reason = rejectAvatarInput(file);
+      if (reason) throw new Error(reason);
+
+      const blob = await resizeAvatarImage(file);
+      const path = avatarPath(userId);
+      const { error: uploadError } = await supabase.storage
+        .from(AVATAR_BUCKET)
+        .upload(path, blob, { contentType: "image/jpeg", upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+      const avatarUrl = withCacheBust(data.publicUrl);
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: avatarUrl })
+        .eq("id", userId);
+      if (updateError) throw updateError;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
+      toast({ title: "Profile picture updated", variant: "success" });
+    },
+    onError: (err) => toast({ title: errorMessage(err), variant: "error" }),
+  });
+
+  return (
+    <div className="mb-4 flex items-center gap-4">
+      <Avatar url={profile?.avatar_url} name={profile?.display_name} size={64} />
+      <div>
+        <Button
+          type="button"
+          variant="secondary"
+          loading={upload.isPending}
+          onClick={() => inputRef.current?.click()}
+        >
+          Change photo
+        </Button>
+        <p className="mt-1 text-xs text-zinc-500">JPEG, PNG, WebP or GIF, up to 20 MB.</p>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) upload.mutate(file);
+        }}
+      />
+    </div>
   );
 }
 

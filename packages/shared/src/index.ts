@@ -1,5 +1,6 @@
 export * from "./activity";
 export * from "./ai-review";
+export * from "./avatar";
 export * from "./constants";
 export * from "./edits";
 export * from "./format";
