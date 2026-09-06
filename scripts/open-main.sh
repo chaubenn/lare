@@ -4,6 +4,12 @@
 # This is not a release. It does not bump versions, tag, or wait for CI. The installed
 # /Applications/Lare.app is the last stable package; this script quits it so its
 # single-instance lock cannot swallow the local window.
+#
+# The desktop app runs as a signed .app bundle launched through Launch Services, not as the
+# bare `tauri dev` binary: macOS attributes camera/microphone permission requests to the app
+# bundle they come from, so with the bare binary requestAccess is auto-denied (the prompt never
+# appears and the status stays NotDetermined) and the facecam cannot be used. See
+# scripts/dev-bundle.sh, which this script reuses to build and sign the bundle.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -14,8 +20,9 @@ EXT_LOG="$LOG_DIR/open-main-extension.log"
 
 quit_released_app() {
   osascript -e 'tell application "Lare" to quit' >/dev/null 2>&1 || true
-  # The installed binary and a leftover debug binary share the process name.
+  # The installed binary, a leftover bare debug binary, and the bundle binary share the name.
   killall lare-desktop >/dev/null 2>&1 || true
+  killall Lare >/dev/null 2>&1 || true
   sleep 0.6
 }
 
@@ -24,12 +31,7 @@ extension_running() {
 }
 
 desktop_running() {
-  pgrep -f '/target/debug/lare-desktop' >/dev/null 2>&1
-}
-
-vite_ready() {
-  # Vite binds `localhost`, which can resolve to ::1 only — probe both spellings.
-  curl -sf -o /dev/null http://localhost:1420/ || curl -sf -o /dev/null http://127.0.0.1:1420/
+  pgrep -f 'Lare.app/Contents/MacOS|/target/debug/lare-desktop' >/dev/null 2>&1
 }
 
 focus_window() {
@@ -47,14 +49,14 @@ EOF
 wait_for_window() {
   i=0
   while [ "$i" -lt 90 ]; do
-    if desktop_running && vite_ready; then
+    if desktop_running; then
       focus_window
       return 0
     fi
     i=$((i + 1))
     sleep 2
   done
-  echo "warning: desktop process or Vite did not come up in time; see $DESKTOP_LOG" >&2
+  echo "warning: desktop app did not come up in time; see $DESKTOP_LOG" >&2
   return 1
 }
 
@@ -67,24 +69,19 @@ else
   echo "Extension watcher already running."
 fi
 
-if desktop_running && vite_ready; then
-  echo "Local desktop already running from this checkout."
-  focus_window
-  echo "Lare (main checkout) should be in front. Extension output: apps/extension/.output/chrome-mv3-dev"
-  exit 0
-fi
+# The bundle serves its own built frontend; a leftover Vite on :1420 is stale, not a fast path.
+pkill -f 'apps/desktop.*vite' >/dev/null 2>&1 || true
 
-# A leftover Vite on :1420 without the Tauri window still blocks `tauri dev`.
-if vite_ready && ! desktop_running; then
-  pkill -f 'apps/desktop.*vite' >/dev/null 2>&1 || true
-  sleep 0.4
+echo "Building the signed .app bundle (camera/microphone grants require a real bundle; build log: $DESKTOP_LOG)."
+if ! sh scripts/dev-bundle.sh >"$DESKTOP_LOG" 2>&1; then
+  echo "Bundle build failed; last lines of $DESKTOP_LOG:" >&2
+  tail -20 "$DESKTOP_LOG" >&2
+  exit 1
 fi
-
-echo "Starting Tauri from this checkout (hot reload; not a release build)."
-pnpm --filter @lare/desktop tauri dev >"$DESKTOP_LOG" 2>&1 &
 
 if wait_for_window; then
   echo "Lare (main checkout) is open. Extension output: apps/extension/.output/chrome-mv3-dev"
+  echo "App logs: /tmp/lare-app.log"
 else
   echo "Started in the background. Check $DESKTOP_LOG"
   exit 1

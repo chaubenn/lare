@@ -96,6 +96,6 @@ jobs:
       - name: Check
         run: cargo check --workspace --all-targets --target ${{ matrix.target }}
       - name: Test (portable crates)
-        run: cargo test -p lare-core -p lare-bunny -p lare-transcribe --target ${{ matrix.target }}
+        run: cargo test -p lare-core -p lare-bunny -p lare-transcribe -p scap-dxgi --target ${{ matrix.target }}
       - name: Clippy (Lare crates)
         run: cargo clippy -p lare-core -p lare-bunny -p lare-recording -p lare-transcribe -p lare-desktop --target ${{ matrix.target }} -- -D warnings
