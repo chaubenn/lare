@@ -16,11 +16,19 @@ use windows::Win32::Graphics::Dxgi::{
     DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO,
     DXGI_OUTDUPL_POINTER_SHAPE_INFO, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR,
     DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME,
-    IDXGIOutput1, IDXGIOutputDuplication, IDXGIResource,
+    IDXGIOutputDuplication, IDXGIResource,
 };
 use windows::core::Interface;
 
 const ACQUIRE_TIMEOUT_MS: u32 = 250;
+/// Bounded retry count for re-establishing duplication after
+/// `DXGI_ERROR_ACCESS_LOST`. The most common cause (a secure-desktop
+/// transition for a UAC prompt or Ctrl+Alt+Del, or a display mode change)
+/// typically rejects an immediate re-`DuplicateOutput` attempt, so a single
+/// failure isn't treated as terminal.
+const ACCESS_LOST_MAX_RETRIES: u32 = 8;
+/// Delay between `ACCESS_LOST` recovery attempts.
+const ACCESS_LOST_RETRY_DELAY_MS: u64 = 100;
 
 pub struct Frame {
     texture: ID3D11Texture2D,
@@ -293,10 +301,26 @@ fn composite_cursor(
     Ok(())
 }
 
+/// Re-resolves `target_monitor` to its `IDXGIOutput1` and re-`DuplicateOutput`s
+/// it. Used for `ACCESS_LOST` recovery: re-resolving (rather than just
+/// re-duplicating adapter output 0, which may not be the monitor we were
+/// asked to capture) matters on multi-monitor machines, and the freshly
+/// returned desktop rect lets the caller pick up a resolution change that
+/// happened while access was lost.
+fn recover_duplication(
+    device: &ID3D11Device,
+    target_monitor: windows::Win32::Graphics::Gdi::HMONITOR,
+) -> windows::core::Result<(IDXGIOutputDuplication, RECT)> {
+    let (output1, desktop_rect) = find_output_for_monitor(device, target_monitor)?;
+    let duplication = unsafe { output1.DuplicateOutput(device) }?;
+    Ok((duplication, desktop_rect))
+}
+
 fn run_capture_loop(
     duplication_output: (IDXGIOutputDuplication, ID3D11Device, ID3D11DeviceContext),
-    frame_width: u32,
-    frame_height: u32,
+    target_monitor: isize,
+    mut frame_width: u32,
+    mut frame_height: u32,
     crop: Option<windows::Win32::Graphics::Direct3D11::D3D11_BOX>,
     control_rx: std::sync::mpsc::Receiver<ThreadMessage>,
     mut on_frame: impl FnMut(Frame) -> windows::core::Result<()> + Send + 'static,
@@ -304,9 +328,15 @@ fn run_capture_loop(
 ) {
     let (mut duplication, device, context) = duplication_output;
     let mut cached_shape: Option<CursorShape> = None;
-    let (out_width, out_height) = crop
-        .map(|c| (c.right - c.left, c.bottom - c.top))
-        .unwrap_or((frame_width, frame_height));
+    // DXGI only refreshes `PointerPosition` on a frame whose
+    // `LastMouseUpdateTime` is non-zero; on any other frame it reads back as
+    // all zeros. Position/visibility are cached across frames the same way
+    // the shape already is, so the cursor doesn't flicker out on desktop-only
+    // update frames.
+    let mut cached_position: (i32, i32) = (0, 0);
+    let mut cached_visible = false;
+    let mut out_width = crop.map(|c| c.right - c.left).unwrap_or(frame_width);
+    let mut out_height = crop.map(|c| c.bottom - c.top).unwrap_or(frame_height);
 
     loop {
         if control_rx.try_recv().is_ok() {
@@ -326,13 +356,43 @@ fn run_capture_loop(
             Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => continue,
             Err(e) if e.code() == DXGI_ERROR_ACCESS_LOST => {
                 tracing::warn!("DXGI duplication access lost, recreating");
-                match find_and_duplicate_same_output(&device) {
-                    Ok(new_dup) => {
+                let monitor = windows::Win32::Graphics::Gdi::HMONITOR(target_monitor as *mut core::ffi::c_void);
+
+                let mut recovered = None;
+                for attempt in 0..ACCESS_LOST_MAX_RETRIES {
+                    match recover_duplication(&device, monitor) {
+                        Ok(result) => {
+                            recovered = Some(result);
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                attempt,
+                                "Failed to recreate DXGI duplication, retrying"
+                            );
+                            std::thread::sleep(std::time::Duration::from_millis(
+                                ACCESS_LOST_RETRY_DELAY_MS,
+                            ));
+                        }
+                    }
+                }
+
+                match recovered {
+                    Some((new_dup, desktop_rect)) => {
                         duplication = new_dup;
+                        frame_width = (desktop_rect.right - desktop_rect.left) as u32;
+                        frame_height = (desktop_rect.bottom - desktop_rect.top) as u32;
+                        if crop.is_none() {
+                            out_width = frame_width;
+                            out_height = frame_height;
+                        }
                         continue;
                     }
-                    Err(e) => {
-                        tracing::error!(error = %e, "Failed to recreate DXGI duplication after access lost");
+                    None => {
+                        tracing::error!(
+                            "Failed to recreate DXGI duplication after access lost, giving up"
+                        );
                         let _ = on_closed();
                         break;
                     }
@@ -345,7 +405,13 @@ fn run_capture_loop(
             }
         };
 
-        let result = (|| -> windows::core::Result<()> {
+        // The desktop frame must be released promptly regardless of whether
+        // the work below it succeeds -- `AcquireNextFrame` fails with
+        // `DXGI_ERROR_INVALID_CALL` on the next call if the previous frame
+        // was never released, and `GetFramePointerShape` (inside
+        // `read_pointer_shape`) is only valid to call while the frame is
+        // still owned, so it must run *before* `ReleaseFrame`, not after.
+        let owned_result = (|| -> windows::core::Result<(ID3D11Texture2D, Option<CursorShape>)> {
             let acquired: ID3D11Texture2D = resource.cast()?;
             let output_texture = create_output_texture(&device, out_width, out_height)?;
 
@@ -357,25 +423,58 @@ fn run_capture_loop(
                 unsafe { context.CopyResource(&output_texture, &acquired) };
             }
 
-            unsafe { duplication.ReleaseFrame() }?;
+            let shape = read_pointer_shape(&duplication, &frame_info)?;
 
-            if let Some(shape) = read_pointer_shape(&duplication, &frame_info)? {
-                cached_shape = Some(shape);
+            Ok((output_texture, shape))
+        })();
+
+        let release_result = unsafe { duplication.ReleaseFrame() };
+
+        let (output_texture, shape) = match owned_result {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "DXGI frame processing failed, continuing");
+                if let Err(e) = release_result {
+                    tracing::warn!(error = %e, "DXGI ReleaseFrame failed, continuing");
+                }
+                continue;
             }
+        };
+        if let Err(e) = release_result {
+            tracing::warn!(error = %e, "DXGI ReleaseFrame failed, continuing");
+        }
 
-            if frame_info.PointerPosition.Visible.as_bool()
+        if let Some(shape) = shape {
+            cached_shape = Some(shape);
+        }
+
+        if frame_info.LastMouseUpdateTime != 0 {
+            cached_visible = frame_info.PointerPosition.Visible.as_bool();
+            cached_position = (
+                frame_info.PointerPosition.Position.x,
+                frame_info.PointerPosition.Position.y,
+            );
+        }
+
+        let result = (|| -> windows::core::Result<()> {
+            if cached_visible
                 && let Some(shape) = &cached_shape
             {
                 let crop_left = crop.map(|c| c.left as i32).unwrap_or(0);
                 let crop_top = crop.map(|c| c.top as i32).unwrap_or(0);
+                // `DXGI_OUTDUPL_POINTER_POSITION::Position` is already the
+                // top-left of the pointer bitmap in desktop coordinates --
+                // Windows has already applied the hotspot offset, so it must
+                // not be subtracted again here (only our own crop offset is
+                // ours to account for).
                 composite_cursor(
                     &device,
                     &context,
                     &output_texture,
                     out_width,
                     out_height,
-                    frame_info.PointerPosition.Position.x - shape.hotspot_x - crop_left,
-                    frame_info.PointerPosition.Position.y - shape.hotspot_y - crop_top,
+                    cached_position.0 - crop_left,
+                    cached_position.1 - crop_top,
                     shape,
                 )?;
             }
@@ -392,18 +491,6 @@ fn run_capture_loop(
             tracing::warn!(error = %e, "DXGI frame processing failed, continuing");
         }
     }
-}
-
-fn find_and_duplicate_same_output(device: &ID3D11Device) -> windows::core::Result<IDXGIOutputDuplication> {
-    // ACCESS_LOST recovery re-duplicates the same adapter's primary output;
-    // Task 5's restart path re-enters `Capturer::new` from scratch (which
-    // re-resolves the target monitor) for anything beyond a transient loss,
-    // so this just needs to get frames flowing again immediately.
-    let dxgi_device: windows::Win32::Graphics::Dxgi::IDXGIDevice = device.cast()?;
-    let adapter = unsafe { dxgi_device.GetAdapter() }?;
-    let output = unsafe { adapter.EnumOutputs(0) }?;
-    let output1: IDXGIOutput1 = output.cast()?;
-    unsafe { output1.DuplicateOutput(device) }
 }
 
 impl Capturer {
@@ -430,11 +517,17 @@ impl Capturer {
         let stop_flag = Arc::new(AtomicBool::new(false));
 
         let crop = settings.crop;
+        // `HMONITOR` wraps a raw pointer and so isn't `Send`; carry it across
+        // the thread boundary as its underlying integer value and rebuild the
+        // handle from that on the capture thread (it's never dereferenced,
+        // only passed back into Win32 APIs that accept it as an opaque id).
+        let target_monitor_raw = target_monitor.0 as isize;
         let thread = std::thread::Builder::new()
             .name("dxgi-duplication-capture".into())
             .spawn(move || {
                 run_capture_loop(
                     (duplication, device, context),
+                    target_monitor_raw,
                     frame_width,
                     frame_height,
                     crop,
