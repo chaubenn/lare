@@ -56,7 +56,12 @@ export function RuntimeChart({
               border: "1px solid #2a2a27",
               borderRadius: 8,
               fontSize: 12,
+              color: "#f0ece4",
             }}
+            labelStyle={{ color: "#f0ece4" }}
+            // recharts falls back to black for items when the Bar has no `fill`
+            // of its own (ours comes from per-bin Cells), which is unreadable here.
+            itemStyle={{ color: "#f0ece4" }}
             labelFormatter={(v) => `${v} ${unit}`}
             formatter={(v) => [`${Number(v).toFixed(2)}%`, "submissions"]}
           />
