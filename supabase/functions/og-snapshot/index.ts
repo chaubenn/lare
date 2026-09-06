@@ -15,6 +15,10 @@
 // Visibility is enforced twice: the caller must be able to SELECT the post (RLS, with their own
 // JWT forwarded to the render route so private posts draw for their owner), and storage reads keep
 // following `private.can_view_post_object` from migration 0007.
+//
+// Drafts: an author may snapshot their own unpublished post so the editor can preview the card
+// they are about to publish. Everyone else still gets 409 until the post is published — and RLS
+// only ever shows a draft to its owner, so the visibility check above already covers it.
 
 import { envOptional, HttpError, handler, json, readJson } from "../_shared/http.ts";
 import { adminClient, bearerJwt, optionalUser } from "../_shared/supabase.ts";
@@ -57,12 +61,23 @@ interface PostRow {
   cover_media_id: string | null;
 }
 
+/** Attach the card as the post's cover, but never over a cover the author picked themselves. */
+async function attachAsCover(admin: Admin, postId: string, mediaId: string): Promise<void> {
+  const { error } = await admin
+    .from("posts")
+    .update({ cover_media_id: mediaId })
+    .eq("id", postId)
+    .is("cover_media_id", null);
+  if (error) console.warn(`attaching the card as cover failed: ${error.message}`);
+}
+
 async function snapshotPost(
   admin: Admin,
   siteUrl: string,
   postId: string,
   jwt: string | null,
   force: boolean,
+  callerId: string | null,
 ): Promise<"created" | "refreshed" | "exists" | "skipped"> {
   const { data: post } = await admin
     .from("posts")
@@ -70,8 +85,11 @@ async function snapshotPost(
     .eq("id", postId)
     .maybeSingle();
   if (!post) throw new HttpError("Post not found", 404);
-  if ((post as PostRow).status !== "published") throw new HttpError("Post is not published", 409);
   const owner = post as PostRow;
+  // Authors may snapshot their own draft to preview it; nobody else sees a card before publish.
+  if (owner.status !== "published" && owner.user_id !== callerId) {
+    throw new HttpError("Post is not published", 409);
+  }
 
   const { data: existing } = await admin
     .from("post_media")
@@ -79,7 +97,12 @@ async function snapshotPost(
     .eq("post_id", postId)
     .eq("kind", "og")
     .maybeSingle();
-  if (existing && !force) return "exists";
+  if (existing && !force) {
+    // The card is already there, but the post may have lost its cover since (an edit that
+    // cleared it, or a draft saved from an editor that had not seen the card yet).
+    if (!owner.cover_media_id) await attachAsCover(admin, postId, existing.id as string);
+    return "exists";
+  }
 
   const png = await renderCard(siteUrl, postId, jwt);
   const path = `${owner.user_id}/${postId}/og.png`;
@@ -115,14 +138,7 @@ async function snapshotPost(
   }
 
   // Attach as the cover only while the author has not picked their own; a custom cover always wins.
-  if (!owner.cover_media_id) {
-    const { error: coverError } = await admin
-      .from("posts")
-      .update({ cover_media_id: mediaId })
-      .eq("id", postId)
-      .is("cover_media_id", null);
-    if (coverError) console.warn(`attaching the card as cover failed: ${coverError.message}`);
-  }
+  if (!owner.cover_media_id) await attachAsCover(admin, postId, mediaId);
   return existing ? "refreshed" : "created";
 }
 
@@ -132,7 +148,7 @@ Deno.serve(
     const body = await readJson<Body>(req);
     const siteUrl = (envOptional("SITE_URL") ?? "https://lare-one.vercel.app").replace(/\/$/, "");
     const jwt = bearerJwt(req);
-    const { client: caller } = await optionalUser(req);
+    const { id: callerId, client: caller } = await optionalUser(req);
     const admin = adminClient();
 
     if (body.backfill === true) {
@@ -156,7 +172,7 @@ Deno.serve(
       for (const post of missing) {
         const id = post.id as string;
         try {
-          results[id] = await snapshotPost(admin, siteUrl, id, jwt, false);
+          results[id] = await snapshotPost(admin, siteUrl, id, jwt, false, callerId);
         } catch (e) {
           results[id] = e instanceof Error ? e.message : "failed";
         }
@@ -175,7 +191,7 @@ Deno.serve(
       .maybeSingle();
     if (!visible) throw new HttpError("Post not found", 404);
 
-    const result = await snapshotPost(admin, siteUrl, postId, jwt, body.force === true);
+    const result = await snapshotPost(admin, siteUrl, postId, jwt, body.force === true, callerId);
     return json({ postId, result });
   }),
 );

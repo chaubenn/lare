@@ -1,4 +1,5 @@
 import type { Post } from "@lare/supabase-types";
+import { Eye } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
@@ -6,6 +7,7 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import { Input, Label, Select, Textarea, Toggle } from "@/components/ui/Field";
 import { errorMessage } from "@/lib/supabase";
 import { PostMediaPanel } from "./PostMediaPanel";
+import { PostPreview, usePreviewSlides } from "./PostPreview";
 import { type PostDetail, useUpdatePost } from "./queries";
 
 /**
@@ -30,8 +32,17 @@ export function PostEditPanel({
   const [visibility, setVisibility] = useState<Post["visibility"]>(post.visibility);
   const [showVideo, setShowVideo] = useState(post.show_video);
   const [coverMediaId, setCoverMediaId] = useState<string | null>(post.cover_media_id);
+  const [previewing, setPreviewing] = useState(false);
 
   const hasVideo = Boolean(post.video_id) && post.video_kind !== "none";
+  const slides = usePreviewSlides({
+    postId: post.id,
+    videoId: post.video_id,
+    videoKind: post.video_kind,
+    showVideo,
+    coverMediaId,
+    session: post.sessions,
+  });
 
   const save = () => {
     update.mutate(
@@ -98,6 +109,13 @@ export function PostEditPanel({
           <Button variant="primary" loading={update.isPending} onClick={save}>
             Save changes
           </Button>
+          <Button
+            variant="ghost"
+            icon={<Eye className="size-4" aria-hidden />}
+            onClick={() => setPreviewing(true)}
+          >
+            Preview
+          </Button>
           <Button variant="ghost" disabled={update.isPending} onClick={onDone}>
             Cancel
           </Button>
@@ -111,6 +129,18 @@ export function PostEditPanel({
         onCoverChange={setCoverMediaId}
         disabled={update.isPending}
       />
+
+      {previewing && (
+        <PostPreview
+          title={title}
+          body={body}
+          visibility={visibility}
+          when={post.published_at ?? post.created_at}
+          published
+          slides={slides}
+          onClose={() => setPreviewing(false)}
+        />
+      )}
     </div>
   );
 }

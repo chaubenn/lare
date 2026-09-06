@@ -1,7 +1,7 @@
 import { MAX_POST_IMAGES, POST_MEDIA_BUCKET, postMediaPath, rejectPostImage } from "@lare/shared";
 import type { PostMedia } from "@lare/supabase-types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { invokeFunction, supabase } from "@/lib/supabase";
 
 export interface PostImage extends PostMedia {
   /** Signed URL, valid for an hour; null when the object could not be signed. */
@@ -247,12 +247,7 @@ export function useSetImageCaption(postId: string) {
 export function useRegenerateOgSnapshot(postId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.functions.invoke("og-snapshot", {
-        body: { postId, force: true },
-      });
-      if (error) throw error;
-    },
+    mutationFn: () => invokeFunction("og-snapshot", { postId, force: true }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
   });
 }

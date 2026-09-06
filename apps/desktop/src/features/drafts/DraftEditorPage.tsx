@@ -1,7 +1,7 @@
 import { formatDurationHuman } from "@lare/shared";
 import type { Post } from "@lare/supabase-types";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { ArrowLeft, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, Send, Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -13,6 +13,7 @@ import { Input, Label, Select, Textarea, Toggle } from "@/components/ui/Field";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { PostMediaPanel } from "@/features/posts/PostMediaPanel";
+import { PostPreview, usePreviewSlides } from "@/features/posts/PostPreview";
 import { copyText } from "@/lib/clipboard";
 import { postWebUrl } from "@/lib/env";
 import { formatDateTime, plural } from "@/lib/format";
@@ -92,6 +93,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const [visibility, setVisibility] = useState<Post["visibility"]>(draft.visibility);
   const [showVideo, setShowVideo] = useState(draft.show_video);
   const [coverMediaId, setCoverMediaId] = useState<string | null>(draft.cover_media_id);
+  const [previewing, setPreviewing] = useState(false);
 
   const session = draft.sessions;
   const problems = session?.session_problems ?? [];
@@ -99,6 +101,14 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const hasVideo = Boolean(draft.video_id) && draft.video_kind !== "none";
   // Photos are written as soon as they are uploaded; the rest of the post is saved by the form.
   const edit = { id: draft.id, title, body, visibility, showVideo, coverMediaId };
+  const slides = usePreviewSlides({
+    postId: draft.id,
+    videoId: draft.video_id,
+    videoKind: draft.video_kind,
+    showVideo,
+    coverMediaId,
+    session,
+  });
 
   const doPublish = async () => {
     if (busy) return;
@@ -226,9 +236,19 @@ function DraftEditor({ draft }: { draft: Draft }) {
               />
             ) : null}
             <div className="flex items-center justify-between gap-3 pt-1">
-              <Button variant="ghost" size="sm" onClick={() => void doSave()} disabled={busy}>
-                Save draft
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => void doSave()} disabled={busy}>
+                  Save draft
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Eye className="size-3.5" aria-hidden />}
+                  onClick={() => setPreviewing(true)}
+                >
+                  Preview
+                </Button>
+              </div>
               <Button
                 type="submit"
                 variant="primary"
@@ -263,6 +283,18 @@ function DraftEditor({ draft }: { draft: Draft }) {
           />
         </aside>
       </form>
+
+      {previewing && (
+        <PostPreview
+          title={title}
+          body={body}
+          visibility={visibility}
+          when={draft.created_at}
+          published={false}
+          slides={slides}
+          onClose={() => setPreviewing(false)}
+        />
+      )}
     </div>
   );
 }

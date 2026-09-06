@@ -91,11 +91,12 @@ export function PostMediaPanel({
           <img
             src={ogImage.url}
             alt="Generated session card"
-            className="aspect-video w-full object-cover"
+            // Contain, not cover: the card is 1200x630 and authors are checking its edges.
+            className="aspect-video w-full bg-zinc-950 object-contain"
           />
         ) : (
           <div className="flex aspect-video items-center justify-center px-4 text-center text-xs text-zinc-600">
-            The session card (OG image) is generated when the post is published.
+            No session card yet. Refresh to generate one and see how the post will look.
           </div>
         )}
         <div className="flex items-center gap-2 border-t border-zinc-800 px-2 py-1.5">

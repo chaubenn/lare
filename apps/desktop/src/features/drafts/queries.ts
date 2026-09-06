@@ -114,7 +114,8 @@ export function usePublishDraft() {
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
       void queryClient.invalidateQueries({ queryKey: ["sessions"] });
       // Every published post gets its session card (OG image) pre-generated and attached.
-      void requestOgSnapshot(data.id).then(() =>
+      // `force`, because a card previewed while drafting was drawn from the older title/body.
+      void requestOgSnapshot(data.id, true).then(() =>
         queryClient.invalidateQueries({ queryKey: postMediaKey(data.id) }),
       );
     },

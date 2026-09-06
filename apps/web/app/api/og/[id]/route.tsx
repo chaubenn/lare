@@ -61,7 +61,6 @@ async function loadOgData(
                memory_mb, memory_display, memory_percentile, submitted_at)))`,
       )
       .eq("id", id)
-      .eq("status", "published")
       .maybeSingle();
     if (!data) return { data: null, coverPath: null };
 
@@ -87,10 +86,14 @@ async function loadOgData(
 /**
  * Crawlers arrive without cookies, so the anonymous client is tried first: whatever it can read
  * is what a shared link may show, and that answer is safe to cache publicly. Only when it comes
- * back empty (a private post, or a private account seen by a follower) do we fall back to the
- * viewer's own session — cookie-based in the browser, Bearer token for server-to-server callers
- * like the `og-snapshot` Edge Function — and that render is marked private so it is never cached
- * for others.
+ * back empty (a private post, a draft, or a private account seen by a follower) do we fall back
+ * to the viewer's own session — cookie-based in the browser, Bearer token for server-to-server
+ * callers like the `og-snapshot` Edge Function — and that render is marked private so it is
+ * never cached for others.
+ *
+ * Visibility is left entirely to RLS (`can_view_post`: the owner, or a published public post on
+ * a visible profile). That is what lets an author preview the card for a draft they have not
+ * published yet, while a stranger asking for the same id still gets the generic fallback.
  */
 async function loadForViewer(
   id: string,
