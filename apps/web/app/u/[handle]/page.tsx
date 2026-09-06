@@ -76,42 +76,40 @@ export default async function ProfilePage({ params }: Params) {
   const name = profile.display_name || `@${profile.handle}`;
 
   return (
-    <div className="space-y-6">
-      <header className={`${cardClass} p-5`}>
-        <div className="flex flex-wrap items-start gap-4">
-          <Avatar src={profile.avatar_url} name={name} size="lg" />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold text-zinc-50">{name}</h1>
-              {profile.is_private && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
-                  title="Private account"
-                >
-                  <Lock className="size-3" />
-                  Private
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-zinc-500">@{profile.handle}</p>
-            {profile.bio && (
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
-                {profile.bio}
-              </p>
+    <div className="space-y-4">
+      <header className="flex flex-wrap items-start gap-4">
+        <Avatar src={profile.avatar_url} name={name} size="md" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg font-semibold text-zinc-50">{name}</h1>
+            {profile.is_private && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
+                title="Private account"
+              >
+                <Lock className="size-3" />
+                Private
+              </span>
             )}
           </div>
-          <div className="shrink-0">
-            <FollowButton
-              targetId={profile.id}
-              targetHandle={profile.handle}
-              viewerId={viewer?.id ?? null}
-              initialState={followState}
-            />
-          </div>
+          <p className="text-sm text-zinc-500">@{profile.handle}</p>
+          {profile.bio && (
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
+              {profile.bio}
+            </p>
+          )}
         </div>
-
-        <Stats stats={stats} />
+        <div className="shrink-0">
+          <FollowButton
+            targetId={profile.id}
+            targetHandle={profile.handle}
+            viewerId={viewer?.id ?? null}
+            initialState={followState}
+          />
+        </div>
       </header>
+
+      <Stats stats={stats} />
 
       {visible && activity?.visible && <ActivityGrid activity={activity} />}
 
@@ -157,14 +155,13 @@ function Stats({ stats }: { stats: ProfileStats | null }) {
       items.push({ label: "Time", value: formatDurationHuman(stats.total_active_ms) });
   }
   return (
-    <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+    <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800 sm:grid-cols-5">
       {items.map((item) => (
-        <div
-          key={item.label}
-          className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 px-3 py-2"
-        >
-          <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{item.label}</dt>
-          <dd className="text-lg font-semibold tabular-nums text-zinc-100">{item.value}</dd>
+        <div key={item.label} className="bg-zinc-950 px-3 py-2.5">
+          <dt className="text-[10px] uppercase tracking-wider text-zinc-500">{item.label}</dt>
+          <dd className="mt-0.5 text-base font-semibold tabular-nums text-zinc-100">
+            {item.value}
+          </dd>
         </div>
       ))}
     </dl>

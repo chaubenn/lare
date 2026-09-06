@@ -1,9 +1,10 @@
-import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
+import { formatDurationHuman } from "@lare/shared";
 import { SquarePen } from "lucide-react";
 import { Link } from "react-router";
-import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
-import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
-import { plural } from "@/lib/format";
+import { KindBadge } from "@/components/ui/Badge";
+import { LogColumns, PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
+import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
+import { formatListWhen, plural } from "@/lib/format";
 import { type Draft, useDrafts } from "./queries";
 
 export function DraftsPage() {
@@ -12,15 +13,16 @@ export function DraftsPage() {
     <>
       <PageHeader
         title="Drafts"
-        subtitle="Every session you end in the extension lands here. Review, write a note, publish."
+        subtitle="Sessions that landed from the extension. Review, write a note, publish."
+        count={drafts.data ? plural(drafts.data.length, "draft") : undefined}
       />
       {drafts.isPending ? (
-        <PageSpinner />
+        <ListSkeleton />
       ) : drafts.isError ? (
         <ErrorState error={drafts.error} onRetry={() => void drafts.refetch()} />
       ) : drafts.data.length === 0 ? (
         <EmptyState
-          icon={<SquarePen className="size-8" aria-hidden />}
+          icon={<SquarePen className="size-7" aria-hidden />}
           title="No drafts yet"
           description={
             <ol className="mt-2 list-decimal space-y-1 pl-5 text-left">
@@ -32,13 +34,16 @@ export function DraftsPage() {
           }
         />
       ) : (
-        <StackedList>
-          {drafts.data.map((d) => (
-            <StackedListItem key={d.id}>
-              <DraftRow draft={d} />
-            </StackedListItem>
-          ))}
-        </StackedList>
+        <>
+          <LogColumns columns={["Session", "Kind", "When", "Time", "Problems", ""]} />
+          <StackedList>
+            {drafts.data.map((d) => (
+              <StackedListItem key={d.id}>
+                <DraftRow draft={d} />
+              </StackedListItem>
+            ))}
+          </StackedList>
+        </>
       )}
     </>
   );
@@ -49,41 +54,43 @@ function DraftRow({ draft }: { draft: Draft }) {
   const problems = session?.session_problems ?? [];
   const title = draft.title?.trim() || problems[0]?.title || "Untitled session";
   const extra = problems.length > 1 ? ` +${problems.length - 1}` : "";
-  const kindLabel = session ? (session.kind === "interview" ? "Interview" : "Practice") : null;
+  const when = formatListWhen(draft.created_at);
 
   return (
-    <div className="flex items-baseline gap-4 px-4 py-3.5">
-      <Link
-        to={`/drafts/${draft.id}`}
-        className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
-      >
-        <p className="truncate text-sm text-zinc-100">
-          {title}
-          {extra ? <span className="text-zinc-500">{extra}</span> : null}
-        </p>
-        <p className="mt-0.5 truncate text-xs text-zinc-500">
-          {kindLabel ? (
-            <>
-              {kindLabel}
-              <span aria-hidden> · </span>
-            </>
-          ) : null}
-          {formatLocalTimestamp(draft.created_at)}
-          {session ? (
-            <>
-              <span aria-hidden> · </span>
-              {formatDurationHuman(session.active_ms)}
-            </>
-          ) : null}
-          <span aria-hidden> · </span>
-          {plural(problems.length, "problem")}
-        </p>
-      </Link>
-      <div className="flex shrink-0 items-center gap-3 text-xs">
-        <Link to={`/drafts/${draft.id}`} className="text-zinc-400 hover:text-zinc-100">
-          Edit
-        </Link>
+    <Link
+      to={`/drafts/${draft.id}`}
+      className="grid items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:grid-cols-[minmax(0,1.4fr)_7rem_minmax(8rem,1fr)_4.5rem_5.5rem_auto]"
+    >
+      <p className="min-w-0 truncate text-sm text-zinc-100">
+        {title}
+        {extra ? <span className="text-zinc-500">{extra}</span> : null}
+      </p>
+      <div className="hidden sm:block">
+        {session ? (
+          <KindBadge kind={session.kind} />
+        ) : (
+          <span className="text-xs text-zinc-600">—</span>
+        )}
       </div>
-    </div>
+      <p className="hidden truncate text-xs text-zinc-500 sm:block" title={when.title}>
+        {when.label}
+      </p>
+      <p className="hidden tabular-nums text-xs text-zinc-400 sm:block">
+        {session ? formatDurationHuman(session.active_ms) : "—"}
+      </p>
+      <p className="hidden text-xs text-zinc-400 sm:block">{plural(problems.length, "problem")}</p>
+      <span className="hidden text-xs text-zinc-500 sm:block">Edit</span>
+      <p className="truncate text-xs text-zinc-500 sm:hidden" title={when.title}>
+        {session ? (session.kind === "interview" ? "Interview" : "Practice") : "Draft"}
+        <span aria-hidden> · </span>
+        {when.label}
+        {session ? (
+          <>
+            <span aria-hidden> · </span>
+            {formatDurationHuman(session.active_ms)}
+          </>
+        ) : null}
+      </p>
+    </Link>
   );
 }

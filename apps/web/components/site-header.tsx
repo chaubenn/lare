@@ -9,7 +9,7 @@ export async function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-4 px-4">
+      <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-4 px-4 sm:px-5">
         <div className="flex items-center gap-5">
           <Link href="/" className="text-lg text-zinc-50">
             <Wordmark markClassName="size-5" />

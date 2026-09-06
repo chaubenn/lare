@@ -3,7 +3,7 @@
  * locally (uploaded / transcribed / last error) and the actions to finish, inspect or remove it.
  */
 
-import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
+import { formatDurationHuman } from "@lare/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -26,14 +26,15 @@ import {
 import { Link } from "react-router";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Button, type ButtonProps } from "@/components/ui/Button";
-import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
-import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
+import { LogColumns, PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
+import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { useUser } from "@/features/auth/AuthProvider";
 import { type RecordingWithMeta, recordingsKey, useRecordings } from "@/features/recording/hooks";
 import { isActive, type Job, STAGE_LABEL, useJobs } from "@/features/recording/jobs";
 import { processInterview, publishInstantDemo } from "@/features/recording/pipeline";
 import { forgetRecording } from "@/features/recording/recordingStore";
+import { formatListWhen } from "@/lib/format";
 import { baseName, recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
@@ -78,7 +79,7 @@ export function RecordingsPage() {
         }
       />
       {recordings.isPending ? (
-        <PageSpinner />
+        <ListSkeleton />
       ) : recordings.isError ? (
         <ErrorState error={recordings.error} onRetry={() => void recordings.refetch()} />
       ) : recordings.data.length === 0 ? (
@@ -97,18 +98,21 @@ export function RecordingsPage() {
           }
         />
       ) : (
-        <StackedList>
-          {[...recordings.data]
-            .sort((a, b) => b.endedAt - a.endedAt)
-            .map((rec) => (
-              <StackedListItem key={rec.recordingId}>
-                <RecordingRow
-                  recording={rec}
-                  job={jobs.find((j) => j.recordingId === rec.recordingId && isActive(j))}
-                />
-              </StackedListItem>
-            ))}
-        </StackedList>
+        <>
+          <LogColumns columns={["Recording", "Mode", "When", "Time", "Status", ""]} />
+          <StackedList>
+            {[...recordings.data]
+              .sort((a, b) => b.endedAt - a.endedAt)
+              .map((rec) => (
+                <StackedListItem key={rec.recordingId}>
+                  <RecordingRow
+                    recording={rec}
+                    job={jobs.find((j) => j.recordingId === rec.recordingId && isActive(j))}
+                  />
+                </StackedListItem>
+              ))}
+          </StackedList>
+        </>
       )}
     </>
   );
@@ -228,40 +232,52 @@ function RecordingRow({
       : rec.transcribed
         ? "Uploaded · transcribed"
         : "Uploaded";
+  const when = formatListWhen(rec.endedAt);
+  const duration = formatDurationHuman(Math.max(0, rec.endedAt - rec.startedAt));
 
   return (
-    <article className="px-4 py-3.5" title={baseName(path)}>
-      <div className="flex items-start gap-4">
-        <div className="min-w-0 flex-1">
+    <article className="px-3 py-2.5" title={baseName(path)}>
+      <div className="grid items-start gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1.4fr)_7rem_minmax(8rem,1fr)_4.5rem_minmax(7rem,1fr)_auto]">
+        <div className="min-w-0">
           <p className="truncate text-sm text-zinc-100">
             {isInterview ? "Mock interview" : "Demo"}
           </p>
-          <p className="mt-0.5 truncate text-xs text-zinc-500">
-            {rec.mode}
-            <span aria-hidden> · </span>
-            {formatLocalTimestamp(rec.endedAt)}
-            <span aria-hidden> · </span>
-            {formatDurationHuman(Math.max(0, rec.endedAt - rec.startedAt))}
+          <div className="mt-0.5 flex items-center gap-1.5 text-zinc-500">
             {rec.facecam ? (
-              <Tooltip label="Facecam" className="ml-2 align-[-2px]">
+              <Tooltip label="Facecam">
                 <Camera className="size-3" aria-label="Facecam" />
               </Tooltip>
             ) : null}
             {rec.micTrack ? (
-              <Tooltip label="Microphone" className="ml-1.5 align-[-2px]">
+              <Tooltip label="Microphone">
                 <Mic className="size-3" aria-label="Microphone" />
               </Tooltip>
             ) : rec.mode === "studio" ? (
-              <Tooltip label="No microphone" className="ml-1.5 align-[-2px]">
+              <Tooltip label="No microphone">
                 <MicOff className="size-3" aria-label="No microphone" />
               </Tooltip>
             ) : null}
-            <span aria-hidden> · </span>
-            <span className={rec.error ? "text-rose-400" : undefined}>{status}</span>
-          </p>
+          </div>
         </div>
+        <p className="hidden truncate text-xs capitalize text-zinc-400 sm:block">{rec.mode}</p>
+        <p className="hidden truncate text-xs text-zinc-500 sm:block" title={when.title}>
+          {when.label}
+        </p>
+        <p className="hidden tabular-nums text-xs text-zinc-400 sm:block">{duration}</p>
+        <p
+          className={`hidden truncate text-xs sm:block ${rec.error ? "text-rose-400" : "text-zinc-400"}`}
+        >
+          {status}
+        </p>
+        <p className="truncate text-xs text-zinc-500 sm:hidden" title={when.title}>
+          {rec.mode}
+          <span aria-hidden> · </span>
+          {when.label}
+          <span aria-hidden> · </span>
+          <span className={rec.error ? "text-rose-400" : undefined}>{status}</span>
+        </p>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:col-start-6">
           {hasEditor ? (
             <LinkButton
               to={editorHref}

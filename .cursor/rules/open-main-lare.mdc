@@ -1,0 +1,10 @@
+---
+description: How to open the local main-checkout Lare desktop app
+alwaysApply: true
+---
+
+# Open local Lare
+
+When the user says **open main branch state of lare on desktop**, **open main**, **open the new lare**, or **run local lare**, run `pnpm open:main` from the workspace root and wait until the script finishes.
+
+Do not open `/Applications/Lare.app`. That is the last released package. `main` is the developer branch; do not bump versions or trigger a release build just to preview it.

@@ -30,7 +30,7 @@ export function UserRow({
   const showRequestHint = person.is_private && state !== undefined && state !== "accepted";
 
   return (
-    <div className="flex items-center gap-3 p-4">
+    <div className="flex items-center gap-3 px-3 py-2.5">
       <ProfileLink handle={person.handle}>
         <Avatar url={person.avatar_url} name={name} size={36} />
       </ProfileLink>

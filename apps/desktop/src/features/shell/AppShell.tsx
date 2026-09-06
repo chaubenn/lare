@@ -42,7 +42,7 @@ export function AppShell() {
       <div className="flex min-h-0 flex-1">
         <Sidebar />
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-4xl px-8 py-8">
+          <div className="mx-auto w-full max-w-[1360px] px-5 py-5">
             <Outlet />
           </div>
         </main>

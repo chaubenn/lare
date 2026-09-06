@@ -14,7 +14,22 @@ export function Spinner({ className, label }: { className?: string; label?: stri
 }
 
 export function PageSpinner({ label = "Loading…" }: { label?: string }) {
-  return <Spinner className="py-20" label={label} />;
+  return <Spinner className="py-16" label={label} />;
+}
+
+export function ListSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <ul className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800" aria-hidden>
+      {Array.from({ length: rows }, (_, i) => (
+        <li key={i} className="flex items-center gap-3 px-3 py-2.5">
+          <span className="lare-skel h-4 w-2/5" />
+          <span className="lare-skel hidden h-3 w-16 sm:block" />
+          <span className="lare-skel hidden h-3 w-24 sm:block" />
+          <span className="lare-skel ml-auto h-3 w-12" />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function EmptyState({
@@ -33,7 +48,7 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 px-6 py-14 text-center",
+        "flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 px-5 py-10 text-center",
         className,
       )}
     >

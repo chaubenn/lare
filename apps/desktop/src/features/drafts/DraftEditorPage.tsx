@@ -36,7 +36,7 @@ export function DraftEditorPage() {
         title="Draft not found"
         description="It may have been published or deleted."
         action={
-          <Link to="/drafts" className="text-sm text-emerald-400 hover:underline">
+          <Link to="/drafts" className="text-sm text-zinc-200 underline underline-offset-2">
             Back to drafts
           </Link>
         }
@@ -48,7 +48,7 @@ export function DraftEditorPage() {
       <EmptyState
         title="Already published"
         action={
-          <Link to={`/posts/${draft.data.id}`} className="text-sm text-emerald-400 hover:underline">
+          <Link to={`/posts/${draft.data.id}`} className="text-sm text-zinc-200 underline underline-offset-2">
             View the post
           </Link>
         }

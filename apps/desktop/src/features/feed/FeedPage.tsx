@@ -1,8 +1,8 @@
-import { cn } from "@lare/ui";
 import { Rss } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/Card";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useViewerLikes } from "@/features/posts/social";
@@ -38,71 +38,66 @@ export function FeedPage() {
         }
       />
 
-      <div className="mb-5 inline-flex items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900/40 p-1">
-        {SCOPES.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            aria-current={item.key === scope ? "page" : undefined}
-            onClick={() => setParams(item.key === "all" ? {} : { scope: item.key })}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-sm transition-colors",
-              item.key === scope
-                ? "bg-zinc-800 font-medium text-zinc-50"
-                : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="mb-4">
+        <SegmentedTabs
+          label="Feed filter"
+          value={scope}
+          onChange={(key) => setParams(key === "all" ? {} : { scope: key })}
+          items={SCOPES}
+        />
       </div>
 
-      {feed.isPending ? (
-        <PageSpinner />
-      ) : feed.isError ? (
-        <ErrorState error={feed.error} onRetry={() => void feed.refetch()} />
-      ) : posts.length === 0 ? (
-        <EmptyState
-          icon={<Rss className="size-8" aria-hidden />}
-          title={scope === "following" ? "Nothing from your follows yet" : "Nothing here yet"}
-          description={
-            scope === "following" ? (
-              <>
-                Posts from the people you follow show up here.{" "}
-                <Link to="/friends?tab=find" className="text-zinc-200 underline underline-offset-2">
-                  Find people to follow
-                </Link>
-              </>
-            ) : (
-              <>
-                Nobody has published a public session yet. Publish a draft to see it here.{" "}
-                <Link to="/drafts" className="text-zinc-200 underline underline-offset-2">
-                  Go to drafts
-                </Link>
-              </>
-            )
-          }
-        />
-      ) : (
-        <>
-          <div className="space-y-4">
-            {posts.map((post) => (
-              <PostCard key={post.id} post={post} liked={likedIds.has(post.id)} />
-            ))}
-          </div>
-          {feed.hasNextPage ? (
-            <div className="flex justify-center pt-4">
-              <Button
-                onClick={() => void feed.fetchNextPage()}
-                loading={feed.isFetchingNextPage}
-                disabled={feed.isFetchingNextPage}
-              >
-                Load more
-              </Button>
+      <div className="mx-auto w-full max-w-xl">
+        {feed.isPending ? (
+          <PageSpinner />
+        ) : feed.isError ? (
+          <ErrorState error={feed.error} onRetry={() => void feed.refetch()} />
+        ) : posts.length === 0 ? (
+          <EmptyState
+            icon={<Rss className="size-8" aria-hidden />}
+            title={scope === "following" ? "Nothing from your follows yet" : "Nothing here yet"}
+            description={
+              scope === "following" ? (
+                <>
+                  Posts from the people you follow show up here.{" "}
+                  <Link
+                    to="/friends?tab=find"
+                    className="text-zinc-200 underline underline-offset-2"
+                  >
+                    Find people to follow
+                  </Link>
+                </>
+              ) : (
+                <>
+                  Nobody has published a public session yet. Publish a draft to see it here.{" "}
+                  <Link to="/drafts" className="text-zinc-200 underline underline-offset-2">
+                    Go to drafts
+                  </Link>
+                </>
+              )
+            }
+          />
+        ) : (
+          <>
+            <div className="space-y-4">
+              {posts.map((post) => (
+                <PostCard key={post.id} post={post} liked={likedIds.has(post.id)} />
+              ))}
             </div>
-          ) : null}
-        </>
-      )}
+            {feed.hasNextPage ? (
+              <div className="flex justify-center pt-4">
+                <Button
+                  onClick={() => void feed.fetchNextPage()}
+                  loading={feed.isFetchingNextPage}
+                  disabled={feed.isFetchingNextPage}
+                >
+                  Load more
+                </Button>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
     </>
   );
 }

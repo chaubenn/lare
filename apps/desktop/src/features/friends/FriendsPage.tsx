@@ -1,5 +1,4 @@
 import { formatLocalTimestamp } from "@lare/shared";
-import { cn } from "@lare/ui";
 import { Check, Search, UserPlus, Users, X } from "lucide-react";
 import { useDeferredValue, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -7,7 +6,8 @@ import { useToast } from "@/components/toast/ToastProvider";
 import { CountBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/Card";
-import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { EmptyState, ErrorState, ListSkeleton, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import {
   type FollowRequest,
@@ -53,24 +53,18 @@ export function FriendsPage() {
         }
       />
 
-      <div className="mb-5 inline-flex items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900/40 p-1">
-        {TABS.map((key) => (
-          <button
-            key={key}
-            type="button"
-            aria-current={key === tab ? "page" : undefined}
-            onClick={() => setParams({ tab: key })}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors",
-              key === tab
-                ? "bg-zinc-800 font-medium text-zinc-50"
-                : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",
-            )}
-          >
-            {TAB_LABELS[key]}
-            {key === "requests" ? <CountBadge count={requests.data?.length ?? 0} /> : null}
-          </button>
-        ))}
+      <div className="mb-4">
+        <SegmentedTabs
+          label="Friends sections"
+          value={tab}
+          onChange={(key) => setParams({ tab: key })}
+          items={TABS.map((key) => ({
+            key,
+            label: TAB_LABELS[key],
+            badge:
+              key === "requests" ? <CountBadge count={requests.data?.length ?? 0} /> : undefined,
+          }))}
+        />
       </div>
 
       {tab === "following" ? <FollowingTab /> : null}
@@ -89,7 +83,7 @@ function List({ children }: { children: React.ReactNode }) {
 
 function FollowingTab() {
   const following = useFollowing();
-  if (following.isPending) return <PageSpinner />;
+  if (following.isPending) return <ListSkeleton />;
   if (following.isError) {
     return <ErrorState error={following.error} onRetry={() => void following.refetch()} />;
   }
@@ -146,7 +140,7 @@ function FollowersTab() {
   const people = followers.data?.map((row) => row.profiles) ?? [];
   const states = useFollowStates(people.map((p) => p.id));
 
-  if (followers.isPending) return <PageSpinner />;
+  if (followers.isPending) return <ListSkeleton />;
   if (followers.isError) {
     return <ErrorState error={followers.error} onRetry={() => void followers.refetch()} />;
   }
@@ -177,7 +171,7 @@ function FollowersTab() {
 
 function RequestsTab() {
   const requests = useFollowRequests();
-  if (requests.isPending) return <PageSpinner />;
+  if (requests.isPending) return <ListSkeleton />;
   if (requests.isError) {
     return <ErrorState error={requests.error} onRetry={() => void requests.refetch()} />;
   }
@@ -271,7 +265,7 @@ function FindTab() {
           placeholder="Search by @handle or name"
           aria-label="Search people by handle or name"
           autoComplete="off"
-          className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 pl-9 pr-3 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-zinc-600"
+          className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 pl-9 pr-3 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition-[border-color,box-shadow] duration-(--duration-fast) ease-(--ease-smooth-out) focus:border-zinc-600 focus:ring-2 focus:ring-zinc-500/50"
         />
       </div>
 

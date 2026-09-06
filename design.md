@@ -41,3 +41,7 @@ transitions.dev tokens in `packages/ui/src/motion.css`. Use the named recipes (t
 ## Genre
 
 modern-minimal. Custom theme (ink / bone) because the brand mark is a specific black–white emblem, not a catalog swatch.
+
+## App pages
+
+Workbench logs, not marketing. Drafts, sessions and recordings are dense tables. Profiles show solved-problem activity as a weekly bar chart (hover a week for count, active days, best day). Page chrome stays tight — no 896px column in a wide window.

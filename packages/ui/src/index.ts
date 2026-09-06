@@ -1,3 +1,4 @@
+export { ActivityChart } from "./ActivityChart";
 export { CodeBlock } from "./CodeBlock";
 export { cn } from "./cn";
 export { DifficultyBadge } from "./DifficultyBadge";

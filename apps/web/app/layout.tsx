@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className={`dark ${outfit.variable} ${ibmPlexMono.variable}`}>
       <body className="flex min-h-screen flex-col font-sans">
         <SiteHeader />
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-5">{children}</main>
         <SiteFooter />
       </body>
     </html>

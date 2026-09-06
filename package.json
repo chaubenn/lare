@@ -13,6 +13,7 @@
     "dev:extension": "pnpm --filter @lare/extension dev",
     "dev:desktop": "pnpm --filter @lare/desktop tauri dev",
     "dev:bundle": "sh scripts/dev-bundle.sh",
+    "open:main": "sh scripts/open-main.sh",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",

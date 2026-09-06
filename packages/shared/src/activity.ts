@@ -1,8 +1,7 @@
 /**
- * Solved-problem activity grid (the GitHub-contributions-style square on profiles).
- *
- * The `solved_activity` RPC buckets accepted submissions into UTC days; everything here is
- * pure layout maths over that payload so the web and desktop apps render the same grid.
+ * Solved-problem activity. The `solved_activity` RPC buckets accepted submissions into UTC
+ * days; this module turns that payload into week bars (and still exposes the older daily
+ * grid helpers for anything that needs them).
  */
 import { z } from "zod";
 
@@ -114,4 +113,72 @@ export function describeActivityCell(cell: ActivityCell): string {
   });
   if (cell.count === 0) return `No problems solved on ${label}`;
   return `${cell.count} problem${cell.count === 1 ? "" : "s"} solved on ${label}`;
+}
+
+export interface ActivityWeek {
+  /** Sunday of the padded week (UTC). */
+  start: string;
+  end: string;
+  /** First / last day that actually sits inside the activity window. */
+  firstDay: string;
+  lastDay: string;
+  count: number;
+  daysActive: number;
+  maxDay: number;
+  monthLabel: string | null;
+  current: boolean;
+}
+
+/** One bar per week: Sunday–Saturday totals over the same window as the old grid. */
+export function buildActivityWeekBars(activity: SolvedActivity): ActivityWeek[] {
+  const weeks = buildActivityWeeks(activity);
+  return weeks.map((week, i) => {
+    const cells = week.filter((c) => !c.outside);
+    const count = cells.reduce((n, c) => n + c.count, 0);
+    const daysActive = cells.filter((c) => c.count > 0).length;
+    const maxDay = cells.reduce((n, c) => Math.max(n, c.count), 0);
+    const first = cells[0] ?? week[0];
+    const last = cells[cells.length - 1] ?? week[week.length - 1];
+    const start = week[0];
+    const end = week[week.length - 1];
+    const month = start?.date.getUTCMonth() ?? 0;
+    const prevMonth = i > 0 ? (weeks[i - 1]?.[0]?.date.getUTCMonth() ?? month) : -1;
+    return {
+      start: start?.iso ?? activity.start,
+      end: end?.iso ?? activity.end,
+      firstDay: first?.iso ?? activity.start,
+      lastDay: last?.iso ?? activity.end,
+      count,
+      daysActive,
+      maxDay,
+      monthLabel: month !== prevMonth ? (ACTIVITY_MONTHS[month] ?? null) : null,
+      current: cells.some((c) => c.iso === activity.end),
+    };
+  });
+}
+
+export function formatWeekRange(startIso: string, endIso: string): string {
+  const start = utcDate(startIso);
+  const end = utcDate(endIso);
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  const a = start.toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+  });
+  const b = end.toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `${a} – ${b}`;
+}
+
+export function describeActivityWeek(week: ActivityWeek): string {
+  const range = formatWeekRange(week.firstDay, week.lastDay);
+  if (week.count === 0) return `No problems solved ${range}`;
+  const days = week.daysActive === 1 ? "1 day active" : `${week.daysActive} days active`;
+  return `${week.count} problem${week.count === 1 ? "" : "s"} · ${days} · ${range}`;
 }

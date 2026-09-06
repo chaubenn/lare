@@ -5,7 +5,7 @@ import { GitHubIcon } from "./brand-icons";
 export function SiteFooter() {
   return (
     <footer className="border-t border-zinc-900">
-      <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-zinc-500">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 text-xs text-zinc-500 sm:px-5">
         <p className="inline-flex items-center gap-2">
           <Wordmark markClassName="size-3.5 text-zinc-400" className="text-zinc-400" />
           <span>· Hevy for LeetCode</span>

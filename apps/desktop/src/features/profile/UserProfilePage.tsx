@@ -5,7 +5,7 @@ import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, PageHeader } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { PostCard } from "@/features/feed/PostCard";
@@ -13,6 +13,7 @@ import { FollowButton } from "@/features/friends/FollowButton";
 import { useViewerLikes } from "@/features/posts/social";
 import { profileWebUrl } from "@/lib/env";
 import { openExternal } from "@/lib/open";
+import { StatStrip } from "./ProfilePage";
 import {
   useFollowState,
   useProfileStats,
@@ -83,11 +84,11 @@ export function UserProfilePage() {
         }
       />
 
-      <Card className="flex items-start gap-4">
-        <Avatar url={profile.avatar_url} name={name} size={64} />
+      <section className="flex items-start gap-4">
+        <Avatar url={profile.avatar_url} name={name} size={56} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold text-zinc-50">{name}</h2>
+            <h2 className="text-base font-semibold text-zinc-50">{name}</h2>
             {profile.is_private ? (
               <Badge>
                 <Lock className="size-3" aria-hidden />
@@ -96,28 +97,33 @@ export function UserProfilePage() {
             ) : null}
           </div>
           {profile.bio ? (
-            <p className="mt-2 select-text whitespace-pre-wrap text-sm text-zinc-300">
+            <p className="mt-1 select-text whitespace-pre-wrap text-sm text-zinc-300">
               {profile.bio}
             </p>
           ) : null}
-          {stats.data ? (
-            <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <Stat label="Followers" value={stats.data.followers} />
-              <Stat label="Following" value={stats.data.following} />
-              {visible ? (
-                <>
-                  <Stat label="Posts" value={stats.data.posts ?? 0} />
-                  <Stat label="Problems solved" value={stats.data.problems_solved ?? 0} />
-                  <Stat
-                    label="Time practising"
-                    value={formatDurationHuman(stats.data.total_active_ms ?? 0)}
-                  />
-                </>
-              ) : null}
-            </dl>
-          ) : null}
         </div>
-      </Card>
+      </section>
+
+      {stats.data ? (
+        <div className="mt-4">
+          <StatStrip
+            items={[
+              { label: "Followers", value: stats.data.followers },
+              { label: "Following", value: stats.data.following },
+              ...(visible
+                ? [
+                    { label: "Posts", value: stats.data.posts ?? 0 },
+                    { label: "Solved", value: stats.data.problems_solved ?? 0 },
+                    {
+                      label: "Time",
+                      value: formatDurationHuman(stats.data.total_active_ms ?? 0),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </div>
+      ) : null}
 
       {!visible ? (
         <div className="mt-4">
@@ -154,14 +160,5 @@ export function UserProfilePage() {
         </div>
       )}
     </>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-      <dt className="text-xs text-zinc-500">{label}</dt>
-      <dd className="mt-1 text-lg font-semibold text-zinc-100">{value}</dd>
-    </div>
   );
 }

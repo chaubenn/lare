@@ -86,14 +86,20 @@ practise. Chrome Web Store listing is coming; until then the unpacked install is
 Prerequisites (macOS): Node 22, pnpm 11, Rust 1.88 (pinned by `rust-toolchain.toml`), and
 `brew install cmake pkg-config deno`. Windows: Visual Studio Build Tools with the LLVM component.
 
+`main` is the developer branch. Commit there without bumping versions. The GitHub Release installers are the stable packages. After a commit, preview this checkout with:
+
+```bash
+pnpm open:main
+```
+
+That quits `/Applications/Lare.app` (it would steal the window), starts the Chrome extension watcher, and opens a Tauri hot-reload window from this tree. Load `apps/extension/.output/chrome-mv3-dev` in `chrome://extensions` once if it is not already unpacked.
+
 ```bash
 pnpm install
 node scripts/setup-native-deps.mjs   # prebuilt ffmpeg for the vendored Cap crates (+ .cargo/config.toml)
 cp .env.example apps/desktop/.env    # then keep only the VITE_* lines (see the file)
 pnpm --filter @lare/shared test
-pnpm dev:extension     # then load apps/extension/.output/chrome-mv3-dev in chrome://extensions
 pnpm dev:web
-pnpm dev:desktop       # Tauri dev build; first compile takes several minutes
 ```
 
 Useful checks: `pnpm lint`, `pnpm -r typecheck`, `cargo clippy -p lare-desktop -p lare-recording

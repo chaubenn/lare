@@ -25,8 +25,8 @@ export default async function HomePage({
 
   return (
     <div>
-      <div className="mb-5 flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold text-zinc-50">Feed</h1>
+      <div className="mb-4 flex items-baseline justify-between">
+        <h1 className="text-lg font-semibold text-zinc-50">Feed</h1>
         <Link
           href={`/u/${viewer.profile.handle}`}
           className="text-sm text-zinc-400 hover:text-zinc-100"
@@ -35,7 +35,7 @@ export default async function HomePage({
         </Link>
       </div>
 
-      <div className="mb-5">
+      <div className="mb-4">
         <TabNav
           label="Feed filter"
           active={scope}
@@ -47,7 +47,7 @@ export default async function HomePage({
       </div>
 
       {items.length === 0 ? (
-        <div className={`${cardClass} px-6 py-12 text-center`}>
+        <div className={`${cardClass} mx-auto max-w-xl px-6 py-12 text-center`}>
           <Inbox className="mx-auto size-8 text-zinc-600" />
           <h2 className="mt-3 text-base font-semibold text-zinc-100">
             {scope === "following" ? "Nothing from your follows yet" : "Your feed is empty"}

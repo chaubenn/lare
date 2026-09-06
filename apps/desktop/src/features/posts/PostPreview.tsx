@@ -45,7 +45,7 @@ export function PostPreview({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6">
+    <div className="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-8">
       <button
         type="button"
         aria-label="Close preview"

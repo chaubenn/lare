@@ -53,16 +53,16 @@ export default async function FriendsPage({ searchParams }: Params) {
 
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold text-zinc-50">Friends</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+      <div className="mb-4">
+        <h1 className="text-lg font-semibold text-zinc-50">Friends</h1>
+        <p className="mt-0.5 text-sm text-zinc-500">
           {viewer.profile.is_private
             ? "Your account is private, so people have to request to follow you before they can see your posts."
             : "Your account is public, so new followers are accepted automatically."}
         </p>
       </div>
 
-      <div className="mb-5">
+      <div className="mb-4">
         <TabNav
           label="Friends sections"
           active={tab}

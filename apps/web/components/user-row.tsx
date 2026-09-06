@@ -38,7 +38,7 @@ export function UserRow({
   const href = person.handle ? `/u/${person.handle}` : null;
 
   return (
-    <li className="flex flex-wrap items-center gap-3 p-4">
+    <li className="flex flex-wrap items-center gap-3 px-3 py-2.5">
       {href ? (
         <Link href={href}>
           <Avatar src={person.avatar_url} name={name} />

@@ -41,7 +41,7 @@ export function Feed({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-xl space-y-4">
       {items.map((post) => (
         <PostCard key={post.id} post={post} viewerId={viewerId} />
       ))}

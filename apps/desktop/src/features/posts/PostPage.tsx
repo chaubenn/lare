@@ -34,7 +34,7 @@ export function PostPage() {
         title="Post not found"
         description="It may have been deleted, or you don't have access to it."
         action={
-          <Link to="/" className="text-sm text-emerald-400 hover:underline">
+          <Link to="/" className="text-sm text-zinc-200 underline underline-offset-2">
             Back to feed
           </Link>
         }
