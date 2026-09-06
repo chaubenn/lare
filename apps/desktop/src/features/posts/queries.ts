@@ -3,6 +3,7 @@ import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { parseAiReview } from "@/lib/json";
 import { supabase } from "@/lib/supabase";
+import { postMediaKey, requestOgSnapshot } from "./media";
 
 const POST_DETAIL_SELECT =
   "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(*, session_problems(*, submissions(*))), videos(*)" as const;
@@ -72,6 +73,10 @@ export function useUpdatePost() {
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: postKey(vars.id) });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
+      // The card shows the title, so an edit regenerates the stored OG image.
+      void requestOgSnapshot(vars.id, true).then(() =>
+        queryClient.invalidateQueries({ queryKey: postMediaKey(vars.id) }),
+      );
     },
   });
 }

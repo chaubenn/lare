@@ -1,15 +1,16 @@
 import type { QueryData } from "@supabase/supabase-js";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { attachCoverUrls } from "@/features/posts/media";
 import { supabase } from "@/lib/supabase";
 
 export const FEED_PAGE_SIZE = 20;
 
 /**
- * `feed()` returns `setof posts`, so PostgREST lets us embed the author, the session summary and
- * the video exactly like a table select.
+ * `feed()` returns `setof posts`, so PostgREST lets us embed the author, the session summary,
+ * the video and the carousel media exactly like a table select.
  */
 const FEED_SELECT =
-  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(id, kind, active_ms, started_at, session_problems(id, slug, title, difficulty, submissions(accepted, runtime_ms, runtime_display, runtime_percentile, submitted_at))), videos(id, status)" as const;
+  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(id, kind, active_ms, started_at, session_problems(id, slug, title, difficulty, submissions(accepted, runtime_ms, runtime_display, runtime_percentile, submitted_at))), videos(id, status), post_media!post_media_post_id_fkey(id, storage_path, kind, position)" as const;
 
 /** "all" is every post the viewer may see; "following" narrows it to accepted followees. */
 export type FeedScope = "all" | "following";
@@ -20,7 +21,9 @@ function feedQuery(scope: FeedScope, before?: string) {
     .select(FEED_SELECT);
 }
 
-export type FeedPost = QueryData<ReturnType<typeof feedQuery>>[number];
+export type FeedPost = QueryData<ReturnType<typeof feedQuery>>[number] & {
+  cover_url: string | null;
+};
 
 export function useFeed(scope: FeedScope = "all") {
   return useInfiniteQuery({
@@ -29,7 +32,7 @@ export function useFeed(scope: FeedScope = "all") {
     queryFn: async ({ pageParam }) => {
       const { data, error } = await feedQuery(scope, pageParam);
       if (error) throw error;
-      return data;
+      return attachCoverUrls(data ?? []);
     },
     getNextPageParam: (lastPage) => {
       if (lastPage.length < FEED_PAGE_SIZE) return undefined;

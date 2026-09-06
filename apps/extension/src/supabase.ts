@@ -4,7 +4,7 @@ import { chromeStorageAdapter } from "./storage";
 
 export const SUPABASE_URL: string = import.meta.env.WXT_SUPABASE_URL;
 export const SUPABASE_KEY: string = import.meta.env.WXT_SUPABASE_PUBLISHABLE_KEY;
-export const SITE_URL: string = import.meta.env.WXT_SITE_URL ?? "https://lare.vercel.app";
+export const SITE_URL: string = import.meta.env.WXT_SITE_URL ?? "https://lare-one.vercel.app";
 
 let client: SupabaseClient<Database> | null = null;
 

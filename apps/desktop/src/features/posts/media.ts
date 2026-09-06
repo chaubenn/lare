@@ -10,6 +10,55 @@ export interface PostImage extends PostMedia {
 
 export const postMediaKey = (postId: string) => ["post-media", postId] as const;
 
+/**
+ * Ask the `og-snapshot` Edge Function to render and store the post's session card (the OG image).
+ * Fire-and-forget: the function is idempotent and the feed falls back to rendering on demand.
+ */
+export function requestOgSnapshot(postId: string, force = false): Promise<unknown> {
+  return supabase.functions
+    .invoke("og-snapshot", { body: force ? { postId, force: true } : { postId } })
+    .catch(() => null);
+}
+
+/** Minimal row shape the feed needs to resolve a post's cover image. */
+export interface Coverable {
+  cover_media_id: string | null;
+  post_media: { id: string; storage_path: string; kind: "og" | "photo" }[] | null;
+}
+
+/**
+ * Sign each post's cover in one round-trip: the author's chosen cover, else the pre-generated
+ * session card (post_media kind 'og'). Rows come back with `cover_url` ready for an <img>.
+ */
+export async function attachCoverUrls<T extends Coverable>(
+  rows: T[],
+): Promise<(T & { cover_url: string | null })[]> {
+  const coverOf = (row: T) => {
+    const mediaRows = row.post_media ?? [];
+    return (
+      mediaRows.find((m) => m.id === row.cover_media_id) ??
+      mediaRows.find((m) => m.kind === "og") ??
+      null
+    );
+  };
+  const paths = [
+    ...new Set(
+      rows.map((row) => coverOf(row)?.storage_path).filter((path): path is string => Boolean(path)),
+    ),
+  ];
+  const urls = new Map<string, string>();
+  if (paths.length > 0) {
+    const { data } = await supabase.storage.from(POST_MEDIA_BUCKET).createSignedUrls(paths, 3600);
+    for (const entry of data ?? []) {
+      if (entry.path && entry.signedUrl && !entry.error) urls.set(entry.path, entry.signedUrl);
+    }
+  }
+  return rows.map((row) => {
+    const path = coverOf(row)?.storage_path;
+    return { ...row, cover_url: path ? (urls.get(path) ?? null) : null };
+  });
+}
+
 /** Photos attached to a post, in author order, each with a signed URL ready to render. */
 export function usePostMedia(postId: string) {
   return useQuery({
@@ -58,7 +107,8 @@ export function useUploadPostImages(postId: string, userId: string) {
       const { count } = await supabase
         .from("post_media")
         .select("id", { count: "exact", head: true })
-        .eq("post_id", postId);
+        .eq("post_id", postId)
+        .eq("kind", "photo");
       const existing = count ?? 0;
       const room = MAX_POST_IMAGES - existing;
       if (room <= 0) throw new Error(`A post can hold ${MAX_POST_IMAGES} photos.`);
@@ -132,6 +182,20 @@ export function useSetImageCaption(postId: string) {
         .update({ caption: trimmed.length > 0 ? trimmed : null })
         .eq("id", id)
         .eq("post_id", postId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
+  });
+}
+
+/** Re-render and replace the stored session card (OG image) for this post. */
+export function useRegenerateOgSnapshot(postId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.functions.invoke("og-snapshot", {
+        body: { postId, force: true },
+      });
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),

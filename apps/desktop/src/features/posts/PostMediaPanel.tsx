@@ -1,6 +1,6 @@
 import { MAX_POST_IMAGES, POST_IMAGE_MIME_TYPES } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { ChevronLeft, ChevronRight, ImagePlus, Star, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImagePlus, RefreshCw, Star, Trash2 } from "lucide-react";
 import { useRef } from "react";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { errorMessage } from "@/lib/supabase";
 import {
   type PostImage,
   usePostMedia,
+  useRegenerateOgSnapshot,
   useRemovePostImage,
   useReorderPostImages,
   useSetImageCaption,
@@ -17,8 +18,8 @@ import {
 
 /**
  * The photo half of a post: add pictures, order them, caption them, and pick which one is the
- * cover. Without a cover the post falls back to the generated session card, which is also what
- * links unfurl to.
+ * cover. The pre-generated session card (the OG image) is always there; starring it — or any
+ * photo — chooses what leads the post and what links unfurl to.
  */
 export function PostMediaPanel({
   postId,
@@ -40,8 +41,11 @@ export function PostMediaPanel({
   const remove = useRemovePostImage(postId);
   const reorder = useReorderPostImages(postId);
   const caption = useSetImageCaption(postId);
+  const regenerate = useRegenerateOgSnapshot(postId);
 
-  const images = media.data ?? [];
+  const all = media.data ?? [];
+  const ogImage = all.find((i) => i.kind === "og") ?? null;
+  const images = all.filter((i) => i.kind !== "og");
   const busy =
     Boolean(disabled) ||
     upload.isPending ||
@@ -78,9 +82,47 @@ export function PostMediaPanel({
     <Card>
       <SectionTitle>Photos</SectionTitle>
       <p className="text-xs text-zinc-500">
-        {images.length}/{MAX_POST_IMAGES} used. Star a photo to make it the cover; otherwise the
-        generated session card leads the post.
+        {images.length}/{MAX_POST_IMAGES} used. Star a photo — or the session card — to make it the
+        cover; otherwise the session card leads the post.
       </p>
+
+      <div className="mt-3 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60">
+        {ogImage?.url ? (
+          <img
+            src={ogImage.url}
+            alt="Generated session card"
+            className="aspect-video w-full object-cover"
+          />
+        ) : (
+          <div className="flex aspect-video items-center justify-center px-4 text-center text-xs text-zinc-600">
+            The session card (OG image) is generated when the post is published.
+          </div>
+        )}
+        <div className="flex items-center gap-2 border-t border-zinc-800 px-2 py-1.5">
+          <span className="min-w-0 flex-1 truncate text-xs text-zinc-400">Session card</span>
+          <IconButton
+            label={ogImage && ogImage.id === coverMediaId ? "Unset cover" : "Use as cover"}
+            active={Boolean(ogImage && ogImage.id === coverMediaId)}
+            disabled={busy || !ogImage}
+            onClick={() =>
+              ogImage && onCoverChange(ogImage.id === coverMediaId ? null : ogImage.id)
+            }
+          >
+            <Star
+              className={cn("size-3.5", ogImage && ogImage.id === coverMediaId && "fill-current")}
+            />
+          </IconButton>
+          <IconButton
+            label="Regenerate card"
+            disabled={busy || regenerate.isPending}
+            onClick={() =>
+              regenerate.mutate(undefined, { onError: fail("Couldn't regenerate the card") })
+            }
+          >
+            <RefreshCw className={cn("size-3.5", regenerate.isPending && "animate-spin")} />
+          </IconButton>
+        </div>
+      </div>
 
       {images.length > 0 ? (
         <ul className="mt-3 grid grid-cols-2 gap-2">

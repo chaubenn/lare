@@ -20,7 +20,7 @@ env:
   # Public client configuration baked into the desktop bundle.
   VITE_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
   VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
-  VITE_SITE_URL: https://lare.vercel.app
+  VITE_SITE_URL: https://lare-one.vercel.app
   VITE_BUNNY_LIBRARY_ID: "743884"
 
 jobs:
@@ -173,7 +173,7 @@ jobs:
         env:
           WXT_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
           WXT_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
-          WXT_SITE_URL: https://lare.vercel.app
+          WXT_SITE_URL: https://lare-one.vercel.app
         run: pnpm build && pnpm zip
       - uses: actions/upload-artifact@v4
         with:

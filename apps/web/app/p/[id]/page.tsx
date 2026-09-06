@@ -13,6 +13,7 @@ import { ProblemSection } from "@/components/problem-section";
 import { Skeleton } from "@/components/skeleton";
 import { TimeAgo } from "@/components/time-ago";
 import { Transcript } from "@/components/transcript";
+import { ensureOgSnapshot } from "@/lib/og-snapshot";
 import { parseTranscriptSegments, toReviewView } from "@/lib/parse";
 import { sessionKindLabel } from "@/lib/post-utils";
 import { fetchComments, getPostDetail } from "@/lib/posts";
@@ -59,6 +60,8 @@ export default async function PostPage({ params }: Params) {
 
   const viewer = await getViewer();
   const isOwner = viewer?.id === post.user_id;
+  // Posts published before the pre-generated session card existed get one after this response.
+  await ensureOgSnapshot(post);
   const author = post.profiles;
   const session = post.sessions;
   const problems = [...(session?.session_problems ?? [])].sort((a, b) =>

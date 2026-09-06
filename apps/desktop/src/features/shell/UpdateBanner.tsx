@@ -6,20 +6,27 @@ import { checkForUpdate, dismissUpdate, installUpdate, useUpdateState } from "@/
 
 /** Delay before the launch check so it never competes with the first paint / auth round-trip. */
 const LAUNCH_CHECK_DELAY_MS = 3_000;
+/**
+ * Re-check interval. People leave Lare open for days; a launch-only check would never notice a
+ * release published after startup, so poll while running too.
+ */
+const RECHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
- * Checks GitHub Releases once on launch and shows a slim banner when a newer Lare exists.
- * Errors from the launch check stay silent (Settings shows them on a manual check).
+ * Checks GitHub Releases on launch and then hourly, and shows a slim banner when a newer Lare
+ * exists. Errors from background checks stay silent (Settings shows them on a manual check).
  */
 export function UpdateBanner() {
   const state = useUpdateState();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    let timer = setTimeout(run, LAUNCH_CHECK_DELAY_MS);
+    function run() {
       void checkForUpdate().then((result) => {
         if (result.status === "error") dismissUpdate();
       });
-    }, LAUNCH_CHECK_DELAY_MS);
+      timer = setTimeout(run, RECHECK_INTERVAL_MS);
+    }
     return () => clearTimeout(timer);
   }, []);
 

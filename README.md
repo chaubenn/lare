@@ -13,6 +13,13 @@ followers, attach demo videos, and run AI-graded mock interviews.
 
 Docs: [architecture](docs/architecture.md) · [QA checklist](docs/qa.md) · [privacy](docs/privacy.md)
 
+## What's new in v0.2.1
+
+- Pre-generated OG session cards for every post: rendered once, stored with the post and attached
+  as its cover — the feed, the post page and link unfurls all show the same instant image.
+- Instagram-style feeds on the web and in the desktop app: author header, caption, then the card.
+- The desktop app now checks for updates hourly while it is open, not only at launch.
+
 ## What's new in v0.2.0
 
 - Posts are social: like, comment and edit published posts, on the web and in the desktop app.

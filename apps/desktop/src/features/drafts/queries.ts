@@ -3,6 +3,7 @@ import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useUser } from "@/features/auth/AuthProvider";
+import { postMediaKey, requestOgSnapshot } from "@/features/posts/media";
 import { supabase } from "@/lib/supabase";
 
 /** Post + the whole session it summarises (problems and their submissions). */
@@ -108,10 +109,14 @@ export function usePublishDraft() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["drafts"] });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
       void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      // Every published post gets its session card (OG image) pre-generated and attached.
+      void requestOgSnapshot(data.id).then(() =>
+        queryClient.invalidateQueries({ queryKey: postMediaKey(data.id) }),
+      );
     },
   });
 }

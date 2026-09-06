@@ -16,6 +16,7 @@ export interface SlidePost {
   show_video: boolean;
   cover_media_id: string | null;
   cover_url: string | null;
+  og_url: string | null;
   thumbnail_url: string | null;
   images: PostImage[];
   videos: {
@@ -32,8 +33,9 @@ export interface SlidePost {
 }
 
 /**
- * The swipe deck: cover (the author's own image, or the generated session card) → the session
- * breakdown → the author's photos → the demo video when they chose to show it.
+ * The swipe deck: cover (the author's own image, or the pre-generated session card, or the card
+ * rendered on demand as a last resort) → the session breakdown → the author's photos → the demo
+ * video when they chose to show it.
  */
 export function PostSlides({
   post,
@@ -56,7 +58,7 @@ export function PostSlides({
   return (
     <PostCarousel label={`${title} — media`} className={className}>
       <CoverSlide
-        src={post.cover_url ?? `/api/og/${post.id}`}
+        src={post.cover_url ?? post.og_url ?? `/api/og/${post.id}`}
         custom={Boolean(post.cover_url)}
         title={title}
       />

@@ -39,6 +39,9 @@ create table if not exists public.post_media (
   user_id uuid not null references public.profiles (id) on delete cascade,
   -- storage object path in bucket `post-media`: {user_id}/{post_id}/{uuid}.{ext}
   storage_path text not null,
+  -- 'photo': attached by the author. 'og': the pre-generated session card (one per post,
+  -- written by the og-snapshot Edge Function; see post_media_og_idx).
+  kind text not null default 'photo' check (kind in ('photo', 'og')),
   width integer,
   height integer,
   caption text check (char_length(caption) <= 280),
@@ -49,6 +52,8 @@ create table if not exists public.post_media (
 create index if not exists post_media_post_idx
   on public.post_media (post_id, "position", created_at);
 create unique index if not exists post_media_path_idx on public.post_media (storage_path);
+create unique index if not exists post_media_og_idx
+  on public.post_media (post_id) where kind = 'og';
 
 -- ---------------------------------------------------------------------------
 -- posts: counters, the video toggle and the optional custom cover

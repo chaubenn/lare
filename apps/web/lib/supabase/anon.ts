@@ -13,3 +13,14 @@ export function createAnonClient(): SupabaseClient<Database> {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }
+
+/**
+ * Client authenticated with a raw access token instead of cookies, for server-to-server callers
+ * (e.g. the `og-snapshot` Edge Function forwarding the post owner's JWT). RLS applies as that user.
+ */
+export function createBearerClient(accessToken: string): SupabaseClient<Database> {
+  return createClient<Database>(env.supabaseUrl, env.supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  });
+}

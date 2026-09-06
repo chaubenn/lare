@@ -1,9 +1,15 @@
 import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
 import { Link } from "react-router";
+import { Avatar } from "@/components/ui/Avatar";
 import type { UserPost } from "@/features/profile/queries";
 import { plural } from "@/lib/format";
 import type { FeedPost } from "./queries";
 
+/**
+ * One post in the feed, Instagram-style: the author header (avatar, name, handle, date) is the
+ * main container, the caption sits above a smaller cover image (the author's own, or the
+ * pre-generated session card), and the session summary trails underneath.
+ */
 export function PostCard({ post }: { post: FeedPost | UserPost }) {
   const author = post.profiles;
   const session = post.sessions;
@@ -16,37 +22,53 @@ export function PostCard({ post }: { post: FeedPost | UserPost }) {
   const hasVideo = Boolean(post.video_id) && post.video_kind !== "none";
 
   return (
-    <div className="flex items-baseline gap-4 px-4 py-3.5">
+    <div className="px-4 py-4">
       <Link
         to={`/posts/${post.id}`}
-        className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
+        className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
       >
-        <p className="truncate text-sm text-zinc-100">
+        <div className="flex items-center gap-2.5">
+          <Avatar url={author?.avatar_url} name={name} size={32} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm text-zinc-100">
+              <span className="font-medium">{name}</span>
+              {author?.handle && author.display_name ? (
+                <span className="text-zinc-500"> @{author.handle}</span>
+              ) : null}
+            </p>
+            <p className="truncate text-xs text-zinc-500">
+              {formatLocalTimestamp(when)}
+              {kindLabel ? (
+                <>
+                  <span aria-hidden> · </span>
+                  {kindLabel}
+                </>
+              ) : null}
+              {session ? (
+                <>
+                  <span aria-hidden> · </span>
+                  {formatDurationHuman(session.active_ms)}
+                </>
+              ) : null}
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-3 text-sm text-zinc-100">
           {title}
           {extra ? <span className="text-zinc-500">{extra}</span> : null}
         </p>
-        <p className="mt-0.5 truncate text-xs text-zinc-500">
-          {name}
-          {author?.handle && author.display_name ? (
-            <>
-              <span aria-hidden> · </span>@{author.handle}
-            </>
-          ) : null}
-          <span aria-hidden> · </span>
-          {formatLocalTimestamp(when)}
-          {kindLabel ? (
-            <>
-              <span aria-hidden> · </span>
-              {kindLabel}
-            </>
-          ) : null}
-          {session ? (
-            <>
-              <span aria-hidden> · </span>
-              {formatDurationHuman(session.active_ms)}
-            </>
-          ) : null}
-          <span aria-hidden> · </span>
+
+        {post.cover_url ? (
+          <img
+            src={post.cover_url}
+            alt=""
+            loading="lazy"
+            className="mt-2 max-h-64 w-auto rounded-lg border border-zinc-800 object-contain"
+          />
+        ) : null}
+
+        <p className="mt-2 text-xs text-zinc-500">
           {plural(problems.length, "problem")}
           {hasVideo ? (
             <>

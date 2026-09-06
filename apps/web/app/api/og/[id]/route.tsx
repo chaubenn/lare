@@ -14,7 +14,7 @@ import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/post-utils";
-import { createAnonClient } from "@/lib/supabase/anon";
+import { createAnonClient, createBearerClient } from "@/lib/supabase/anon";
 import { createClient } from "@/lib/supabase/server";
 
 const emblemSrc = readFile(join(process.cwd(), "public/brand/emblem-512.png")).then(
@@ -88,10 +88,13 @@ async function loadOgData(
  * Crawlers arrive without cookies, so the anonymous client is tried first: whatever it can read
  * is what a shared link may show, and that answer is safe to cache publicly. Only when it comes
  * back empty (a private post, or a private account seen by a follower) do we fall back to the
- * viewer's own session — and that render is marked private so it is never cached for others.
+ * viewer's own session — cookie-based in the browser, Bearer token for server-to-server callers
+ * like the `og-snapshot` Edge Function — and that render is marked private so it is never cached
+ * for others.
  */
 async function loadForViewer(
   id: string,
+  bearer: string | null,
 ): Promise<{ data: OgData | null; coverPath: string | null; supabase: Client; shared: boolean }> {
   if (!isUuid(id)) {
     return { data: null, coverPath: null, supabase: createAnonClient(), shared: true };
@@ -102,7 +105,14 @@ async function loadForViewer(
 
   const viewer = await createClient();
   const viewerResult = await loadOgData(id, viewer);
-  return { ...viewerResult, supabase: viewer, shared: viewerResult.data === null };
+  if (viewerResult.data) return { ...viewerResult, supabase: viewer, shared: false };
+
+  if (bearer) {
+    const tokenClient = createBearerClient(bearer);
+    const tokenResult = await loadOgData(id, tokenClient);
+    return { ...tokenResult, supabase: tokenClient, shared: tokenResult.data === null };
+  }
+  return { ...viewerResult, supabase: viewer, shared: true };
 }
 
 /** Author-supplied cover wins over the generated card; RLS gates the signature. */
@@ -185,14 +195,19 @@ function ProblemRow({ problem }: { problem: ProblemOverview }) {
  * the problems themselves. Used both as the Open Graph image and as the first slide of the post
  * in the feed, so the two never drift apart.
  */
-export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
+  // `?card=1` forces the generated session card even when the author set a custom cover —
+  // the og-snapshot function uses it to (re)generate the stored card image.
+  const cardOnly = request.nextUrl.searchParams.get("card") === "1";
+  const authHeader = request.headers.get("authorization");
+  const bearer = authHeader?.toLowerCase().startsWith("bearer ") ? authHeader.slice(7) : null;
   const [{ data, coverPath, supabase, shared }, emblem] = await Promise.all([
-    loadForViewer(id),
+    loadForViewer(id, bearer),
     emblemSrc,
   ]);
 
-  if (coverPath) {
+  if (coverPath && !cardOnly) {
     const signed = await signedCover(supabase, coverPath);
     if (signed) return NextResponse.redirect(signed, 307);
   }

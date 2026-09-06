@@ -2,11 +2,28 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { isUuid } from "@/lib/post-utils";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, type ServerSupabase } from "@/lib/supabase/server";
 
 export interface ActionResult {
   error: string | null;
+}
+
+/**
+ * Ask the og-snapshot function to (re)generate the stored session card after the response —
+ * on publish, and after edits that change what the card shows.
+ */
+function regenerateCard(supabase: ServerSupabase, postId: string, force: boolean) {
+  after(async () => {
+    try {
+      await supabase.functions.invoke("og-snapshot", {
+        body: force ? { postId, force: true } : { postId },
+      });
+    } catch {
+      // Best effort; the post page lazily ensures a card too.
+    }
+  });
 }
 
 /** RLS restricts updates/deletes to the owner; a non-owner simply affects zero rows. */
@@ -32,6 +49,7 @@ export async function setPostStatus(
     status === "published" ? { status, published_at: new Date().toISOString() } : { status };
   const { error } = await supabase.from("posts").update(patch).eq("id", postId);
   if (error) return { error: error.message };
+  if (status === "published") regenerateCard(supabase, postId, false);
   revalidatePost(postId);
   return { error: null };
 }
@@ -84,6 +102,7 @@ export async function updatePost(postId: string, edit: PostEdit): Promise<Action
     })
     .eq("id", postId);
   if (error) return { error: error.message };
+  regenerateCard(supabase, postId, true);
   revalidatePost(postId);
   return { error: null };
 }

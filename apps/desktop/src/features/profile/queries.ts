@@ -4,6 +4,7 @@ import type { QueryData } from "@supabase/supabase-js";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
 import type { FollowState } from "@/features/friends/queries";
+import { attachCoverUrls } from "@/features/posts/media";
 import { parseProfileStats } from "@/lib/json";
 import { supabase } from "@/lib/supabase";
 
@@ -82,7 +83,7 @@ export function useFollowState(targetId: string | null | undefined) {
  * account they don't follow simply returns nothing.
  */
 const userPostsSelect =
-  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(id, kind, active_ms, started_at, session_problems(id, slug, title, difficulty, submissions(accepted, runtime_ms, runtime_display, runtime_percentile, submitted_at))), videos(id, status)" as const;
+  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(id, kind, active_ms, started_at, session_problems(id, slug, title, difficulty, submissions(accepted, runtime_ms, runtime_display, runtime_percentile, submitted_at))), videos(id, status), post_media!post_media_post_id_fkey(id, storage_path, kind, position)" as const;
 
 function userPostsQuery(userId: string) {
   return supabase
@@ -94,7 +95,9 @@ function userPostsQuery(userId: string) {
     .limit(50);
 }
 
-export type UserPost = QueryData<ReturnType<typeof userPostsQuery>>[number];
+export type UserPost = QueryData<ReturnType<typeof userPostsQuery>>[number] & {
+  cover_url: string | null;
+};
 
 export function useUserPosts(userId: string | null | undefined) {
   return useQuery({
@@ -103,7 +106,7 @@ export function useUserPosts(userId: string | null | undefined) {
     queryFn: async () => {
       const { data, error } = await userPostsQuery(userId ?? "");
       if (error) throw error;
-      return data;
+      return attachCoverUrls(data ?? []);
     },
   });
 }

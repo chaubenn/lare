@@ -21,7 +21,7 @@ export const POST_CARD_SELECT = `
       submissions(id, accepted, lang, runtime_ms, runtime_display, runtime_percentile,
         memory_mb, memory_display, memory_percentile, submitted_at))),
   videos!posts_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id),
-  post_media!post_media_post_id_fkey(id, storage_path, width, height, caption, position, created_at)
+  post_media!post_media_post_id_fkey(id, storage_path, kind, width, height, caption, position, created_at)
 ` as const;
 
 /** Everything `/p/[id]` renders. */
@@ -58,6 +58,8 @@ export interface PostSocial {
   images: PostImage[];
   /** Author-supplied cover, or null when the generated session card is used instead. */
   cover_url: string | null;
+  /** Signed URL of the stored, pre-generated session card (post_media kind 'og'), if any. */
+  og_url: string | null;
   viewer_liked: boolean;
 }
 
@@ -86,6 +88,7 @@ async function signPaths(
 type MediaRow = {
   id: string;
   storage_path: string;
+  kind?: "og" | "photo" | null;
   width: number | null;
   height: number | null;
   caption: string | null;
@@ -135,10 +138,16 @@ export async function decoratePosts<T extends DecoratableRow>(
   ]);
 
   return rows.map((row) => {
-    const images: PostImage[] = orderMedia(row.post_media ?? []).flatMap((m) => {
-      const url = media.get(m.storage_path);
-      return url ? [{ id: m.id, url, width: m.width, height: m.height, caption: m.caption }] : [];
-    });
+    const mediaRows = row.post_media ?? [];
+    // Author photos only: the pre-generated session card (kind 'og') is the cover fallback,
+    // never a carousel photo.
+    const images: PostImage[] = orderMedia(mediaRows.filter((m) => m.kind !== "og")).flatMap(
+      (m) => {
+        const url = media.get(m.storage_path);
+        return url ? [{ id: m.id, url, width: m.width, height: m.height, caption: m.caption }] : [];
+      },
+    );
+    const ogRow = mediaRows.find((m) => m.kind === "og");
     return {
       ...row,
       thumbnail_url: row.videos?.thumbnail_path
@@ -146,6 +155,7 @@ export async function decoratePosts<T extends DecoratableRow>(
         : null,
       images,
       cover_url: images.find((i) => i.id === row.cover_media_id)?.url ?? null,
+      og_url: ogRow ? (media.get(ogRow.storage_path) ?? null) : null,
       viewer_liked: likedIds.has(row.id),
     };
   });

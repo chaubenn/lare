@@ -1,6 +1,7 @@
 import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Copy, ExternalLink, Lock, Pencil } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -16,7 +17,7 @@ import { copyText } from "@/lib/clipboard";
 import { postWebUrl } from "@/lib/env";
 import { formatDateTime, plural } from "@/lib/format";
 import { openExternal } from "@/lib/open";
-import { usePostMedia } from "./media";
+import { postMediaKey, requestOgSnapshot, usePostMedia } from "./media";
 import { PostEditPanel } from "./PostEditPanel";
 import { CommentsSection, PostActions } from "./PostSocial";
 import { type PostDetail, useInterviewReview, usePost } from "./queries";
@@ -47,9 +48,21 @@ function PostView({ post }: { post: PostDetail }) {
   // The route lives under RequireAuth, so the viewer is always signed in here.
   const { userId } = useUser();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const review = useInterviewReview(post.session_id);
   const media = usePostMedia(post.id);
   const [editing, setEditing] = useState(false);
+  const mediaRows = media.data ?? [];
+  const ogImage = mediaRows.find((m) => m.kind === "og") ?? null;
+  const photos = mediaRows.filter((m) => m.kind !== "og");
+  // Every published post carries a pre-generated session card; make one if this post lacks it.
+  const needsOg = post.status === "published" && media.isSuccess && !ogImage;
+  useEffect(() => {
+    if (!needsOg) return;
+    void requestOgSnapshot(post.id).then(() =>
+      queryClient.invalidateQueries({ queryKey: postMediaKey(post.id) }),
+    );
+  }, [needsOg, post.id, queryClient]);
   const author = post.profiles;
   const session = post.sessions;
   const problems = session?.session_problems ?? [];
@@ -151,11 +164,22 @@ function PostView({ post }: { post: PostDetail }) {
         </div>
       </header>
 
-      {(media.data ?? []).length > 0 ? (
+      {ogImage?.url ? (
+        <section>
+          <SectionTitle>Session card</SectionTitle>
+          <img
+            src={ogImage.url}
+            alt="Session overview card"
+            className="w-full rounded-xl border border-zinc-800"
+          />
+        </section>
+      ) : null}
+
+      {photos.length > 0 ? (
         <section>
           <SectionTitle>Photos</SectionTitle>
           <ul className="grid gap-3 sm:grid-cols-2">
-            {(media.data ?? []).map((image) =>
+            {photos.map((image) =>
               image.url ? (
                 <li key={image.id} className="overflow-hidden rounded-xl border border-zinc-800">
                   <img

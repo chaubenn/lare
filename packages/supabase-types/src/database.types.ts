@@ -187,6 +187,7 @@ export type Database = {
           created_at: string
           height: number | null
           id: string
+          kind: "og" | "photo"
           position: number
           post_id: string
           storage_path: string
@@ -198,6 +199,7 @@ export type Database = {
           created_at?: string
           height?: number | null
           id?: string
+          kind?: "og" | "photo"
           position?: number
           post_id: string
           storage_path: string
@@ -209,6 +211,7 @@ export type Database = {
           created_at?: string
           height?: number | null
           id?: string
+          kind?: "og" | "photo"
           position?: number
           post_id?: string
           storage_path?: string

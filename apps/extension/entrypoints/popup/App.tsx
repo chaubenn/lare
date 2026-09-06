@@ -2,7 +2,7 @@ import { activeMs, formatDuration, timerStatus } from "@lare/shared";
 import { useCallback, useEffect, useState } from "react";
 import { type RuntimeSnapshot, type StateBroadcast, sendRuntime } from "@/src/messages";
 
-const SITE_URL: string = import.meta.env.WXT_SITE_URL ?? "https://lare.vercel.app";
+const SITE_URL: string = import.meta.env.WXT_SITE_URL ?? "https://lare-one.vercel.app";
 
 export function App() {
   const [snap, setSnap] = useState<RuntimeSnapshot | null>(null);
