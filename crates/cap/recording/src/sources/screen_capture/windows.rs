@@ -863,6 +863,9 @@ fn try_create_dxgi_capturer(
     let mut err_tx = error_tx.clone();
     let device_for_callback = params.d3d_device.clone();
 
+    // Fixed epoch for this capturer instance's cadence-gate ticks (see below).
+    let cadence_epoch = cap_timestamp::PerformanceCounterTimestamp::now();
+
     scap_dxgi::Capturer::new(
         &display,
         dxgi_settings,
@@ -870,11 +873,28 @@ fn try_create_dxgi_capturer(
             let capture_time = cap_timestamp::PerformanceCounterTimestamp::now();
             let timestamp = cap_timestamp::Timestamp::PerformanceCounter(capture_time);
 
-            if let Some(gate) = cadence_gate.as_mut()
-                && !gate.admit(0)
-            {
-                video_decimated_counter.fetch_add(1, atomic::Ordering::Relaxed);
-                return Ok(());
+            if frame.width() == 0 || frame.height() == 0 {
+                return Err(windows::core::Error::new(
+                    windows::Win32::Foundation::E_INVALIDARG,
+                    "Empty screen frame",
+                ));
+            }
+
+            if let Some(gate) = cadence_gate.as_mut() {
+                // Real, monotonically-increasing 100ns-unit tick count, not
+                // the raw frame_info fields -- DXGI duplication doesn't give
+                // us a per-frame capture timestamp the way WGC's
+                // SystemRelativeTime does, so we approximate with wall-clock
+                // time at delivery. Going through `Duration` (rather than a
+                // raw QPC tick count) matters because QPC's tick frequency
+                // isn't guaranteed to be 100ns on every machine, and
+                // `nominal_interval` is expressed in 100ns units.
+                let elapsed = capture_time.duration_since(cadence_epoch);
+                let ticks_100ns = (elapsed.as_nanos() / 100) as i64;
+                if !gate.admit(ticks_100ns) {
+                    video_decimated_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                    return Ok(());
+                }
             }
 
             let frame_width = frame.width();

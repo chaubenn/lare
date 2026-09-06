@@ -3,7 +3,7 @@ use crate::output::find_output_for_monitor;
 use crate::{NewCapturerError, Settings};
 use scap_direct3d::PixelFormat;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread::JoinHandle;
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct3D11::{
@@ -136,6 +136,7 @@ enum ThreadMessage {
 
 pub struct Capturer {
     stop_flag: Arc<AtomicBool>,
+    armed: Arc<AtomicBool>,
     control_tx: std::sync::mpsc::Sender<ThreadMessage>,
     thread: Option<JoinHandle<()>>,
 }
@@ -325,6 +326,7 @@ fn run_capture_loop(
     crop: Option<windows::Win32::Graphics::Direct3D11::D3D11_BOX>,
     show_cursor: bool,
     control_rx: std::sync::mpsc::Receiver<ThreadMessage>,
+    armed: Arc<AtomicBool>,
     mut on_frame: impl FnMut(Frame) -> windows::core::Result<()> + Send + 'static,
     mut on_closed: impl FnMut() -> windows::core::Result<()> + Send + 'static,
 ) {
@@ -353,7 +355,14 @@ fn run_capture_loop(
         let resource = match acquire_result {
             Ok(()) => match resource {
                 Some(r) => r,
-                None => continue,
+                None => {
+                    // `AcquireNextFrame` succeeded but handed back no resource --
+                    // the frame is still considered acquired, so it must be
+                    // released or every subsequent `AcquireNextFrame` call fails
+                    // with `DXGI_ERROR_INVALID_CALL`.
+                    let _ = unsafe { duplication.ReleaseFrame() };
+                    continue;
+                }
             },
             Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => continue,
             Err(e) if e.code() == DXGI_ERROR_ACCESS_LOST => {
@@ -482,6 +491,15 @@ fn run_capture_loop(
                 )?;
             }
 
+            // Frames must still be acquired and released as normal even
+            // before `start()` is called (releasing promptly is required
+            // regardless), but delivery to `on_frame` is gated on `armed` so
+            // no frame reaches the pipeline before the caller actually
+            // started recording.
+            if !armed.load(Ordering::Acquire) {
+                return Ok(());
+            }
+
             on_frame(Frame {
                 texture: output_texture,
                 width: out_width,
@@ -506,7 +524,7 @@ impl Capturer {
     ) -> Result<Self, NewCapturerError> {
         let target_monitor = display.raw_handle().inner();
         let (output1, desktop_rect) =
-            find_output_for_monitor(&device, target_monitor).map_err(|_| NewCapturerError::OutputNotFound)?;
+            find_output_for_monitor(&device, target_monitor).map_err(NewCapturerError::OutputNotFound)?;
 
         let duplication = unsafe { output1.DuplicateOutput(&device) }
             .map_err(NewCapturerError::DuplicateOutput)?;
@@ -524,6 +542,8 @@ impl Capturer {
 
         let (control_tx, control_rx) = std::sync::mpsc::channel();
         let stop_flag = Arc::new(AtomicBool::new(false));
+        let armed = Arc::new(AtomicBool::new(false));
+        let armed_for_loop = armed.clone();
 
         let crop = settings.crop;
         let show_cursor = settings.show_cursor;
@@ -543,6 +563,7 @@ impl Capturer {
                     crop,
                     show_cursor,
                     control_rx,
+                    armed_for_loop,
                     on_frame,
                     on_closed,
                 )
@@ -551,15 +572,18 @@ impl Capturer {
 
         Ok(Self {
             stop_flag,
+            armed,
             control_tx,
             thread: Some(thread),
         })
     }
 
     pub fn start(&mut self) -> windows::core::Result<()> {
-        // The capture loop starts pulling frames as soon as the thread is
-        // spawned in `new` -- there is no separate "arm the session" step
-        // like WGC's `StartCapture`, so this is a no-op kept for API parity.
+        // The capture loop starts pulling (and releasing) frames as soon as
+        // the thread is spawned in `new`, but delivery to `on_frame` is
+        // gated on `armed` -- this is what makes `start()` meaningful, in
+        // parity with WGC's `session.StartCapture()`.
+        self.armed.store(true, Ordering::Release);
         Ok(())
     }
 

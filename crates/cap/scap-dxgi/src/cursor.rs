@@ -17,7 +17,12 @@ pub struct CursorShape {
     /// Row pitch of `data`, in bytes, as reported by
     /// `DXGI_OUTDUPL_POINTER_SHAPE_INFO::Pitch`.
     pub pitch: u32,
+    // kept for documentation -- DXGI_OUTDUPL_POINTER_POSITION::Position
+    // already accounts for the hotspot, so these aren't used in
+    // compositing; do not resurrect the subtraction.
+    #[allow(dead_code)]
     pub hotspot_x: i32,
+    #[allow(dead_code)]
     pub hotspot_y: i32,
     pub data: Vec<u8>,
 }

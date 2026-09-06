@@ -26,8 +26,8 @@ impl Default for Settings {
 
 #[derive(Debug, thiserror::Error)]
 pub enum NewCapturerError {
-    #[error("No DXGI output found for the requested display")]
-    OutputNotFound,
+    #[error("OutputNotFound: {0}")]
+    OutputNotFound(windows::core::Error),
     #[error("DuplicateOutput: {0}")]
     DuplicateOutput(windows::core::Error),
     #[error("GetImmediateContext: {0}")]
