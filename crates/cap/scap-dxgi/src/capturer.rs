@@ -9,7 +9,8 @@ use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_READ,
     D3D11_CPU_ACCESS_WRITE, D3D11_MAP_READ_WRITE, D3D11_MAPPED_SUBRESOURCE, D3D11_TEXTURE2D_DESC,
-    D3D11_USAGE_DEFAULT, D3D11_USAGE_STAGING, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
+    D3D11_USAGE_DEFAULT, D3D11_USAGE_STAGING, ID3D11Device, ID3D11DeviceContext, ID3D11Multithread,
+    ID3D11Texture2D,
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC;
 use windows::Win32::Graphics::Dxgi::{
@@ -322,6 +323,7 @@ fn run_capture_loop(
     mut frame_width: u32,
     mut frame_height: u32,
     crop: Option<windows::Win32::Graphics::Direct3D11::D3D11_BOX>,
+    show_cursor: bool,
     control_rx: std::sync::mpsc::Receiver<ThreadMessage>,
     mut on_frame: impl FnMut(Frame) -> windows::core::Result<()> + Send + 'static,
     mut on_closed: impl FnMut() -> windows::core::Result<()> + Send + 'static,
@@ -457,7 +459,8 @@ fn run_capture_loop(
         }
 
         let result = (|| -> windows::core::Result<()> {
-            if cached_visible
+            if show_cursor
+                && cached_visible
                 && let Some(shape) = &cached_shape
             {
                 let crop_left = crop.map(|c| c.left as i32).unwrap_or(0);
@@ -510,6 +513,12 @@ impl Capturer {
 
         let context = unsafe { device.GetImmediateContext() }.map_err(NewCapturerError::Context)?;
 
+        if let Ok(multithread) = device.cast::<ID3D11Multithread>() {
+            unsafe {
+                let _ = multithread.SetMultithreadProtected(true);
+            }
+        }
+
         let frame_width = (desktop_rect.right - desktop_rect.left) as u32;
         let frame_height = (desktop_rect.bottom - desktop_rect.top) as u32;
 
@@ -517,6 +526,7 @@ impl Capturer {
         let stop_flag = Arc::new(AtomicBool::new(false));
 
         let crop = settings.crop;
+        let show_cursor = settings.show_cursor;
         // `HMONITOR` wraps a raw pointer and so isn't `Send`; carry it across
         // the thread boundary as its underlying integer value and rebuild the
         // handle from that on the capture thread (it's never dereferenced,
@@ -531,6 +541,7 @@ impl Capturer {
                     frame_width,
                     frame_height,
                     crop,
+                    show_cursor,
                     control_rx,
                     on_frame,
                     on_closed,

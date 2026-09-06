@@ -205,6 +205,12 @@ struct FrameScalerState {
     context: ffmpeg::software::scaling::Context,
     source_width: u32,
     source_height: u32,
+    /// The pixel format the scaling context was built for. Tracked
+    /// separately from `pixel_format` on `WindowsFrameScaler` itself because
+    /// a capturer restart can switch backends (WGC's RGBA vs DXGI
+    /// duplication's BGRA) without a resolution change, and a stale context
+    /// built for the other format must not be reused across that switch.
+    source_pixel: ffmpeg::format::Pixel,
 }
 
 unsafe impl Send for FrameScalerState {}
@@ -236,18 +242,18 @@ impl WindowsFrameScaler {
     fn scale_frame(&mut self, frame: &scap_direct3d::Frame) -> Option<ScreenFrame> {
         let src_width = frame.width();
         let src_height = frame.height();
+        let src_pixel = match self.pixel_format {
+            scap_direct3d::PixelFormat::R8G8B8A8Unorm => ffmpeg::format::Pixel::RGBA,
+            scap_direct3d::PixelFormat::B8G8R8A8Unorm => ffmpeg::format::Pixel::BGRA,
+        };
 
-        let needs_reinit = self
-            .state
-            .as_ref()
-            .is_none_or(|s| s.source_width != src_width || s.source_height != src_height);
+        let needs_reinit = self.state.as_ref().is_none_or(|s| {
+            s.source_width != src_width
+                || s.source_height != src_height
+                || s.source_pixel != src_pixel
+        });
 
         if needs_reinit {
-            let src_pixel = match self.pixel_format {
-                scap_direct3d::PixelFormat::R8G8B8A8Unorm => ffmpeg::format::Pixel::RGBA,
-                scap_direct3d::PixelFormat::B8G8R8A8Unorm => ffmpeg::format::Pixel::BGRA,
-            };
-
             let context = ffmpeg::software::scaling::Context::get(
                 src_pixel,
                 src_width,
@@ -263,6 +269,7 @@ impl WindowsFrameScaler {
                 context,
                 source_width: src_width,
                 source_height: src_height,
+                source_pixel: src_pixel,
             });
         }
 
@@ -270,11 +277,6 @@ impl WindowsFrameScaler {
         let src_data = buffer.data();
         let src_stride = buffer.stride() as usize;
         let row_length = (src_width * 4) as usize;
-
-        let src_pixel = match self.pixel_format {
-            scap_direct3d::PixelFormat::R8G8B8A8Unorm => ffmpeg::format::Pixel::RGBA,
-            scap_direct3d::PixelFormat::B8G8R8A8Unorm => ffmpeg::format::Pixel::BGRA,
-        };
 
         let mut src_frame = ffmpeg::frame::Video::new(src_pixel, src_width, src_height);
         let ff_stride = src_frame.stride(0);
@@ -368,6 +370,132 @@ impl WindowsFrameScaler {
             width: self.target_width,
             height: self.target_height,
             pixel_format: self.pixel_format,
+        }))
+    }
+
+    /// Mirrors `scale_frame` for `scap_dxgi::Frame`. DXGI Desktop Duplication
+    /// always hands back BGRA8 data (see `scap_dxgi::Frame::as_buffer`), so
+    /// unlike `scale_frame` this ignores `self.pixel_format` (which reflects
+    /// the WGC-side capture format) and hardcodes BGRA throughout.
+    fn scale_dxgi_frame(&mut self, frame: &scap_dxgi::Frame) -> Option<ScreenFrame> {
+        let src_width = frame.width();
+        let src_height = frame.height();
+        let src_pixel = ffmpeg::format::Pixel::BGRA;
+
+        let needs_reinit = self.state.as_ref().is_none_or(|s| {
+            s.source_width != src_width
+                || s.source_height != src_height
+                || s.source_pixel != src_pixel
+        });
+
+        if needs_reinit {
+            let context = ffmpeg::software::scaling::Context::get(
+                src_pixel,
+                src_width,
+                src_height,
+                src_pixel,
+                self.target_width,
+                self.target_height,
+                ffmpeg::software::scaling::Flags::BILINEAR,
+            )
+            .ok()?;
+
+            self.state = Some(FrameScalerState {
+                context,
+                source_width: src_width,
+                source_height: src_height,
+                source_pixel: src_pixel,
+            });
+        }
+
+        let buffer = frame.as_buffer().ok()?;
+        let src_data = buffer.data();
+        let src_stride = buffer.stride() as usize;
+        let row_length = (src_width * 4) as usize;
+
+        let mut src_frame = ffmpeg::frame::Video::new(src_pixel, src_width, src_height);
+        let ff_stride = src_frame.stride(0);
+        let ff_data = src_frame.data_mut(0);
+
+        for row in 0..src_height as usize {
+            let s_start = row * src_stride;
+            let d_start = row * ff_stride;
+            let copy_len = row_length.min(
+                src_data
+                    .len()
+                    .saturating_sub(s_start)
+                    .min(ff_data.len().saturating_sub(d_start)),
+            );
+            if copy_len > 0 {
+                ff_data[d_start..d_start + copy_len]
+                    .copy_from_slice(&src_data[s_start..s_start + copy_len]);
+            }
+        }
+
+        drop(buffer);
+
+        let state = self.state.as_mut()?;
+        let mut dst_frame =
+            ffmpeg::frame::Video::new(src_pixel, self.target_width, self.target_height);
+        state.context.run(&src_frame, &mut dst_frame).ok()?;
+
+        let dst_stride = dst_frame.stride(0);
+        let dst_row_length = (self.target_width * 4) as usize;
+        let total_bytes = dst_row_length * self.target_height as usize;
+        let mut pixel_data = vec![0u8; total_bytes];
+        let dst_data = dst_frame.data(0);
+
+        for row in 0..self.target_height as usize {
+            let s_start = row * dst_stride;
+            let d_start = row * dst_row_length;
+            let copy_len = dst_row_length.min(
+                dst_data
+                    .len()
+                    .saturating_sub(s_start)
+                    .min(pixel_data.len().saturating_sub(d_start)),
+            );
+            if copy_len > 0 {
+                pixel_data[d_start..d_start + copy_len]
+                    .copy_from_slice(&dst_data[s_start..s_start + copy_len]);
+            }
+        }
+
+        let texture_desc = D3D11_TEXTURE2D_DESC {
+            Width: self.target_width,
+            Height: self.target_height,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: ::windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: 0,
+        };
+
+        let subresource_data = D3D11_SUBRESOURCE_DATA {
+            pSysMem: pixel_data.as_ptr() as *const _,
+            SysMemPitch: dst_row_length as u32,
+            SysMemSlicePitch: 0,
+        };
+
+        let texture = unsafe {
+            let mut tex = None;
+            self.d3d_device
+                .CreateTexture2D(&texture_desc, Some(&subresource_data), Some(&mut tex))
+                .ok()?;
+            tex?
+        };
+
+        Some(ScreenFrame::Scaled(ScaledScreenFrame {
+            texture,
+            pixel_data,
+            width: self.target_width,
+            height: self.target_height,
+            pixel_format: scap_direct3d::PixelFormat::B8G8R8A8Unorm,
         }))
     }
 }
@@ -715,6 +843,7 @@ fn try_create_dxgi_capturer(
 
     let dxgi_settings = scap_dxgi::Settings {
         crop: params.settings.crop,
+        show_cursor: params.settings.is_cursor_capture_enabled.unwrap_or(true),
     };
 
     let video_frame_counter = params.video_frame_counter.clone();
@@ -724,6 +853,12 @@ fn try_create_dxgi_capturer(
     let mut tx = params.video_tx.clone();
     let stall_health_tx = params.stall_health_tx.clone();
     let first_frame = params.first_frame.clone();
+    let first_frame_for_closed = params.first_frame.clone();
+    let expected_width = params.expected_width;
+    let expected_height = params.expected_height;
+    let frame_scaler = params.frame_scaler.clone();
+    let scaling_logged = params.scaling_logged.clone();
+    let scaled_frame_count = params.scaled_frame_count.clone();
 
     let mut err_tx = error_tx.clone();
     let device_for_callback = params.d3d_device.clone();
@@ -742,10 +877,58 @@ fn try_create_dxgi_capturer(
                 return Ok(());
             }
 
+            let frame_width = frame.width();
+            let frame_height = frame.height();
+
+            let screen_frame = if frame_width != expected_width || frame_height != expected_height
+            {
+                let Ok(mut scaler_guard) = frame_scaler.lock() else {
+                    video_drop_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                    return Ok(());
+                };
+
+                if !scaling_logged.load(atomic::Ordering::Relaxed) {
+                    info!(
+                        expected_width,
+                        expected_height,
+                        frame_width,
+                        frame_height,
+                        "Display resolution changed, scaling DXGI duplication frames to match original dimensions"
+                    );
+                    scaling_logged.store(true, atomic::Ordering::Relaxed);
+                }
+
+                match scaler_guard.scale_dxgi_frame(&frame) {
+                    Some(scaled) => {
+                        let count = scaled_frame_count.fetch_add(1, atomic::Ordering::Relaxed) + 1;
+                        if count.is_multiple_of(300) {
+                            debug!(scaled_frames = count, "Scaling DXGI duplication frames");
+                        }
+                        scaled
+                    }
+                    None => {
+                        video_drop_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                        return Ok(());
+                    }
+                }
+            } else {
+                if scaling_logged.swap(false, atomic::Ordering::Relaxed) {
+                    let count = scaled_frame_count.swap(0, atomic::Ordering::Relaxed);
+                    info!(
+                        scaled_frames = count,
+                        "Display dimensions restored, resuming direct DXGI duplication capture"
+                    );
+                    if let Ok(mut guard) = frame_scaler.lock() {
+                        guard.state = None;
+                    }
+                }
+                ScreenFrame::Duplicated(frame)
+            };
+
             match output_pipeline::send_with_stall_budget_futures(
                 &mut tx,
                 VideoFrame {
-                    frame: ScreenFrame::Duplicated(frame),
+                    frame: screen_frame,
                     timestamp,
                 },
                 "screen-video",
@@ -771,6 +954,7 @@ fn try_create_dxgi_capturer(
                 CaptureClosureKind::TargetLost => "capture target lost".to_string(),
                 CaptureClosureKind::Transient => "capture closed".to_string(),
             };
+            first_frame_for_closed.complete(Err(message.clone()));
             drop(err_tx.try_send(CaptureClosureEvent { kind, message }));
             Ok(())
         },

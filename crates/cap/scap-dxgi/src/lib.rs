@@ -9,9 +9,19 @@ pub use scap_direct3d::PixelFormat;
 
 use windows::Win32::Graphics::Direct3D11::D3D11_BOX;
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 pub struct Settings {
     pub crop: Option<D3D11_BOX>,
+    pub show_cursor: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            crop: None,
+            show_cursor: true,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
