@@ -62,7 +62,12 @@ flowchart LR
   distributions).
 - `videos` (Bunny guid, status created|uploading|uploaded|processing|ready|failed, dimensions,
   `thumbnail_path` in bucket `thumbnails`), `posts` (draft|published, visibility public|private,
-  `video_id`, `video_kind` none|full|highlights, `include_ai_insights`).
+  two video slots — `video_id` + `video_kind` none|full|highlights for the demo/full take and
+  `demo_video_id` for an interview's summary clip, each with a `show_*` switch — plus the three
+  optional extras the draft editor groups together: `include_ai_insights`, `include_og_card`,
+  `og_show_ai_scores`).
+- `post_media` (carousel photos plus the one `kind = 'og'` row holding the pre-generated session
+  card written by `og-snapshot`), `post_likes`, `post_comments`.
 - `transcripts` (segments `[{s,e,text}]` in media ms), `interview_reviews` (OpenAI structured output).
 - Visibility: `can_view_post` - published and (owner, or public post and (author not private or
   accepted follower)). Child rows inherit through their post; AI insights additionally require
@@ -90,15 +95,32 @@ already in media time; edit events (wall-clock epoch from Monaco) and submission
 4. `features/recording/pipeline.ts`:
    - instant demo -> `publishVideo` (create Bunny video via `bunny-create-upload`, thumbnail to
      Storage, TUS upload from Rust with progress events, attach to the draft);
-   - interview -> render (`cap-export`, facecam PiP if recorded) -> transcribe the render with
-     whisper -> upload -> captions (`bunny-captions`) -> attach to the session's draft;
+   - interview -> render (`cap-export`, facecam PiP if one was recorded) -> transcribe the render
+     with whisper -> upload -> captions (`bunny-captions`) -> attach to the session's draft. The
+     facecam is optional and so is the render: if it fails, the transcript is still taken from the
+     raw mic track and saved before the failure is reported, so the AI review is never lost with
+     the video;
    - studio -> editor (`/studio/:recordingId`) -> `exportAndPublish` with the user's edit.
 5. Bunny calls `bunny-webhook` (HMAC) as it encodes; `videos.status` flips to `ready` and the web
    and desktop players pick it up over Realtime. Playback URLs come from `bunny-playback-token`
    after an RLS visibility check.
 
 Bookkeeping for resumable pipelines is in the Tauri store (`recordings.json`), surfaced on the
-Recordings page.
+Recordings page. It also records which of the post's two video slots a take was started for — the
+recorder manifest only carries the post id.
+
+## Post carousel
+
+One deck, rendered identically by `apps/web/components/post-slides.tsx` and
+`apps/desktop/src/features/feed/PostSlides.tsx`:
+
+    session card (or the author's cover) -> session breakdown -> summary video -> photos -> demo/full video
+
+The session card is `/api/og/{id}`: the Open Graph image *and* the first slide, so the two cannot
+drift. `og-snapshot` renders that route with the author's JWT and stores the PNG, so shared links
+and the feed read one image instead of rendering per request. Both are opt-out per post
+(`include_og_card`), and an interview may also draw its AI review percentages on the card
+(`og_show_ai_scores`).
 
 ## Licensing
 

@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  AI_SCORE_LABELS,
+  type AiScoreKey,
   buildSessionOverview,
   difficultyMixLabel,
   formatBeats,
@@ -34,12 +36,23 @@ const DIFFICULTY_COLOUR: Record<string, string> = {
   Hard: "#fb7185",
 };
 
+/** Overall plus the five skill percentages, in the order they are drawn. */
+interface AiScores {
+  overall: number;
+  skills: { key: AiScoreKey; label: string; score: number }[];
+}
+
 interface OgData {
   title: string;
   handle: string | null;
   displayName: string | null;
   kind: "practice" | "interview" | null;
   overview: SessionOverview;
+  /** The author's "include the session card" switch; false renders the generic Lare card. */
+  showCard: boolean;
+  sessionId: string | null;
+  /** The author's "show the AI percentages on the card" switch. */
+  showAiScores: boolean;
 }
 
 type Client = SupabaseClient<Database>;
@@ -52,7 +65,7 @@ async function loadOgData(
     const { data } = await supabase
       .from("posts")
       .select(
-        `title, cover_media_id,
+        `title, cover_media_id, session_id, include_og_card, og_show_ai_scores,
          profiles!posts_user_id_fkey(handle, display_name),
          post_media!post_media_post_id_fkey(id, storage_path),
          sessions!posts_session_id_fkey(kind, active_ms,
@@ -76,6 +89,9 @@ async function loadOgData(
           data.sessions?.session_problems ?? [],
           data.sessions?.active_ms ?? null,
         ),
+        showCard: data.include_og_card,
+        sessionId: data.session_id,
+        showAiScores: data.og_show_ai_scores,
       },
     };
   } catch {
@@ -193,6 +209,57 @@ function ProblemRow({ problem }: { problem: ProblemOverview }) {
 }
 
 /**
+ * The AI review percentages, when the author asked for them on the card. Read with the same
+ * client as the post, so RLS decides: `can_view_session_insights` only opens the review up to
+ * the owner and to viewers of a post that ships its AI insights. A crawler that cannot see them
+ * simply gets the card without the strip — the stored PNG (rendered for the author by
+ * `og-snapshot`) is what shared links actually resolve to.
+ */
+async function loadAiScores(supabase: Client, sessionId: string): Promise<AiScores | null> {
+  try {
+    const { data } = await supabase
+      .from("interview_reviews")
+      .select("overall, scores")
+      .eq("session_id", sessionId)
+      .maybeSingle();
+    if (!data || typeof data.overall !== "number") return null;
+    const raw = (data.scores ?? {}) as Record<string, { score?: unknown } | undefined>;
+    const skills = (Object.keys(AI_SCORE_LABELS) as AiScoreKey[]).flatMap((key) => {
+      const score = raw[key]?.score;
+      return typeof score === "number"
+        ? [{ key, label: AI_SCORE_LABELS[key], score: Math.round(score) }]
+        : [];
+    });
+    return skills.length > 0 ? { overall: Math.round(data.overall), skills } : null;
+  } catch {
+    return null;
+  }
+}
+
+function ScoreChip({ label, value, lead }: { label: string; value: number; lead?: boolean }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 2,
+        flex: 1,
+        padding: "10px 8px",
+        borderRadius: 14,
+        background: lead ? "#1d241f" : INK_2,
+        border: `1px solid ${lead ? "#34d399" : LINE}`,
+      }}
+    >
+      <div style={{ fontSize: 26, fontWeight: 700, color: lead ? "#34d399" : BONE }}>{value}%</div>
+      <div style={{ fontSize: 14, letterSpacing: 1, textTransform: "uppercase", color: MUTED }}>
+        {truncate(label, 16)}
+      </div>
+    </div>
+  );
+}
+
+/**
  * The session card: an at-a-glance overview of what the author actually did — how many of the
  * problems they solved, how long they were at it, how their fastest accepted run compared, and
  * the problems themselves. Used both as the Open Graph image and as the first slide of the post
@@ -215,8 +282,15 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     if (signed) return NextResponse.redirect(signed, 307);
   }
 
-  const overview = data?.overview;
-  const shown = overview?.problems.slice(0, 3) ?? [];
+  // An author who switched the session card off gets the generic Lare card instead — their
+  // stats are not what a shared link should unfurl to.
+  const card = data?.showCard ? data : null;
+  const scores =
+    card?.showAiScores && card.sessionId ? await loadAiScores(supabase, card.sessionId) : null;
+
+  const overview = card?.overview;
+  // The score strip takes a row's worth of height, so fewer problems fit under it.
+  const shown = overview?.problems.slice(0, scores ? 2 : 3) ?? [];
   const remaining = (overview?.total ?? 0) - shown.length;
   const mix = overview ? difficultyMixLabel(overview.difficulty) : null;
   const beats = overview ? formatBeats(overview.bestPercentile) : null;
@@ -241,7 +315,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
           <img src={emblem} width={40} height={40} alt="" />
           <div style={{ fontSize: 28, fontWeight: 600, letterSpacing: -0.5 }}>Lare</div>
         </div>
-        {data ? (
+        {card ? (
           <div
             style={{
               display: "flex",
@@ -254,30 +328,30 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
               padding: "8px 18px",
             }}
           >
-            {data.kind === "interview" ? "Mock interview" : "Practice session"}
+            {card.kind === "interview" ? "Mock interview" : "Practice session"}
           </div>
         ) : (
           <div style={{ display: "flex", fontSize: 20, color: MUTED }}>Hevy for LeetCode</div>
         )}
       </div>
 
-      {data && overview ? (
+      {card && overview ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div
               style={{
-                fontSize: data.title.length > 46 ? 40 : 46,
+                fontSize: card.title.length > 46 ? 40 : 46,
                 fontWeight: 800,
                 lineHeight: 1.1,
                 letterSpacing: -1.4,
                 display: "flex",
               }}
             >
-              {truncate(data.title, 68)}
+              {truncate(card.title, 68)}
             </div>
             <div style={{ display: "flex", gap: 12, fontSize: 22, color: MUTED }}>
-              <span>{data.displayName || (data.handle ? `@${data.handle}` : "Someone")}</span>
-              {data.handle && data.displayName ? <span>@{data.handle}</span> : null}
+              <span>{card.displayName || (card.handle ? `@${card.handle}` : "Someone")}</span>
+              {card.handle && card.displayName ? <span>@{card.handle}</span> : null}
               {mix ? <span>· {mix}</span> : null}
             </div>
           </div>
@@ -292,6 +366,15 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
             <Stat label="Best runtime" value={beats ? `beats ${beats}` : "—"} />
             <Stat label="Submissions" value={String(overview.attempts)} />
           </div>
+
+          {scores ? (
+            <div style={{ display: "flex", gap: 10 }}>
+              <ScoreChip label="Overall" value={scores.overall} lead />
+              {scores.skills.map((skill) => (
+                <ScoreChip key={skill.key} label={skill.label} value={skill.score} />
+              ))}
+            </div>
+          ) : null}
 
           <div style={{ display: "flex", flexDirection: "column" }}>
             {shown.map((problem) => (
@@ -332,7 +415,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       headers: {
         "Cache-Control": !shared
           ? "private, max-age=60"
-          : data
+          : card
             ? "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
             : "public, max-age=60",
       },

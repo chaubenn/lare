@@ -227,6 +227,18 @@ function PostView({ post }: { post: PostDetail }) {
         </Card>
       ) : null}
 
+      {post.demo_videos && (post.show_demo_video || isMine) ? (
+        <section>
+          <SectionTitle>Summary video</SectionTitle>
+          <VideoEmbed video={post.demo_videos} />
+          {!post.show_demo_video && isMine ? (
+            <p className="mt-2 text-xs text-zinc-500">
+              Hidden from the post — turn it back on with "Edit post".
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       {(post.video_kind !== "none" || post.videos) && (post.show_video || isMine) ? (
         <section>
           <SectionTitle>

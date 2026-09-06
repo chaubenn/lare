@@ -15,8 +15,12 @@ export interface OwnerControlsProps {
   title: string;
   body: string;
   showVideo: boolean;
+  showDemoVideo: boolean;
   includeAiInsights: boolean;
+  includeOgCard: boolean;
+  ogShowAiScores: boolean;
   hasVideo: boolean;
+  hasDemoVideo: boolean;
   isInterview: boolean;
   coverMediaId: string | null;
   images: PostImage[];
@@ -116,8 +120,12 @@ export function OwnerControls(props: OwnerControlsProps) {
             body={props.body}
             visibility={visibility}
             showVideo={props.showVideo}
+            showDemoVideo={props.showDemoVideo}
             includeAiInsights={props.includeAiInsights}
+            includeOgCard={props.includeOgCard}
+            ogShowAiScores={props.ogShowAiScores}
             hasVideo={props.hasVideo}
+            hasDemoVideo={props.hasDemoVideo}
             isInterview={props.isInterview}
             coverMediaId={props.coverMediaId}
             images={props.images}

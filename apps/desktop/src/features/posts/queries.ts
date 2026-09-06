@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { postMediaKey, requestOgSnapshot } from "./media";
 
 const POST_DETAIL_SELECT =
-  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(*, session_problems(*, submissions(*))), videos(*)" as const;
+  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(*, session_problems(*, submissions(*))), videos!posts_video_id_fkey(*), demo_videos:videos!posts_demo_video_id_fkey(*)" as const;
 
 function postQuery(id: string) {
   return supabase.from("posts").select(POST_DETAIL_SELECT).eq("id", id).maybeSingle();
@@ -50,6 +50,8 @@ export interface PostEdit {
   body: string;
   visibility: Post["visibility"];
   showVideo: boolean;
+  /** Show the interview's summary video as a slide, ahead of the full recording. */
+  showDemoVideo: boolean;
   coverMediaId: string | null;
 }
 
@@ -57,7 +59,15 @@ export interface PostEdit {
 export function useUpdatePost() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, title, body, visibility, showVideo, coverMediaId }: PostEdit) => {
+    mutationFn: async ({
+      id,
+      title,
+      body,
+      visibility,
+      showVideo,
+      showDemoVideo,
+      coverMediaId,
+    }: PostEdit) => {
       const { error } = await supabase
         .from("posts")
         .update({
@@ -65,6 +75,7 @@ export function useUpdatePost() {
           body: body.trim() || null,
           visibility,
           show_video: showVideo,
+          show_demo_video: showDemoVideo,
           cover_media_id: coverMediaId,
         })
         .eq("id", id);

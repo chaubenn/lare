@@ -27,6 +27,13 @@ import { patchRecordingMeta } from "./recordingStore";
 
 type VideoKind = Database["public"]["Enums"]["video_kind"];
 
+/**
+ * Which of a post's two video slots a render belongs to. `main` is the demo video of a practice
+ * post and the full take of an interview (`video_id` + `video_kind`); `demo` is the short summary
+ * clip an author records about the session, which plays before the full take (`demo_video_id`).
+ */
+export type VideoSlot = "main" | "demo";
+
 function throwIf(error: PostgrestError | null, what: string): void {
   if (error) throw new Error(`${what}: ${error.message}`);
 }
@@ -53,8 +60,10 @@ export interface PublishVideoOptions {
   mode: "instant" | "studio";
   title: string;
   sessionId?: string | null;
-  /** Draft post to attach the video to (sets `video_id` + `video_kind`). */
+  /** Draft post to attach the video to. */
   postId?: string | null;
+  /** Which slot on that post to fill. Defaults to `main`. */
+  slot?: VideoSlot;
   videoKind?: VideoKind;
   /** WebVTT captions to attach on Bunny once uploaded. */
   vtt?: string | null;
@@ -151,13 +160,13 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
 
   if (opts.postId) {
     stage(job, "attach", "Attaching to the post");
+    // `video_kind` describes the main video only — a summary clip is always the whole take.
+    const patch =
+      opts.slot === "demo"
+        ? { demo_video_id: created.videoId }
+        : { video_id: created.videoId, video_kind: opts.videoKind ?? "full" };
     throwIf(
-      (
-        await supabase
-          .from("posts")
-          .update({ video_id: created.videoId, video_kind: opts.videoKind ?? "full" })
-          .eq("id", opts.postId)
-      ).error,
+      (await supabase.from("posts").update(patch).eq("id", opts.postId)).error,
       "posts update",
     );
   }
@@ -263,8 +272,14 @@ export interface InterviewOptions {
 
 /**
  * Everything that happens after a mock interview recording stops: align the session with media
- * time, transcribe the mic track, render the studio project (facecam PiP if recorded), upload,
- * attach captions and the video to the session's draft post.
+ * time, render the studio project (facecam PiP if recorded), transcribe, upload, attach captions
+ * and the video to the session's draft post.
+ *
+ * The facecam is optional, and so is everything downstream of the render: an interview recorded
+ * with the facecam unchecked has no camera track, and a project that will not render for any
+ * reason must not also cost the author their transcript — which is what the AI review is built
+ * from. So the transcript is taken from the render when there is one and from the raw mic track
+ * when there is not, and it is saved before a failed render is reported.
  */
 export async function processInterview(opts: InterviewOptions): Promise<void> {
   const { recording, userId } = opts;
@@ -293,22 +308,36 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
     // Render first: the exported MP4 carries the full mic track across every pause/resume clip,
     // and its clock is the video's clock, so the transcript lines up with playback and captions.
     let output = opts.resume?.exportPath ?? null;
+    let renderError: string | null = null;
     if (!output || !(await recorder.pathExists(output))) {
-      output = await renderStudio({
-        job,
-        projectPath: recording.projectPath,
-        edit: { ...DEFAULT_EDIT, camera: { ...DEFAULT_EDIT.camera, hide: !recording.facecam } },
-        recordingId: recording.recordingId,
-      });
+      // Hide the camera whenever no camera track was written, not just when the facecam flag was
+      // off: a facecam that failed to open leaves the same project a facecam-off take does.
+      const info = await recorder.studioProjectInfo(recording.projectPath).catch(() => null);
+      const hideCamera = !recording.facecam || !info?.cameraPath;
+      try {
+        output = await renderStudio({
+          job,
+          projectPath: recording.projectPath,
+          edit: { ...DEFAULT_EDIT, camera: { ...DEFAULT_EDIT.camera, hide: hideCamera } },
+          recordingId: recording.recordingId,
+        });
+      } catch (e) {
+        renderError = errorMessage(e);
+        output = null;
+      }
     }
 
+    // Prefer the render (one clock for video, captions and transcript); fall back to the raw mic
+    // track, which is recorded independently of the camera. The fallback only covers the first
+    // clip of a paused recording, so it is a floor, not a replacement.
+    const transcribeInput = output ?? recording.micTrack;
     let vtt: string | null = null;
-    if (!opts.resume?.transcribed) {
+    if (!opts.resume?.transcribed && transcribeInput) {
       try {
         vtt = await transcribeSession({
           job,
           sessionId,
-          input: output,
+          input: transcribeInput,
           recordingId: recording.recordingId,
         });
       } catch (e) {
@@ -316,6 +345,16 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
         console.warn("transcription failed", e);
         updateJob(job.id, { detail: `Transcription failed: ${errorMessage(e)}` });
       }
+    }
+
+    // The transcript is saved by now, so the AI review is available either way; only the video
+    // is lost. Retry the render from Recordings.
+    if (!output) {
+      throw new Error(
+        `Rendering the interview video failed: ${renderError ?? "no rendered file"}.${
+          vtt ? " The transcript was saved, so the AI review still works." : ""
+        }`,
+      );
     }
 
     const post = await postForSession(sessionId);
@@ -344,6 +383,8 @@ export interface DemoPublishOptions {
   recording: CompletedRecording;
   userId: string;
   postId: string | null;
+  /** Which video slot on the post to fill. Defaults to `main`. */
+  slot?: VideoSlot;
   title: string;
   queryClient?: QueryClient;
 }
@@ -364,6 +405,7 @@ export async function publishInstantDemo(opts: DemoPublishOptions): Promise<stri
       mode: "instant",
       title: opts.title,
       postId: opts.postId,
+      slot: opts.slot,
       videoKind: "full",
       recordingId: recording.recordingId,
     });
@@ -382,6 +424,8 @@ export interface StudioPublishOptions {
   edit: StudioEdit;
   userId: string;
   postId: string | null;
+  /** Which video slot on the post to fill. Defaults to `main`. */
+  slot?: VideoSlot;
   title: string;
   videoKind?: VideoKind;
   vtt?: string | null;
@@ -411,6 +455,7 @@ export async function exportAndPublish(opts: StudioPublishOptions): Promise<stri
       title: opts.title,
       sessionId: recording.sessionId,
       postId: opts.postId,
+      slot: opts.slot,
       videoKind: opts.videoKind ?? "full",
       vtt: opts.vtt ?? null,
       recordingId: recording.recordingId,

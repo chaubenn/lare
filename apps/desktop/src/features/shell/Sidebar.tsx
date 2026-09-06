@@ -1,6 +1,6 @@
 import { cn } from "@lare/ui";
-import { Wordmark } from "@lare/ui/brand";
-import { Clapperboard, House, Inbox, Rss, Settings, SquarePen, User, Users } from "lucide-react";
+import { Emblem, Wordmark } from "@lare/ui/brand";
+import { Clapperboard, Inbox, Rss, Settings, SquarePen, User, Users } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { NavLink } from "react-router";
 import { CountBadge } from "@/components/ui/Badge";
@@ -56,8 +56,7 @@ export function Sidebar() {
         ))}
       </nav>
       <div className="px-4 py-3 text-[11px] text-zinc-600">
-        <House className="mr-1 inline size-3" aria-hidden />
-        Hevy for LeetCode
+        <Emblem className="mr-1.5 inline size-3 align-[-1px]" />v{__APP_VERSION__}
       </div>
     </aside>
   );

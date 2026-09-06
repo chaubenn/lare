@@ -140,7 +140,8 @@ function RecordingRow({
         recording: rec,
         userId,
         postId: rec.postId,
-        title: "Demo video",
+        slot: rec.slot,
+        title: rec.slot === "demo" ? "Summary video" : "Demo video",
         queryClient,
       }),
     onSuccess: () =>

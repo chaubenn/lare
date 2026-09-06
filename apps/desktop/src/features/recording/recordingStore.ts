@@ -6,9 +6,16 @@
 
 import { load, type Store } from "@tauri-apps/plugin-store";
 import { inTauri } from "@/lib/tauri";
+import type { VideoSlot } from "./pipeline";
 
 export interface RecordingMeta {
   recordingId: string;
+  /**
+   * Which video slot of `postId` this recording is destined for. Only the app knows — the
+   * recorder manifest carries the post, not the slot — so it is remembered here and read again
+   * when the recording finishes, or later from the studio editor / the Recordings page.
+   */
+  slot: VideoSlot;
   /** `videos.id` once the upload pipeline created a row. */
   videoId: string | null;
   uploaded: boolean;
@@ -54,6 +61,7 @@ export async function patchRecordingMeta(
 ): Promise<RecordingMeta> {
   const prev = (await getRecordingMeta(recordingId)) ?? {
     recordingId,
+    slot: "main" as VideoSlot,
     videoId: null,
     uploaded: false,
     transcribed: false,
@@ -61,7 +69,14 @@ export async function patchRecordingMeta(
     error: null,
     updatedAt: 0,
   };
-  const next: RecordingMeta = { ...prev, ...patch, recordingId, updatedAt: Date.now() };
+  // Entries written before `slot` existed have none; they are all main-slot recordings.
+  const next: RecordingMeta = {
+    ...prev,
+    ...patch,
+    recordingId,
+    slot: patch.slot ?? prev.slot ?? "main",
+    updatedAt: Date.now(),
+  };
   try {
     const s = await store();
     await s.set(recordingId, next);

@@ -39,6 +39,16 @@ the CI workflow runs all of it on macOS and Windows. The items below are the man
 - Mock interview from the extension: on end, the jobs tray shows render -> transcribe -> upload ->
   captions; Sessions -> the session shows video, transcript, code timeline and a **Generate AI
   review** button (5/day limit surfaces as a toast).
+- Mock interview with **Include facecam unchecked**: same pipeline, no camera track, and the
+  transcript + **Generate AI review** must still work. The render is not allowed to take the
+  transcript down with it — the mic track is the fallback.
+- Interview draft -> **Summary video** -> Record (Instant): uploads to the second slot and appears
+  as the third slide (after the session card and the session breakdown), with the full recording
+  fourth. Removing it detaches only that slot.
+- Draft -> "Include with the post": switching the **Session card** off removes the stored card and
+  drops the first slide (Preview and Photos agree); switching it back on regenerates it. **AI
+  scores on the session card** (interviews with a review) draws the overall grade and the five
+  skill percentages on it.
 - Recordings page: unfinished pipelines can be resumed; delete removes the folder.
 - Publish a draft; the post page in the desktop and on the web render the runtime chart, code and
   video. A private account's public post is invisible to a stranger and visible to an accepted

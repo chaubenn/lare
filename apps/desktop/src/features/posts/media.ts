@@ -30,6 +30,8 @@ export interface FeedImage {
 /** Signed media URLs the feed card needs on top of the raw row. */
 export interface PostDecoration {
   thumbnail_url: string | null;
+  /** Poster for the summary video (`demo_video_id`), when there is one. */
+  demo_thumbnail_url: string | null;
   images: FeedImage[];
   /** Author-supplied cover, or null when the generated session card is used instead. */
   cover_url: string | null;
@@ -41,6 +43,7 @@ interface DecoratableRow {
   id: string;
   cover_media_id: string | null;
   videos: { thumbnail_path: string | null } | null;
+  demo_videos?: { thumbnail_path: string | null } | null;
   post_media:
     | {
         id: string;
@@ -84,7 +87,7 @@ export async function decoratePosts<T extends DecoratableRow>(
   const [thumbs, media] = await Promise.all([
     signPaths(
       "thumbnails",
-      rows.map((r) => r.videos?.thumbnail_path ?? ""),
+      rows.flatMap((r) => [r.videos?.thumbnail_path ?? "", r.demo_videos?.thumbnail_path ?? ""]),
     ),
     signPaths(
       POST_MEDIA_BUCKET,
@@ -106,6 +109,9 @@ export async function decoratePosts<T extends DecoratableRow>(
       ...row,
       thumbnail_url: row.videos?.thumbnail_path
         ? (thumbs.get(row.videos.thumbnail_path) ?? null)
+        : null,
+      demo_thumbnail_url: row.demo_videos?.thumbnail_path
+        ? (thumbs.get(row.demo_videos.thumbnail_path) ?? null)
         : null,
       images,
       cover_url: images.find((i) => i.id === row.cover_media_id)?.url ?? null,

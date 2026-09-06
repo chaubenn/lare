@@ -45,6 +45,17 @@ export const AiReviewSchema = z.object({
 });
 export type AiReview = z.infer<typeof AiReviewSchema>;
 
+export type AiScoreKey = keyof AiReview["scores"];
+
+/** Display names for the five skill scores, in the order every surface renders them. */
+export const AI_SCORE_LABELS: Record<AiScoreKey, string> = {
+  communication: "Communication",
+  problem_solving: "Problem solving",
+  code_quality: "Code quality",
+  speed: "Speed",
+  correctness: "Correctness",
+};
+
 export const AI_REVIEW_JSON_SCHEMA_NAME = "lare_interview_review";
 
 /** JSON schema for OpenAI `text.format = { type: "json_schema", strict: true, ... }`. */

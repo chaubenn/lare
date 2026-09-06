@@ -85,7 +85,7 @@ export function useFollowState(targetId: string | null | undefined) {
  * shared PostCard renders identically in both places.
  */
 const userPostsSelect =
-  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url, is_private), sessions!posts_session_id_fkey(id, kind, scope, status, active_ms, started_at, ended_at, session_problems(id, slug, title, difficulty, active_ms, opened_at, submissions(id, accepted, lang, runtime_ms, runtime_display, runtime_percentile, memory_mb, memory_display, memory_percentile, submitted_at))), videos!posts_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id), post_media!post_media_post_id_fkey(id, storage_path, kind, width, height, caption, position, created_at)" as const;
+  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url, is_private), sessions!posts_session_id_fkey(id, kind, scope, status, active_ms, started_at, ended_at, session_problems(id, slug, title, difficulty, active_ms, opened_at, submissions(id, accepted, lang, runtime_ms, runtime_display, runtime_percentile, memory_mb, memory_display, memory_percentile, submitted_at))), videos!posts_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id), demo_videos:videos!posts_demo_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id), post_media!post_media_post_id_fkey(id, storage_path, kind, width, height, caption, position, created_at)" as const;
 
 function userPostsQuery(userId: string) {
   return supabase

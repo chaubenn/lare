@@ -241,10 +241,14 @@ export type Database = {
           comment_count: number
           cover_media_id: string | null
           created_at: string
+          demo_video_id: string | null
           id: string
           include_ai_insights: boolean
+          include_og_card: boolean
           like_count: number
+          og_show_ai_scores: boolean
           published_at: string | null
+          show_demo_video: boolean
           show_video: boolean
           session_id: string | null
           status: Database["public"]["Enums"]["post_status"]
@@ -260,10 +264,14 @@ export type Database = {
           comment_count?: number
           cover_media_id?: string | null
           created_at?: string
+          demo_video_id?: string | null
           id?: string
           include_ai_insights?: boolean
+          include_og_card?: boolean
           like_count?: number
+          og_show_ai_scores?: boolean
           published_at?: string | null
+          show_demo_video?: boolean
           show_video?: boolean
           session_id?: string | null
           status?: Database["public"]["Enums"]["post_status"]
@@ -279,10 +287,14 @@ export type Database = {
           comment_count?: number
           cover_media_id?: string | null
           created_at?: string
+          demo_video_id?: string | null
           id?: string
           include_ai_insights?: boolean
+          include_og_card?: boolean
           like_count?: number
+          og_show_ai_scores?: boolean
           published_at?: string | null
+          show_demo_video?: boolean
           show_video?: boolean
           session_id?: string | null
           status?: Database["public"]["Enums"]["post_status"]
@@ -299,6 +311,13 @@ export type Database = {
             columns: ["cover_media_id"]
             isOneToOne: false
             referencedRelation: "post_media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_demo_video_id_fkey"
+            columns: ["demo_video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
             referencedColumns: ["id"]
           },
           {

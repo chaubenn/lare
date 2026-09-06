@@ -85,8 +85,12 @@ export default async function PostPage({ params }: Params) {
           title={post.title ?? ""}
           body={post.body ?? ""}
           showVideo={post.show_video}
+          showDemoVideo={post.show_demo_video}
           includeAiInsights={post.include_ai_insights}
+          includeOgCard={post.include_og_card}
+          ogShowAiScores={post.og_show_ai_scores}
           hasVideo={Boolean(post.videos) && post.video_kind !== "none"}
+          hasDemoVideo={Boolean(post.demo_videos)}
           isInterview={session?.kind === "interview"}
           coverMediaId={post.cover_media_id}
           images={post.images}

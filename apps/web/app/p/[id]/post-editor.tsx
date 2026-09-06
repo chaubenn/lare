@@ -31,8 +31,12 @@ export interface PostEditorProps {
   body: string;
   visibility: "public" | "private";
   showVideo: boolean;
+  showDemoVideo: boolean;
   includeAiInsights: boolean;
+  includeOgCard: boolean;
+  ogShowAiScores: boolean;
   hasVideo: boolean;
+  hasDemoVideo: boolean;
   isInterview: boolean;
   coverMediaId: string | null;
   images: PostImage[];
@@ -55,7 +59,10 @@ export function PostEditor(props: PostEditorProps) {
   const [body, setBody] = useState(props.body);
   const [visibility, setVisibility] = useState(props.visibility);
   const [showVideo, setShowVideo] = useState(props.showVideo);
+  const [showDemoVideo, setShowDemoVideo] = useState(props.showDemoVideo);
   const [insights, setInsights] = useState(props.includeAiInsights);
+  const [ogCard, setOgCard] = useState(props.includeOgCard);
+  const [ogScores, setOgScores] = useState(props.ogShowAiScores);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -141,7 +148,10 @@ export function PostEditor(props: PostEditorProps) {
               body,
               visibility,
               show_video: showVideo,
+              show_demo_video: showDemoVideo,
               include_ai_insights: insights,
+              include_og_card: ogCard,
+              og_show_ai_scores: ogScores,
               cover_media_id: props.coverMediaId,
             }),
           props.onDone,
@@ -193,6 +203,16 @@ export function PostEditor(props: PostEditorProps) {
         </select>
       </div>
 
+      {props.hasDemoVideo && (
+        <Check
+          id="edit-show-summary-video"
+          checked={showDemoVideo}
+          onChange={setShowDemoVideo}
+          label="Show the summary video on this post"
+          description="Adds the debrief clip to the carousel, ahead of the full recording."
+        />
+      )}
+
       {props.hasVideo && (
         <Check
           id="edit-show-video"
@@ -203,6 +223,7 @@ export function PostEditor(props: PostEditorProps) {
         />
       )}
 
+      {/* The optional extras, together: what the author chooses to send along with the post. */}
       {props.isInterview && (
         <Check
           id="edit-insights"
@@ -210,6 +231,25 @@ export function PostEditor(props: PostEditorProps) {
           onChange={setInsights}
           label="Include AI insights"
           description="Viewers can see the interview grade, timestamped moments and suggestions."
+        />
+      )}
+
+      <Check
+        id="edit-og-card"
+        checked={ogCard}
+        onChange={setOgCard}
+        label="Include the session card"
+        description="Leads the post and is what a shared link unfurls to."
+      />
+
+      {props.isInterview && (
+        <Check
+          id="edit-og-scores"
+          checked={ogScores}
+          onChange={setOgScores}
+          disabled={!ogCard}
+          label="Show AI scores on the session card"
+          description="Draws the overall grade and the five skill percentages on the card."
         />
       )}
 
@@ -350,19 +390,22 @@ function Check({
   onChange,
   label,
   description,
+  disabled,
 }: {
   id: string;
   checked: boolean;
   onChange: (value: boolean) => void;
   label: string;
   description?: string;
+  disabled?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-2">
+    <div className={cn("flex items-start gap-2", disabled && "opacity-50")}>
       <input
         id={id}
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="mt-0.5 size-4 rounded border-zinc-700 bg-zinc-900 accent-zinc-200"
       />

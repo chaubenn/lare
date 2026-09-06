@@ -19,6 +19,10 @@
 // Drafts: an author may snapshot their own unpublished post so the editor can preview the card
 // they are about to publish. Everyone else still gets 409 until the post is published — and RLS
 // only ever shows a draft to its owner, so the visibility check above already covers it.
+//
+// Opting out: a post with `include_og_card = false` never gets a card, and an existing one is
+// removed (row, object and the cover pointer if it was the cover). The result is "skipped", so
+// the same call is what both generates and cleans up after the toggle in the editor.
 
 import { envOptional, HttpError, handler, json, readJson } from "../_shared/http.ts";
 import { adminClient, bearerJwt, optionalUser } from "../_shared/supabase.ts";
@@ -59,6 +63,32 @@ interface PostRow {
   user_id: string;
   status: string;
   cover_media_id: string | null;
+  include_og_card: boolean;
+}
+
+/** Drop a stored card: the cover pointer first (FK), then the row, then the object. */
+async function removeCard(
+  admin: Admin,
+  post: PostRow,
+  media: { id: string; storage_path: string },
+): Promise<void> {
+  if (post.cover_media_id === media.id) {
+    const { error } = await admin
+      .from("posts")
+      .update({ cover_media_id: null })
+      .eq("id", post.id)
+      .eq("cover_media_id", media.id);
+    if (error) console.warn(`clearing the card cover failed: ${error.message}`);
+  }
+  const { error: deleteError } = await admin.from("post_media").delete().eq("id", media.id);
+  if (deleteError) {
+    console.warn(`removing the card row failed: ${deleteError.message}`);
+    return;
+  }
+  const { error: objectError } = await admin.storage
+    .from("post-media")
+    .remove([media.storage_path]);
+  if (objectError) console.warn(`removing the card object failed: ${objectError.message}`);
 }
 
 /** Attach the card as the post's cover, but never over a cover the author picked themselves. */
@@ -81,7 +111,7 @@ async function snapshotPost(
 ): Promise<"created" | "refreshed" | "exists" | "skipped"> {
   const { data: post } = await admin
     .from("posts")
-    .select("id, user_id, status, cover_media_id")
+    .select("id, user_id, status, cover_media_id, include_og_card")
     .eq("id", postId)
     .maybeSingle();
   if (!post) throw new HttpError("Post not found", 404);
@@ -93,10 +123,16 @@ async function snapshotPost(
 
   const { data: existing } = await admin
     .from("post_media")
-    .select("id")
+    .select("id, storage_path")
     .eq("post_id", postId)
     .eq("kind", "og")
     .maybeSingle();
+  if (!owner.include_og_card) {
+    if (existing) {
+      await removeCard(admin, owner, existing as { id: string; storage_path: string });
+    }
+    return "skipped";
+  }
   if (existing && !force) {
     // The card is already there, but the post may have lost its cover since (an edit that
     // cleared it, or a draft saved from an editor that had not seen the card yet).

@@ -1,5 +1,5 @@
 // POST { videoId } — owner-only. Deletes the Bunny video, the thumbnail object and
-// the `videos` row (posts.video_id becomes null via ON DELETE SET NULL).
+// the `videos` row (posts.video_id / posts.demo_video_id become null via ON DELETE SET NULL).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { deleteVideo } from "../_shared/bunny.ts";
 import { HttpError, handler, json, readJson } from "../_shared/http.ts";
@@ -27,6 +27,8 @@ Deno.serve(
         .remove([video.thumbnail_path])
         .catch(() => undefined);
     }
+    // The FK already nulls both slots on delete; this is only about `video_kind`, which
+    // describes the main slot and would otherwise still claim there is a video there.
     await admin
       .from("posts")
       .update({ video_id: null, video_kind: "none" })

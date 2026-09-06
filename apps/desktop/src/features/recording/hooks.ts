@@ -11,6 +11,7 @@ import {
 } from "@/lib/recorder";
 import { supabase } from "@/lib/supabase";
 import { inTauri, useTauriEvent } from "@/lib/tauri";
+import type { VideoSlot } from "./pipeline";
 import { getAllRecordingMeta } from "./recordingStore";
 
 const IDLE: RecorderStatus = {
@@ -80,6 +81,8 @@ export function useWhisperModels() {
 }
 
 export interface RecordingWithMeta extends CompletedRecording {
+  /** Which video slot of `postId` this take fills. */
+  slot: VideoSlot;
   videoId: string | null;
   uploaded: boolean;
   transcribed: boolean;
@@ -98,6 +101,7 @@ export function useRecordings() {
         const m = meta[r.recordingId];
         return {
           ...r,
+          slot: m?.slot ?? "main",
           videoId: m?.videoId ?? null,
           uploaded: m?.uploaded ?? false,
           transcribed: m?.transcribed ?? false,

@@ -31,7 +31,13 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useInterviewReview } from "@/features/posts/queries";
 import { createJob, isActive, updateJob, useJobs } from "@/features/recording/jobs";
-import { exportAndPublish, postForSession, renderStudio } from "@/features/recording/pipeline";
+import {
+  exportAndPublish,
+  postForSession,
+  renderStudio,
+  type VideoSlot,
+} from "@/features/recording/pipeline";
+import { getRecordingMeta } from "@/features/recording/recordingStore";
 import {
   type CompletedRecording,
   type Corner,
@@ -103,12 +109,16 @@ function useRecording(recordingId: string) {
     queryFn: async (): Promise<{
       recording: CompletedRecording;
       info: StudioProjectInfo;
+      slot: VideoSlot;
     } | null> => {
       const list = await recorder.list();
       const recording = list.find((r) => r.recordingId === recordingId);
       if (!recording) return null;
-      const info = await recorder.studioProjectInfo(recording.projectPath);
-      return { recording, info };
+      const [info, meta] = await Promise.all([
+        recorder.studioProjectInfo(recording.projectPath),
+        getRecordingMeta(recording.recordingId),
+      ]);
+      return { recording, info, slot: meta?.slot ?? ("main" as VideoSlot) };
     },
   });
 }
@@ -172,6 +182,7 @@ export function StudioEditorPage() {
       key={recordingId}
       recording={loaded.data.recording}
       info={loaded.data.info}
+      slot={loaded.data.slot}
       postParam={search.get("post")}
     />
   );
@@ -180,10 +191,13 @@ export function StudioEditorPage() {
 function StudioEditor({
   recording,
   info,
+  slot,
   postParam,
 }: {
   recording: CompletedRecording;
   info: StudioProjectInfo;
+  /** Which video slot of the attached post this take fills (chosen when recording started). */
+  slot: VideoSlot;
   postParam: string | null;
 }) {
   const { userId } = useUser();
@@ -367,6 +381,7 @@ function StudioEditor({
           edit,
           userId,
           postId: attach.data?.postId ?? null,
+          slot,
           title,
           videoKind: isHighlights ? "highlights" : "full",
           queryClient,

@@ -21,6 +21,7 @@ import { useHotkey } from "@/lib/hotkeys";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 import { DemoVideoPanel } from "./DemoVideoPanel";
+import { PostExtrasPanel } from "./PostExtrasPanel";
 import { type Draft, useDeleteDraft, useDraft, usePublishDraft, useSaveDraft } from "./queries";
 
 export function DraftEditorPage() {
@@ -92,6 +93,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const [body, setBody] = useState(draft.body ?? "");
   const [visibility, setVisibility] = useState<Post["visibility"]>(draft.visibility);
   const [showVideo, setShowVideo] = useState(draft.show_video);
+  const [showDemoVideo, setShowDemoVideo] = useState(draft.show_demo_video);
   const [coverMediaId, setCoverMediaId] = useState<string | null>(draft.cover_media_id);
   const [previewing, setPreviewing] = useState(false);
 
@@ -99,13 +101,25 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const problems = session?.session_problems ?? [];
   const busy = publish.isPending || save.isPending || remove.isPending;
   const hasVideo = Boolean(draft.video_id) && draft.video_kind !== "none";
+  const hasDemoVideo = Boolean(draft.demo_video_id);
   // Photos are written as soon as they are uploaded; the rest of the post is saved by the form.
-  const edit = { id: draft.id, title, body, visibility, showVideo, coverMediaId };
+  const edit = {
+    id: draft.id,
+    title,
+    body,
+    visibility,
+    showVideo,
+    showDemoVideo,
+    coverMediaId,
+  };
   const slides = usePreviewSlides({
     postId: draft.id,
     videoId: draft.video_id,
     videoKind: draft.video_kind,
     showVideo,
+    demoVideoId: draft.demo_video_id,
+    showDemoVideo,
+    includeOgCard: draft.include_og_card,
     coverMediaId,
     session,
   });
@@ -226,6 +240,15 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 <option value="private">Only me</option>
               </Select>
             </div>
+            {hasDemoVideo ? (
+              <Toggle
+                id="draft-show-summary-video"
+                checked={showDemoVideo}
+                onChange={setShowDemoVideo}
+                label="Show the summary video on the post"
+                description="Adds the debrief clip to the carousel, ahead of the full recording."
+              />
+            ) : null}
             {hasVideo ? (
               <Toggle
                 id="draft-show-video"
@@ -274,6 +297,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
 
         <aside className="space-y-4">
           <DemoVideoPanel draft={draft} />
+          <PostExtrasPanel draft={draft} />
           <PostMediaPanel
             postId={draft.id}
             userId={userId}

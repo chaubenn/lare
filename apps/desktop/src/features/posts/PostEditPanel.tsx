@@ -31,22 +31,27 @@ export function PostEditPanel({
   const [body, setBody] = useState(post.body ?? "");
   const [visibility, setVisibility] = useState<Post["visibility"]>(post.visibility);
   const [showVideo, setShowVideo] = useState(post.show_video);
+  const [showDemoVideo, setShowDemoVideo] = useState(post.show_demo_video);
   const [coverMediaId, setCoverMediaId] = useState<string | null>(post.cover_media_id);
   const [previewing, setPreviewing] = useState(false);
 
   const hasVideo = Boolean(post.video_id) && post.video_kind !== "none";
+  const hasDemoVideo = Boolean(post.demo_video_id);
   const slides = usePreviewSlides({
     postId: post.id,
     videoId: post.video_id,
     videoKind: post.video_kind,
     showVideo,
+    demoVideoId: post.demo_video_id,
+    showDemoVideo,
+    includeOgCard: post.include_og_card,
     coverMediaId,
     session: post.sessions,
   });
 
   const save = () => {
     update.mutate(
-      { id: post.id, title, body, visibility, showVideo, coverMediaId },
+      { id: post.id, title, body, visibility, showVideo, showDemoVideo, coverMediaId },
       {
         onSuccess: () => {
           toast({ title: "Post updated", variant: "success" });
@@ -96,6 +101,15 @@ export function PostEditPanel({
             <option value="private">Only me</option>
           </Select>
         </div>
+        {hasDemoVideo ? (
+          <Toggle
+            id="post-show-summary-video"
+            checked={showDemoVideo}
+            onChange={setShowDemoVideo}
+            label="Show the summary video on the post"
+            description="Adds the debrief clip to the carousel, ahead of the full recording."
+          />
+        ) : null}
         {hasVideo ? (
           <Toggle
             id="post-show-video"

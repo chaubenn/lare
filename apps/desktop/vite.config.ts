@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { fileURLToPath, URL } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -5,9 +6,19 @@ import { defineConfig } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
 
+// The shipped version, baked in at build time so the UI can show it without a round trip to
+// Rust (and so it still reads correctly in a plain browser). package.json, tauri.conf.json,
+// src-tauri/Cargo.toml and the extension's package.json are all kept on the same number.
+const { version: APP_VERSION } = createRequire(import.meta.url)("./package.json") as {
+  version: string;
+};
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

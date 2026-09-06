@@ -10,6 +10,7 @@ import { useUser } from "@/features/auth/AuthProvider";
 import { errorMessage } from "@/lib/supabase";
 import { useTauriEvent } from "@/lib/tauri";
 import { processInterview, publishInstantDemo } from "./pipeline";
+import { getRecordingMeta } from "./recordingStore";
 
 export function useRecordingEvents(): void {
   const { userId } = useUser();
@@ -41,16 +42,23 @@ export function useRecordingEvents(): void {
       return;
     }
     if (recording.mode === "instant") {
-      publishInstantDemo({
-        recording,
-        userId,
-        postId: recording.postId,
-        title: "Demo video",
-        queryClient,
-      })
+      // Which slot the author was filling is only known here (the recorder manifest carries the
+      // post, not the slot), so read it back from the store the panel wrote it to.
+      getRecordingMeta(recording.recordingId)
+        .then((meta) => {
+          const slot = meta?.slot ?? "main";
+          return publishInstantDemo({
+            recording,
+            userId,
+            postId: recording.postId,
+            slot,
+            title: slot === "demo" ? "Summary video" : "Demo video",
+            queryClient,
+          });
+        })
         .then(() => {
           toast({
-            title: "Demo video uploaded",
+            title: "Video uploaded",
             description: "Bunny is encoding it now; the player appears when that finishes.",
             variant: "success",
           });

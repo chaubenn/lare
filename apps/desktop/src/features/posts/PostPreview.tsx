@@ -1,10 +1,10 @@
 import { formatLocalTimestamp } from "@lare/shared";
-import type { Post } from "@lare/supabase-types";
+import type { Post, Video } from "@lare/supabase-types";
 import { Lock, X } from "lucide-react";
 import { useEffect } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { useUser } from "@/features/auth/AuthProvider";
-import { PostSlides, type SlidePost } from "@/features/feed/PostSlides";
+import { PostSlides, type SlidePost, type SlideVideo } from "@/features/feed/PostSlides";
 import { usePostMedia } from "@/features/posts/media";
 import { useVideo } from "@/features/recording/hooks";
 
@@ -117,7 +117,7 @@ export function PostPreview({
           </div>
         </article>
 
-        {!slides.og_url && !slides.cover_url && (
+        {slides.include_og_card && !slides.og_url && !slides.cover_url && (
           <p className="text-xs text-zinc-500">
             No session card yet — use the refresh button on the session card in Photos to generate
             one. Publishing always regenerates it.
@@ -138,6 +138,9 @@ export function usePreviewSlides({
   videoId,
   videoKind,
   showVideo,
+  demoVideoId,
+  showDemoVideo,
+  includeOgCard,
   coverMediaId,
   session,
 }: {
@@ -145,36 +148,47 @@ export function usePreviewSlides({
   videoId: string | null;
   videoKind: Post["video_kind"];
   showVideo: boolean;
+  demoVideoId: string | null;
+  showDemoVideo: boolean;
+  includeOgCard: boolean;
   coverMediaId: string | null;
   session: SlidePost["sessions"];
 }): SlidePost {
   const media = usePostMedia(postId);
   const video = useVideo(videoId);
+  const demo = useVideo(demoVideoId);
 
   const rows = media.data ?? [];
   const images = rows.flatMap((row) =>
     row.kind !== "og" && row.url ? [{ id: row.id, url: row.url, caption: row.caption }] : [],
   );
-  const clip = video.data;
 
   return {
     id: postId,
     video_kind: videoKind,
     show_video: showVideo,
+    show_demo_video: showDemoVideo,
+    include_og_card: includeOgCard,
     cover_media_id: coverMediaId,
     // Null when the cover is the session card (or unset): the deck falls back to `og_url`.
     cover_url: images.find((image) => image.id === coverMediaId)?.url ?? null,
     og_url: rows.find((row) => row.kind === "og")?.url ?? null,
     thumbnail_url: null,
+    demo_thumbnail_url: null,
     images,
-    videos: clip
-      ? {
-          id: clip.id,
-          status: clip.status,
-          bunny_video_id: clip.bunny_video_id,
-          duration_ms: clip.duration_ms,
-        }
-      : null,
+    videos: toSlideVideo(video.data),
+    demo_videos: toSlideVideo(demo.data),
     sessions: session,
   };
+}
+
+function toSlideVideo(clip: Video | null | undefined): SlideVideo | null {
+  return clip
+    ? {
+        id: clip.id,
+        status: clip.status,
+        bunny_video_id: clip.bunny_video_id,
+        duration_ms: clip.duration_ms,
+      }
+    : null;
 }

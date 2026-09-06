@@ -1,4 +1,5 @@
 import {
+  AI_SCORE_LABELS,
   type AiReview,
   AiReviewSchema,
   CodeIterationSchema,
@@ -67,14 +68,10 @@ export type ReviewView = {
   model: string;
 };
 
-const SCORE_LABELS: Record<string, string> = {
-  communication: "Communication",
-  problem_solving: "Problem solving",
-  code_quality: "Code quality",
-  speed: "Speed",
-  correctness: "Correctness",
-};
-const SCORE_ORDER = ["communication", "problem_solving", "code_quality", "speed", "correctness"];
+// One source of truth for the five skill names and the order every surface renders them in:
+// this view, the desktop review section and the AI strip on the session card.
+const SCORE_LABELS: Record<string, string> = AI_SCORE_LABELS;
+const SCORE_ORDER = Object.keys(AI_SCORE_LABELS);
 
 export function toReviewView(row: InterviewReview): ReviewView {
   const candidate = {

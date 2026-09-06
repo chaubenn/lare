@@ -78,7 +78,10 @@ export interface PostEdit {
   body: string;
   visibility: "public" | "private";
   show_video: boolean;
+  show_demo_video: boolean;
   include_ai_insights: boolean;
+  include_og_card: boolean;
+  og_show_ai_scores: boolean;
   cover_media_id: string | null;
 }
 
@@ -97,7 +100,10 @@ export async function updatePost(postId: string, edit: PostEdit): Promise<Action
       body: body.length > 0 ? body : null,
       visibility: edit.visibility,
       show_video: edit.show_video,
+      show_demo_video: edit.show_demo_video,
       include_ai_insights: edit.include_ai_insights,
+      include_og_card: edit.include_og_card,
+      og_show_ai_scores: edit.og_show_ai_scores,
       cover_media_id: edit.cover_media_id,
     })
     .eq("id", postId);

@@ -13,7 +13,8 @@ export const FEED_PAGE_SIZE = 10;
 /** Columns needed by `PostCard`. Keep it lean: no code, no distributions, no descriptions. */
 export const POST_CARD_SELECT = `
   id, user_id, title, body, status, visibility, video_id, video_kind, include_ai_insights,
-  show_video, cover_media_id, like_count, comment_count,
+  show_video, demo_video_id, show_demo_video, include_og_card, og_show_ai_scores,
+  cover_media_id, like_count, comment_count,
   published_at, created_at, updated_at, session_id,
   profiles!posts_user_id_fkey(handle, display_name, avatar_url, is_private),
   sessions!posts_session_id_fkey(id, kind, scope, status, active_ms, started_at, ended_at,
@@ -21,6 +22,7 @@ export const POST_CARD_SELECT = `
       submissions(id, accepted, lang, runtime_ms, runtime_display, runtime_percentile,
         memory_mb, memory_display, memory_percentile, submitted_at))),
   videos!posts_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id),
+  demo_videos:videos!posts_demo_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id),
   post_media!post_media_post_id_fkey(id, storage_path, kind, width, height, caption, position, created_at)
 ` as const;
 
@@ -30,6 +32,7 @@ export const POST_DETAIL_SELECT = `
   profiles!posts_user_id_fkey(id, handle, display_name, avatar_url, is_private),
   sessions!posts_session_id_fkey(*, session_problems(*, submissions(*))),
   videos!posts_video_id_fkey(*),
+  demo_videos:videos!posts_demo_video_id_fkey(*),
   post_media!post_media_post_id_fkey(*)
 ` as const;
 
@@ -55,6 +58,8 @@ export interface PostImage {
 /** Everything the card and the post page need on top of the raw row. */
 export interface PostSocial {
   thumbnail_url: string | null;
+  /** Poster for the summary video (`demo_video_id`), when there is one. */
+  demo_thumbnail_url: string | null;
   images: PostImage[];
   /** Author-supplied cover, or null when the generated session card is used instead. */
   cover_url: string | null;
@@ -100,6 +105,7 @@ type DecoratableRow = {
   id: string;
   cover_media_id: string | null;
   videos: { thumbnail_path: string | null } | null;
+  demo_videos?: { thumbnail_path: string | null } | null;
   post_media: MediaRow[] | null;
 };
 
@@ -124,7 +130,11 @@ export async function decoratePosts<T extends DecoratableRow>(
     signPaths(
       supabase,
       "thumbnails",
-      rows.map((r) => r.videos?.thumbnail_path ?? "").filter(Boolean),
+      rows.flatMap((r) =>
+        [r.videos?.thumbnail_path, r.demo_videos?.thumbnail_path].filter((p): p is string =>
+          Boolean(p),
+        ),
+      ),
     ),
     signPaths(
       supabase,
@@ -152,6 +162,9 @@ export async function decoratePosts<T extends DecoratableRow>(
       ...row,
       thumbnail_url: row.videos?.thumbnail_path
         ? (thumbs.get(row.videos.thumbnail_path) ?? null)
+        : null,
+      demo_thumbnail_url: row.demo_videos?.thumbnail_path
+        ? (thumbs.get(row.demo_videos.thumbnail_path) ?? null)
         : null,
       images,
       cover_url: images.find((i) => i.id === row.cover_media_id)?.url ?? null,
