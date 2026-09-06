@@ -2,18 +2,28 @@
  * Facecam preview (`?window=camera`): a draggable, always-on-top circle showing the webcam.
  * In instant mode it is captured as part of the screen; in studio mode it is a preview only.
  * The camera is opened with getUserMedia so it works without any Rust plumbing.
+ *
+ * This window outlives the recording that opened it — it is hidden, not closed — so the stream is
+ * tied to `camera:active` from Rust rather than to the component's lifetime. Without that the
+ * camera light would stay on between takes.
  */
 
 import { cn } from "@lare/ui";
 import { useEffect, useRef, useState } from "react";
 import { recorder } from "@/lib/recorder";
+import { useTauriEvent } from "@/lib/tauri";
 
 export function CameraWindow() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [mirror, setMirror] = useState(true);
+  // The window is only ever built to be shown, so the first take needs no event to start.
+  const [active, setActive] = useState(true);
+
+  useTauriEvent("camera:active", setActive);
 
   useEffect(() => {
+    if (!active) return;
     let stream: MediaStream | null = null;
     let cancelled = false;
     (async () => {
@@ -41,8 +51,9 @@ export function CameraWindow() {
     return () => {
       cancelled = true;
       if (stream) for (const t of stream.getTracks()) t.stop();
+      if (videoRef.current) videoRef.current.srcObject = null;
     };
-  }, []);
+  }, [active]);
 
   return (
     <div className="flex h-full w-full items-center justify-center p-1">

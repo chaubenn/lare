@@ -24,6 +24,7 @@ const IDLE: RecorderStatus = {
   projectPath: null,
   postId: null,
   message: null,
+  recordedMs: null,
 };
 
 /** Current recorder state, kept fresh by `recording:state` events. */

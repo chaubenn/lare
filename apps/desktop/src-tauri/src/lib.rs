@@ -138,6 +138,9 @@ async fn forward_server_events(app: AppHandle, mut events: UnboundedReceiver<Ser
     }
 }
 
+/// Set once the app has been told to quit, so the window teardown does not ask twice.
+static QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     init_tracing();
@@ -192,9 +195,9 @@ pub fn run() {
             commands::recordings_list,
             commands::recording_delete,
             commands::open_recorder_window,
-            commands::close_recorder_window,
+            commands::hide_recorder_window,
             commands::open_camera_window,
-            commands::close_camera_window,
+            commands::hide_camera_window,
             commands::resize_camera_window,
             commands::focus_main,
             commands::media_info,
@@ -220,6 +223,15 @@ pub fn run() {
             backend_ctx.set_recording_backend(Some(Arc::new(recorder::CapRecordingBackend::new(
                 recorder.clone(),
             ))));
+            // Anything a killed process left half-written is finished before the frontend asks
+            // for the list, so an interrupted take shows up in Recordings like any other.
+            let recovering = recorder.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let recovered = recovering.recover_incomplete();
+                if recovered > 0 {
+                    info!(recovered, "recovered recordings from a previous run");
+                }
+            });
             app.manage(recorder);
 
             // Deep links. macOS registers the scheme via the bundle's Info.plist; Windows/Linux
@@ -253,8 +265,23 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if matches!(event, tauri::WindowEvent::Focused(_)) {
-                crate::windows::repromote_overlays(window.app_handle());
+            match event {
+                tauri::WindowEvent::Focused(_) => {
+                    crate::windows::repromote_overlays(window.app_handle());
+                }
+                // The overlays are only ever hidden while the app runs (closing one mid-recording
+                // crashes it), so the main window is no longer the last window standing: without
+                // this the app would linger after its window went away.
+                tauri::WindowEvent::Destroyed if window.label() == "main" => {
+                    // Guarded: the main window is also destroyed on the way out of an exit we
+                    // asked for, and asking again from inside that teardown is not welcome.
+                    if !QUITTING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                        let app = window.app_handle();
+                        crate::windows::destroy_overlays(app);
+                        app.exit(0);
+                    }
+                }
+                _ => {}
             }
         })
         .run(tauri::generate_context!())

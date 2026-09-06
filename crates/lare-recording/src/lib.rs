@@ -537,6 +537,35 @@ pub fn remux_studio_if_needed(project_path: &Path) -> anyhow::Result<bool> {
         .map_err(|e| anyhow!("remuxing studio recording: {e}"))
 }
 
+/// Finish a project from whatever is on disk, without the actor that wrote it.
+///
+/// [`ActiveRecording::stop`] does this with the actor's own completion handle; this is the same
+/// work for the two cases where that handle is gone: `stop` itself failed, and the process was
+/// killed mid-recording. Instant projects are muxed into `content/output.mp4` (returned); studio
+/// projects are remuxed into the per-segment `display.mp4` files the exporter reads, and have no
+/// single output until [`export_studio`] runs.
+pub fn finalize_project(mode: RecordingMode, project_path: &Path) -> anyhow::Result<Option<PathBuf>> {
+    match mode {
+        RecordingMode::Instant => {
+            let content = project_path.join("content");
+            let output = content.join("output.mp4");
+            if !output.exists() {
+                cap_recording::recovery::RecoveryManager::finalize_instant_output(
+                    &content.join("display"),
+                    &content.join("audio"),
+                    &output,
+                )
+                .map_err(|e| anyhow!("finalizing instant recording: {e}"))?;
+            }
+            Ok(output.exists().then_some(output))
+        }
+        RecordingMode::Studio => {
+            remux_studio_if_needed(project_path)?;
+            Ok(None)
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Export (studio projects)
 // ---------------------------------------------------------------------------

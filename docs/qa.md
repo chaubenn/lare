@@ -49,6 +49,13 @@ the CI workflow runs all of it on macOS and Windows. The items below are the man
   drops the first slide (Preview and Photos agree); switching it back on regenerates it. **AI
   scores on the session card** (interviews with a review) draws the overall grade and the five
   skill percentages on it.
+- Stopping never takes the app with it: stop an instant take from the pill, stop a studio take,
+  and end an interview from the extension while the pill is still on screen. In each case the pill
+  and the camera bubble leave the screen, the camera light goes out, and the app is still running.
+- Pause a studio take for a while, resume, then stop: the pill's timer counts only the recorded
+  stretches, and the editor's clips add up to the same length.
+- Force-quit mid-recording (Activity Monitor), reopen: the take is finished on launch and appears
+  on the Recordings page rather than being lost.
 - Recordings page: unfinished pipelines can be resumed; delete removes the folder.
 - Publish a draft; the post page in the desktop and on the web render the runtime chart, code and
   video. A private account's public post is invisible to a stranger and visible to an accepted

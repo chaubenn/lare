@@ -90,8 +90,19 @@ already in media time; edit events (wall-clock epoch from Monaco) and submission
 2. `Recorder` (`apps/desktop/src-tauri/src/recorder.rs`) starts Cap's **instant** actor (single
    MP4; facecam preview window is captured as part of the screen) or **studio** actor (display,
    camera and mic tracks per pause/resume clip). Overlay windows: recorder pill and camera preview.
+   Both are built once and thereafter only shown and hidden — the pill's stop button lives inside
+   its own webview, and destroying that webview under an in-flight `recording_stop` aborts the
+   process. `destroy_overlays` closes them when the main window goes, which is also what quits the
+   app now that the overlays outlive every recording.
 3. On stop, studio projects are remuxed (`RecoveryManager::remux_if_needed`) so every clip has a
    `display.mp4`; the `recording:completed` event hands the recording to the React pipeline.
+   `stop` and `cancel` are serialised on one mutex and idempotent — the pill's stop button and the
+   extension's `session.end` race on every interview ended from the browser, and the second caller
+   gets the first one's payload rather than an error. The completed manifest
+   (`lare-recording.json`) is written before anything else can fail; if Cap's own stop errors,
+   `lare_recording::finalize_project` finishes the take from the fragments on disk instead. The
+   same call recovers projects a killed process abandoned (a `lare-started.json` with no completed
+   manifest) at the next launch, so they simply turn up in Recordings.
 4. `features/recording/pipeline.ts`:
    - instant demo -> `publishVideo` (create Bunny video via `bunny-create-upload`, thumbnail to
      Storage, TUS upload from Rust with progress events, attach to the draft);
@@ -104,6 +115,9 @@ already in media time; edit events (wall-clock epoch from Monaco) and submission
 5. Bunny calls `bunny-webhook` (HMAC) as it encodes; `videos.status` flips to `ready` and the web
    and desktop players pick it up over Realtime. Playback URLs come from `bunny-playback-token`
    after an RLS visibility check.
+
+The recorder reports `recordedMs` — wall clock less every paused stretch — with each state and
+completed payload, so the pill's timer counts the video rather than the sitting.
 
 Bookkeeping for resumable pipelines is in the Tauri store (`recordings.json`), surfaced on the
 Recordings page. It also records which of the post's two video slots a take was started for — the

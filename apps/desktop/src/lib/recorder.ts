@@ -61,6 +61,11 @@ export interface RecorderStatus {
   projectPath: string | null;
   postId: string | null;
   message: string | null;
+  /**
+   * Media captured so far, excluding paused stretches — the length of the video you will get,
+   * as of the moment this payload was built. `null` when nothing is recording.
+   */
+  recordedMs: number | null;
 }
 
 export interface CompletedRecording {
@@ -75,6 +80,8 @@ export interface CompletedRecording {
   endedAt: number;
   postId: string | null;
   facecam: boolean;
+  /** Captured length in ms, excluding pauses. `endedAt - startedAt` for recovered recordings. */
+  recordedMs: number;
 }
 
 export interface DemoStart {
@@ -207,6 +214,8 @@ export interface WhisperModelStatus {
 export interface RecorderEvents {
   "recording:state": RecorderStatus;
   "recording:completed": CompletedRecording;
+  /** Whether the facecam preview window should be holding the webcam open. */
+  "camera:active": boolean;
   "upload:progress": { jobId: string; uploaded: number; total: number };
   "export:progress": { jobId: string; frame: number; total: number };
   "transcribe:progress":
@@ -241,9 +250,9 @@ export const recorder = {
   delete: (recordingId: string) => invoke<void>("recording_delete", { recordingId }),
 
   openRecorderWindow: () => invoke<void>("open_recorder_window"),
-  closeRecorderWindow: () => invoke<void>("close_recorder_window"),
+  hideRecorderWindow: () => invoke<void>("hide_recorder_window"),
   openCameraWindow: () => invoke<void>("open_camera_window"),
-  closeCameraWindow: () => invoke<void>("close_camera_window"),
+  hideCameraWindow: () => invoke<void>("hide_camera_window"),
   resizeCameraWindow: (size: number) => invoke<void>("resize_camera_window", { size }),
   focusMain: () => invoke<void>("focus_main"),
 

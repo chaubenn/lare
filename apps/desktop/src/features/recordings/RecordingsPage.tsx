@@ -233,7 +233,8 @@ function RecordingRow({
         ? "Uploaded · transcribed"
         : "Uploaded";
   const when = formatListWhen(rec.endedAt);
-  const duration = formatDurationHuman(Math.max(0, rec.endedAt - rec.startedAt));
+  // `recordedMs` leaves out the paused stretches; manifests written before it existed have 0.
+  const duration = formatDurationHuman(Math.max(0, rec.recordedMs || rec.endedAt - rec.startedAt));
 
   return (
     <article className="px-3 py-2.5" title={baseName(path)}>

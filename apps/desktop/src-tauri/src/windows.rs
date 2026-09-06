@@ -3,6 +3,12 @@
 //! Both load the same React bundle with a `?window=` query so `main.tsx` can render the
 //! matching mini UI instead of the full app.
 //!
+//! Overlays are built once and then only shown and hidden. Closing one destroys its wry webview,
+//! and the pill's stop button is *inside* that webview: tearing it down while its `recording_stop`
+//! invoke is still in flight raises an Objective-C exception on the main thread, which unwinds
+//! into tao's event loop as a foreign exception and aborts the process. [`destroy_overlays`] is
+//! the only place that closes them, at quit, when nothing is in flight.
+//!
 //! All AppKit / window mutations must run on the main thread. Recording start runs on a
 //! Tokio worker, so public helpers marshal via `run_on_main_thread` (and run inline when
 //! already on the main thread to avoid deadlocking the event loop).
@@ -12,10 +18,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::ThreadId;
 use std::time::Duration;
 
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const RECORDER_LABEL: &str = "recorder";
 pub const CAMERA_LABEL: &str = "camera";
+
+/// Tells the facecam preview whether it should be holding the webcam open. A hidden window keeps
+/// running its script, and nobody wants the camera light on between takes.
+fn set_camera_active(app: &AppHandle, active: bool) {
+    if let Err(e) = app.emit_to(CAMERA_LABEL, "camera:active", active) {
+        tracing::warn!(%e, "emit camera:active failed");
+    }
+}
 
 static MAIN_THREAD: OnceLock<ThreadId> = OnceLock::new();
 
@@ -254,10 +268,12 @@ fn start_overlay_watchdog(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
-            let any_open = [RECORDER_LABEL, CAMERA_LABEL]
-                .iter()
-                .any(|label| app.get_webview_window(label).is_some());
-            if !any_open {
+            // Visibility, not existence: the overlays outlive every recording now.
+            let any_visible = [RECORDER_LABEL, CAMERA_LABEL].iter().any(|label| {
+                app.get_webview_window(label)
+                    .is_some_and(|w| w.is_visible().unwrap_or(false))
+            });
+            if !any_visible {
                 break;
             }
             repromote_overlays(&app);
@@ -298,10 +314,11 @@ pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), St
     })
 }
 
-pub fn close_recorder(app: &AppHandle) {
+/// Take the pill off screen. It keeps its webview so a stop still in flight can finish.
+pub fn hide_recorder(app: &AppHandle) {
     on_main_unit(app, |app| {
         if let Some(w) = app.get_webview_window(RECORDER_LABEL) {
-            let _ = w.close();
+            let _ = w.hide();
         }
     });
 }
@@ -322,6 +339,7 @@ pub fn open_camera(app: &AppHandle, display_id: Option<&str>) -> Result<(), Stri
             let (x, y) = camera_position(wa, size);
             let _ = w.set_position(LogicalPosition::new(x, y));
             w.show().map_err(|e| e.to_string())?;
+            set_camera_active(app, true);
             promote_overlay(&w);
             start_overlay_watchdog(app);
             return Ok(());
@@ -347,10 +365,25 @@ pub fn open_camera(app: &AppHandle, display_id: Option<&str>) -> Result<(), Stri
     })
 }
 
-pub fn close_camera(app: &AppHandle) {
+/// Take the facecam preview off screen, keeping its webview (see [`hide_recorder`]).
+pub fn hide_camera(app: &AppHandle) {
     on_main_unit(app, |app| {
         if let Some(w) = app.get_webview_window(CAMERA_LABEL) {
-            let _ = w.close();
+            let _ = w.hide();
+            set_camera_active(app, false);
+        }
+    });
+}
+
+/// Tear the overlays down for good, on the way out. `close` only *asks* a window to close, which
+/// is no use when the process is about to end; `destroy` takes it down there and then, so the
+/// panels leave the screen with the main window rather than a beat after it.
+pub fn destroy_overlays(app: &AppHandle) {
+    on_main_unit(app, |app| {
+        for label in [RECORDER_LABEL, CAMERA_LABEL] {
+            if let Some(w) = app.get_webview_window(label) {
+                let _ = w.destroy();
+            }
         }
     });
 }

@@ -181,8 +181,8 @@ pub fn open_recorder_window(app: AppHandle, rec: Rec<'_>) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub fn close_recorder_window(app: AppHandle) {
-    windows::close_recorder(&app);
+pub fn hide_recorder_window(app: AppHandle) {
+    windows::hide_recorder(&app);
 }
 
 #[tauri::command]
@@ -191,8 +191,8 @@ pub fn open_camera_window(app: AppHandle, rec: Rec<'_>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn close_camera_window(app: AppHandle) {
-    windows::close_camera(&app);
+pub fn hide_camera_window(app: AppHandle) {
+    windows::hide_camera(&app);
 }
 
 #[tauri::command]

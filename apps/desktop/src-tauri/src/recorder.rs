@@ -56,6 +56,10 @@ pub struct StatePayload {
     pub project_path: Option<PathBuf>,
     pub post_id: Option<String>,
     pub message: Option<String>,
+    /// Media captured so far in ms, excluding paused stretches — the length of the video the
+    /// user will actually get. `None` when nothing is recording.
+    #[serde(default)]
+    pub recorded_ms: Option<u64>,
 }
 
 impl StatePayload {
@@ -70,6 +74,7 @@ impl StatePayload {
             project_path: None,
             post_id: None,
             message: None,
+            recorded_ms: None,
         }
     }
 }
@@ -88,6 +93,26 @@ pub struct CompletedPayload {
     pub ended_at: u64,
     pub post_id: Option<String>,
     pub facecam: bool,
+    /// Length of the captured media in ms, excluding paused stretches. Defaulted for manifests
+    /// written before this field existed, and for recordings recovered after a crash, where the
+    /// pauses are not knowable — both fall back to the wall clock.
+    #[serde(default)]
+    pub recorded_ms: u64,
+}
+
+/// The start manifest (`lare-started.json`), written the moment a recording begins so a project
+/// abandoned by a killed process can still be identified and finished at the next launch.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StartedManifest {
+    recording_id: String,
+    session_id: Option<String>,
+    purpose: Option<Purpose>,
+    mode: Option<RecordingMode>,
+    started_at: u64,
+    post_id: Option<String>,
+    #[serde(default)]
+    facecam: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,7 +150,32 @@ struct Active {
     post_id: Option<String>,
     facecam: bool,
     rec: lare_recording::ActiveRecording,
-    paused: bool,
+    /// When the current pause began; `None` while recording.
+    paused_at: Option<u64>,
+    /// Time already spent paused, in ms.
+    paused_total_ms: u64,
+}
+
+impl Active {
+    fn paused(&self) -> bool {
+        self.paused_at.is_some()
+    }
+
+    /// Wall clock since the start, less every paused stretch (including one in progress).
+    fn recorded_ms(&self) -> u64 {
+        let now = now_ms();
+        let paused = self.paused_total_ms + self.paused_at.map_or(0, |at| now.saturating_sub(at));
+        now.saturating_sub(self.rec.started_at_epoch_ms())
+            .saturating_sub(paused)
+    }
+}
+
+/// How the last recording ended. Kept so a second `stop`/`cancel` gets the same answer instead
+/// of "No active recording": the pill's stop button and the extension's `session.end` frame race
+/// on every interview that is ended from the browser.
+enum Finish {
+    Completed(Box<CompletedPayload>),
+    Cancelled,
 }
 
 pub struct Recorder {
@@ -133,6 +183,9 @@ pub struct Recorder {
     feeds: OnceCell<Feeds>,
     active: Mutex<Option<Active>>,
     starting: Mutex<bool>,
+    /// Held for the whole of `stop`/`cancel` so the two never interleave.
+    finishing: Mutex<()>,
+    last_finish: Mutex<Option<Finish>>,
     settings: RwLock<RecorderSettings>,
     recordings_dir: PathBuf,
 }
@@ -150,6 +203,8 @@ impl Recorder {
             feeds: OnceCell::new(),
             active: Mutex::new(None),
             starting: Mutex::new(false),
+            finishing: Mutex::new(()),
+            last_finish: Mutex::new(None),
             settings: RwLock::new(settings),
             recordings_dir,
         })
@@ -188,6 +243,7 @@ impl Recorder {
     }
 
     pub async fn status(&self) -> StatePayload {
+        // `active` is always taken before `starting`; `start` uses the same order.
         let active = self.active.lock().await;
         match active.as_ref() {
             None => {
@@ -199,7 +255,7 @@ impl Recorder {
                 p
             }
             Some(a) => StatePayload {
-                state: if a.paused {
+                state: if a.paused() {
                     RecordingState::Paused
                 } else {
                     RecordingState::Recording
@@ -212,6 +268,7 @@ impl Recorder {
                 project_path: Some(a.rec.project_path().to_path_buf()),
                 post_id: a.post_id.clone(),
                 message: None,
+                recorded_ms: Some(a.recorded_ms()),
             },
         }
     }
@@ -268,12 +325,16 @@ impl Recorder {
         } = spec;
         let session_id = session_id.clone();
         {
+            // Same order as `status`: active, then starting. Taking them the other way round
+            // here would let the two deadlock against each other.
+            let active = self.active.lock().await;
             let mut starting = self.starting.lock().await;
-            if *starting || self.active.lock().await.is_some() {
+            if *starting || active.is_some() {
                 return Err("A recording is already in progress".into());
             }
             *starting = true;
         }
+        *self.last_finish.lock().await = None;
         // Instant mode has no camera track: the facecam preview window is captured as part
         // of the screen, so it must be on screen before capture starts.
         let display_id = self.settings().display_id;
@@ -292,7 +353,7 @@ impl Recorder {
                 }
             }
             Err(message) => {
-                crate::windows::close_camera(&self.app);
+                crate::windows::hide_camera(&self.app);
                 let mut p = StatePayload::idle();
                 p.state = RecordingState::Error;
                 p.session_id = session_id.clone();
@@ -360,6 +421,7 @@ impl Recorder {
             project_path: Some(rec.project_path().to_path_buf()),
             post_id: post_id.clone(),
             message: None,
+            recorded_ms: Some(0),
         };
         write_manifest(rec.project_path(), &payload, facecam);
         *self.active.lock().await = Some(Active {
@@ -369,7 +431,8 @@ impl Recorder {
             post_id,
             facecam,
             rec,
-            paused: false,
+            paused_at: None,
+            paused_total_ms: 0,
         });
         self.broadcast_ext(hub, session_id.as_deref(), RecordingState::Recording, Some(started_at), None);
         Ok(payload)
@@ -378,9 +441,9 @@ impl Recorder {
     pub async fn pause(&self, hub: Option<&WsHub>) -> Result<StatePayload, String> {
         let mut guard = self.active.lock().await;
         let a = guard.as_mut().ok_or("No active recording")?;
-        if !a.paused {
+        if a.paused_at.is_none() {
             a.rec.pause().await.map_err(|e| format!("pause failed: {e:#}"))?;
-            a.paused = true;
+            a.paused_at = Some(now_ms());
         }
         let sid = a.session_id.clone();
         let started = a.rec.started_at_epoch_ms();
@@ -394,9 +457,10 @@ impl Recorder {
     pub async fn resume(&self, hub: Option<&WsHub>) -> Result<StatePayload, String> {
         let mut guard = self.active.lock().await;
         let a = guard.as_mut().ok_or("No active recording")?;
-        if a.paused {
+        if let Some(at) = a.paused_at {
             a.rec.resume().await.map_err(|e| format!("resume failed: {e:#}"))?;
-            a.paused = false;
+            a.paused_at = None;
+            a.paused_total_ms += now_ms().saturating_sub(at);
         }
         let sid = a.session_id.clone();
         let started = a.rec.started_at_epoch_ms();
@@ -407,17 +471,31 @@ impl Recorder {
         Ok(p)
     }
 
+    /// Stop and keep the recording. Safe to call twice: the loser of the race gets the same
+    /// payload the winner produced, not an error.
     pub async fn stop(&self, hub: Option<&WsHub>) -> Result<CompletedPayload, String> {
-        let active = self.active.lock().await.take().ok_or("No active recording")?;
-        crate::windows::close_recorder(&self.app);
-        crate::windows::close_camera(&self.app);
+        let _finishing = self.finishing.lock().await;
+        let Some(active) = self.active.lock().await.take() else {
+            return match &*self.last_finish.lock().await {
+                Some(Finish::Completed(p)) => Ok((**p).clone()),
+                Some(Finish::Cancelled) => Err("The recording was discarded.".into()),
+                None => Err("No active recording".into()),
+            };
+        };
+        // Hidden, not closed: this call usually comes from a button inside the pill's webview.
+        crate::windows::hide_recorder(&self.app);
+        crate::windows::hide_camera(&self.app);
         let sid = active.session_id.clone();
+        let mode = active.rec.mode();
+        let project_path = active.rec.project_path().to_path_buf();
         let started = active.rec.started_at_epoch_ms();
+        let recorded_ms = active.recorded_ms();
         self.broadcast_ext(hub, sid.as_deref(), RecordingState::Stopping, Some(started), None);
         let mut stopping = StatePayload::idle();
         stopping.state = RecordingState::Stopping;
         stopping.recording_id = Some(active.recording_id.clone());
         stopping.session_id = sid.clone();
+        stopping.recorded_ms = Some(recorded_ms);
         self.emit_state(&stopping);
 
         let feeds = self.feeds().await;
@@ -425,11 +503,32 @@ impl Recorder {
         feeds.release_mic().await;
         feeds.release_camera().await;
 
-        let done = match result {
-            Ok(d) => d,
+        // A failed stop is not a lost recording: the fragments Cap already wrote are the whole
+        // take bar the final mux, so finish them from disk before giving up.
+        let finished = match result {
+            Ok(done) => Ok((done.project_path, done.output_mp4, done.mic_track, done.ended_at_epoch_ms)),
             Err(e) => {
-                let msg = format!("Stopping the recording failed: {e:#}");
+                warn!(error = %format!("{e:#}"), "stopping the recording failed; salvaging the project");
+                match salvage(mode, project_path.clone()).await {
+                    // An instant recording is only salvaged if the mux actually produced the MP4;
+                    // a studio project has no single output until the exporter runs either way.
+                    Ok(output) if mode == RecordingMode::Studio || output.is_some() => {
+                        Ok((project_path.clone(), output, mic_track(mode, &project_path), now_ms()))
+                    }
+                    Ok(_) => Err(format!(
+                        "Stopping the recording failed: {e:#} (there was nothing left on disk to recover)"
+                    )),
+                    Err(salvage_error) => Err(format!(
+                        "Stopping the recording failed: {e:#} (recovering it from disk also failed: {salvage_error})"
+                    )),
+                }
+            }
+        };
+        let (project_path, output_mp4, mic_track, ended_at) = match finished {
+            Ok(parts) => parts,
+            Err(msg) => {
                 error!(%msg);
+                *self.last_finish.lock().await = None;
                 self.broadcast_ext(hub, sid.as_deref(), RecordingState::Error, None, Some(msg.clone()));
                 let mut p = StatePayload::idle();
                 p.state = RecordingState::Error;
@@ -442,16 +541,20 @@ impl Recorder {
             recording_id: active.recording_id,
             session_id: sid.clone(),
             purpose: active.purpose,
-            mode: done.mode,
-            project_path: done.project_path.clone(),
-            output_mp4: done.output_mp4.clone(),
-            mic_track: done.mic_track.clone(),
-            started_at: done.started_at_epoch_ms,
-            ended_at: done.ended_at_epoch_ms,
+            mode,
+            project_path: project_path.clone(),
+            output_mp4,
+            mic_track,
+            started_at: started,
+            ended_at,
             post_id: active.post_id,
             facecam: active.facecam,
+            recorded_ms,
         };
-        write_completed(&done.project_path, &payload);
+        // The manifest goes down before anything that can still fail: from here on the recording
+        // exists on disk, and the Recordings page can retry whatever comes next.
+        write_completed(&project_path, &payload);
+        *self.last_finish.lock().await = Some(Finish::Completed(Box::new(payload.clone())));
         if let Err(e) = self.app.emit("recording:completed", &payload) {
             warn!(%e, "emit recording:completed failed");
         }
@@ -460,10 +563,19 @@ impl Recorder {
         Ok(payload)
     }
 
+    /// Stop and throw the recording away. Idempotent in the same way as [`Recorder::stop`].
     pub async fn cancel(&self, hub: Option<&WsHub>) -> Result<(), String> {
-        let active = self.active.lock().await.take().ok_or("No active recording")?;
-        crate::windows::close_recorder(&self.app);
-        crate::windows::close_camera(&self.app);
+        let _finishing = self.finishing.lock().await;
+        let Some(active) = self.active.lock().await.take() else {
+            // Whichever of the two calls arrived first has already finished the recording;
+            // there is nothing left to discard either way.
+            return match &*self.last_finish.lock().await {
+                Some(_) => Ok(()),
+                None => Err("No active recording".into()),
+            };
+        };
+        crate::windows::hide_recorder(&self.app);
+        crate::windows::hide_camera(&self.app);
         let sid = active.session_id.clone();
         let path = active.rec.project_path().to_path_buf();
         let feeds = self.feeds().await;
@@ -471,9 +583,73 @@ impl Recorder {
         feeds.release_mic().await;
         feeds.release_camera().await;
         let _ = std::fs::remove_dir_all(&path);
+        *self.last_finish.lock().await = Some(Finish::Cancelled);
         self.broadcast_ext(hub, sid.as_deref(), RecordingState::Idle, None, None);
         self.emit_state(&StatePayload::idle());
         res
+    }
+
+    /// Finish recordings a previous run left behind — a project with a start manifest but no
+    /// completed one, which is what a crash or a force-quit leaves. Runs once at launch, before
+    /// the Recordings page asks for the list, so an interrupted take simply turns up in it.
+    pub fn recover_incomplete(&self) -> usize {
+        let Ok(entries) = std::fs::read_dir(&self.recordings_dir) else {
+            return 0;
+        };
+        let mut recovered = 0;
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            if !dir.is_dir() || dir.join("lare-recording.json").exists() {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(dir.join("lare-started.json")) else {
+                continue;
+            };
+            let Ok(started) = serde_json::from_str::<StartedManifest>(&text) else {
+                continue;
+            };
+            let (Some(mode), Some(purpose)) = (started.mode, started.purpose) else {
+                continue;
+            };
+            info!(dir = %dir.display(), "finishing a recording left behind by a previous run");
+            let output_mp4 = match lare_recording::finalize_project(mode, &dir) {
+                Ok(output) => output,
+                Err(e) => {
+                    warn!(dir = %dir.display(), error = %format!("{e:#}"), "could not recover recording");
+                    continue;
+                }
+            };
+            if mode == RecordingMode::Instant && output_mp4.is_none() {
+                warn!(dir = %dir.display(), "nothing recoverable in the project");
+                continue;
+            }
+            // The kill took the pause bookkeeping with it, so the wall clock is the best guess
+            // at the length; the file itself is the source of truth once it is opened.
+            let ended_at = std::fs::metadata(&dir)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or_else(now_ms)
+                .max(started.started_at);
+            let payload = CompletedPayload {
+                recording_id: started.recording_id,
+                session_id: started.session_id,
+                purpose,
+                mode,
+                project_path: dir.clone(),
+                output_mp4,
+                mic_track: mic_track(mode, &dir),
+                started_at: started.started_at,
+                ended_at,
+                post_id: started.post_id,
+                facecam: started.facecam,
+                recorded_ms: ended_at.saturating_sub(started.started_at),
+            };
+            write_completed(&dir, &payload);
+            recovered += 1;
+        }
+        recovered
     }
 
     /// List completed recordings (manifests) newest first.
@@ -568,12 +744,32 @@ impl RecordingBackend for CapRecordingBackend {
 // helpers
 // ---------------------------------------------------------------------------
 
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Mux/remux a project from what is on disk, off the async runtime (ffmpeg work, seconds long).
+async fn salvage(mode: RecordingMode, project_path: PathBuf) -> Result<Option<PathBuf>, String> {
+    tokio::task::spawn_blocking(move || lare_recording::finalize_project(mode, &project_path))
+        .await
+        .map_err(|e| format!("recovery task panicked: {e}"))?
+        .map_err(|e| format!("{e:#}"))
+}
+
+/// Studio projects keep the microphone as its own track; instant recordings mux it into the MP4.
+fn mic_track(mode: RecordingMode, project_path: &Path) -> Option<PathBuf> {
+    match mode {
+        RecordingMode::Studio => lare_recording::find_mic_track(project_path),
+        RecordingMode::Instant => None,
+    }
+}
+
 fn uuid_like() -> String {
     // Time-ordered, filesystem-safe id without pulling in uuid: <unix-ms>-<random>
-    let ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
+    let ms = now_ms();
     let rand: u64 = rand_u64();
     format!("{ms:013x}-{rand:016x}")
 }

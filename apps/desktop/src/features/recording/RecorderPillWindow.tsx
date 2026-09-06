@@ -6,22 +6,29 @@
 
 import { cn } from "@lare/ui";
 import { Pause, Play, Square, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { type RecorderStatus, recorder } from "@/lib/recorder";
 import { useTauriEvent } from "@/lib/tauri";
 
-function useElapsed(status: RecorderStatus | null): number {
+/**
+ * How much video exists, ticking. Rust reports `recordedMs` with every state payload — wall clock
+ * less every paused stretch — so the pill shows the length of the file the user will get rather
+ * than how long ago they pressed record. Between payloads it extrapolates from `since`, the
+ * moment the payload arrived, and while paused it simply holds.
+ */
+function useElapsed(status: RecorderStatus | null, since: number): number {
   const [now, setNow] = useState(() => Date.now());
   const running = status?.state === "recording";
   useEffect(() => {
     if (!running) return;
+    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
+    // `since` is deliberately not a dependency: a payload only arrives on a state change, and
+    // every change that matters here also flips `running`.
   }, [running]);
-  if (!status?.startedAt) return 0;
-  // Pauses are not subtracted here (the pill is a coarse indicator); the exported video keeps
-  // only the recorded portions.
-  return Math.max(0, (status.state === "recording" ? now : Date.now()) - status.startedAt);
+  const base = status?.recordedMs ?? 0;
+  return running ? base + Math.max(0, now - since) : base;
 }
 
 function fmt(ms: number): string {
@@ -36,22 +43,28 @@ function fmt(ms: number): string {
 
 export function RecorderPillWindow() {
   const [status, setStatus] = useState<RecorderStatus | null>(null);
+  // When the current status arrived: `recordedMs` is a snapshot, so the timer needs its epoch.
+  const [statusAt, setStatusAt] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const elapsed = useElapsed(status);
+  const elapsed = useElapsed(status, statusAt);
+
+  const applyStatus = useCallback((next: RecorderStatus) => {
+    setStatus(next);
+    setStatusAt(Date.now());
+    // This window is reused across takes, so a message from the last one has to be cleared.
+    if (next.state === "starting" || next.state === "recording") setError(null);
+  }, []);
 
   useEffect(() => {
     recorder
       .status()
-      .then(setStatus)
+      .then(applyStatus)
       .catch((e: unknown) => setError(String(e)));
-  }, []);
-  useTauriEvent("recording:state", (payload) => {
-    setStatus(payload);
-    if (payload.state === "idle" || payload.state === "error") {
-      // The Rust side closes this window; nothing else to do.
-    }
-  });
+  }, [applyStatus]);
+  // The Rust side hides this window once the recording is over — the webview stays alive, since
+  // tearing it down under an in-flight `recording_stop` used to take the whole app with it.
+  useTauriEvent("recording:state", applyStatus);
 
   const run = async (fn: () => Promise<unknown>) => {
     if (busy) return;
