@@ -13,52 +13,6 @@ followers, attach demo videos, and run AI-graded mock interviews.
 
 Docs: [architecture](docs/architecture.md) · [QA checklist](docs/qa.md) · [privacy](docs/privacy.md)
 
-## What's new in v0.3.0
-
-- Windows screen recording no longer fails when Game DVR / Windows Graphics Capture is disabled:
-  the recorder now falls back to DXGI Desktop Duplication, with cursor compositing and recovery
-  from access-lost events (resolution changes, secure desktop switches).
-- Camera and microphone grants work on macOS again — the local dev stack now runs as a signed
-  .app bundle so the system attributes (and remembers) the permission prompts to Lare.
-- Stopping a recording no longer takes the app down with it.
-- Tighter app chrome, aligned log tables and a real post column in the feed.
-- Refreshed app icon set regenerated from the 1024x1024 source.
-
-## What's new in v0.2.3
-
-- Mock interviews recorded with the facecam unchecked still produce a transcript and an AI review.
-  The transcript now falls back to the raw mic track and is saved before a failed render is
-  reported, so a video problem can no longer cost you the feedback.
-- Interview posts can carry a second video: a short summary you record afterwards, which plays
-  before the full recording.
-- The three optional extras — AI insights, the session card and the AI percentages drawn on that
-  card — now sit together in one "Include with the post" panel in the draft editor, and switching
-  the card off removes it from the post and from link unfurls.
-- The desktop sidebar shows the version you are running.
-
-## What's new in v0.2.2
-
-- The desktop feed and profiles now render the same post card as the web: swipe from the session
-  card to a per-problem breakdown, your photos and the demo video, all in one deck.
-- Likes, a copy-link button and an inline preview of the first comments sit on every card, so you
-  can read and react without opening the post.
-- The carousel arrows moved outside the image, where they no longer cover the session card.
-
-## What's new in v0.2.1
-
-- Pre-generated OG session cards for every post: rendered once, stored with the post and attached
-  as its cover — the feed, the post page and link unfurls all show the same instant image.
-- Instagram-style feeds on the web and in the desktop app: author header, caption, then the card.
-- The desktop app now checks for updates hourly while it is open, not only at launch.
-
-## What's new in v0.2.0
-
-- Posts are social: like, comment and edit published posts, on the web and in the desktop app.
-- Instagram-style post cards: a generated session overview card (problems solved, time
-  complexity, session kind) you can swipe through with attached photos and your demo video.
-- Custom cover images for posts, and an optional toggle to show/hide the demo video on the card.
-- Fixed videos failing to play on the website (embed token authentication is now proxied).
-
 ## Install
 
 Two pieces: the desktop app and the Chrome extension. About two minutes.
