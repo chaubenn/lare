@@ -282,7 +282,7 @@ export function ActivityChart({
                 height={18}
               />
               <Tooltip
-                cursor={{ fill: "rgba(240, 236, 228, 0.06)" }}
+                cursor={false}
                 content={<DayTooltip chartWidth={chartWidth} />}
                 allowEscapeViewBox={{ x: true, y: true }}
               />
@@ -328,7 +328,7 @@ export function ActivityChart({
                 height={18}
               />
               <Tooltip
-                cursor={{ fill: "rgba(240, 236, 228, 0.06)" }}
+                cursor={false}
                 content={<WeekTooltip chartWidth={chartWidth} />}
                 allowEscapeViewBox={{ x: true, y: true }}
               />
