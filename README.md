@@ -13,6 +13,18 @@ followers, attach demo videos, and run AI-graded mock interviews.
 
 Docs: [architecture](docs/architecture.md) · [QA checklist](docs/qa.md) · [privacy](docs/privacy.md)
 
+## What's new in v0.2.3
+
+- Mock interviews recorded with the facecam unchecked still produce a transcript and an AI review.
+  The transcript now falls back to the raw mic track and is saved before a failed render is
+  reported, so a video problem can no longer cost you the feedback.
+- Interview posts can carry a second video: a short summary you record afterwards, which plays
+  before the full recording.
+- The three optional extras — AI insights, the session card and the AI percentages drawn on that
+  card — now sit together in one "Include with the post" panel in the draft editor, and switching
+  the card off removes it from the post and from link unfurls.
+- The desktop sidebar shows the version you are running.
+
 ## What's new in v0.2.2
 
 - The desktop feed and profiles now render the same post card as the web: swipe from the session
@@ -99,8 +111,10 @@ site URL and the Bunny library id. Server secrets never live in clients.
 
 ## Releasing
 
-1. Bump the version in `apps/desktop/package.json`, `apps/desktop/src-tauri/tauri.conf.json` and
-   `apps/desktop/src-tauri/Cargo.toml` (they must match the tag).
+1. Bump the version in `apps/desktop/package.json`, `apps/desktop/src-tauri/tauri.conf.json`,
+   `apps/desktop/src-tauri/Cargo.toml` (they must match the tag) and
+   `apps/extension/package.json` — the extension carries the same number as the app it talks to,
+   even when nothing in it changed, so a support question only ever needs one version.
 2. `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 The Release workflow builds installers for macOS (Apple Silicon + Intel) and Windows x64 and the
