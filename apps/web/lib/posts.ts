@@ -63,7 +63,7 @@ export interface PostSocial {
   viewer_liked: boolean;
 }
 
-export type PostCardData = PostCardRow & PostSocial;
+export type PostCardData = PostCardRow & PostSocial & { top_comments: PostCommentRow[] };
 export type PostDetail = PostDetailRow & PostSocial;
 
 export type PostCardSession = NonNullable<PostCardRow["sessions"]>;
@@ -200,7 +200,7 @@ export async function fetchFeedPage(
     .overrideTypes<PostCardRow[], { merge: false }>();
   if (error) throw new Error(`feed failed: ${error.message}`);
   const rows = data ?? [];
-  const items = await decoratePosts(supabase, rows);
+  const items = await decorateCardRows(supabase, rows);
   const last = rows.at(-1);
   const nextCursor =
     rows.length === FEED_PAGE_SIZE && last?.published_at ? last.published_at : null;
@@ -215,7 +215,19 @@ export async function fetchUserPosts(supabase: Client, userId: string): Promise<
     .order("published_at", { ascending: false })
     .limit(50);
   if (error) throw new Error(`posts failed: ${error.message}`);
-  return decoratePosts(supabase, data ?? []);
+  return decorateCardRows(supabase, data ?? []);
+}
+
+/** Signed media + viewer like + the first few comments, so the feed card renders in one pass. */
+async function decorateCardRows(supabase: Client, rows: PostCardRow[]): Promise<PostCardData[]> {
+  const [decorated, comments] = await Promise.all([
+    decoratePosts(supabase, rows),
+    fetchTopComments(
+      supabase,
+      rows.map((r) => r.id),
+    ),
+  ]);
+  return decorated.map((row) => ({ ...row, top_comments: comments.get(row.id) ?? [] }));
 }
 
 /** Full post for `/p/[id]`, deduped between `generateMetadata` and the page. Null = not visible. */
@@ -247,4 +259,30 @@ export async function fetchComments(supabase: Client, postId: string): Promise<P
     .limit(200);
   if (error) throw new Error(`comments failed: ${error.message}`);
   return data ?? [];
+}
+
+/**
+ * The first few comments of each post (oldest first), for the feed card's inline preview.
+ * One query for the whole page; posts with fewer comments simply come back shorter.
+ */
+export const FEED_COMMENT_PREVIEW = 3;
+
+export async function fetchTopComments(
+  supabase: Client,
+  postIds: string[],
+  limit = FEED_COMMENT_PREVIEW,
+): Promise<Map<string, PostCommentRow[]>> {
+  if (postIds.length === 0) return new Map();
+  const { data, error } = await commentQuery(supabase)
+    .in("post_id", postIds)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`comments failed: ${error.message}`);
+  const map = new Map<string, PostCommentRow[]>();
+  for (const row of data ?? []) {
+    const list = map.get(row.post_id);
+    if (list && list.length >= limit) continue;
+    if (list) list.push(row);
+    else map.set(row.post_id, [row]);
+  }
+  return map;
 }

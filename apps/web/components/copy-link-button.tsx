@@ -31,7 +31,7 @@ export function CopyLinkButton({ path, className }: { path: string; className?: 
       className={cn(buttonSecondary, "px-3 py-1.5 text-xs", className)}
     >
       {copied ? <Check className="size-3.5 text-emerald-400" /> : <Link2 className="size-3.5" />}
-      {copied ? "Copied" : "Copy link"}
+      {copied ? "Copied" : "Post Link"}
     </button>
   );
 }

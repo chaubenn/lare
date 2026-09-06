@@ -18,6 +18,8 @@ export type PostComment = QueryData<ReturnType<typeof commentsQuery>>[number];
 
 export const commentsKey = (postId: string) => ["post-comments", postId] as const;
 export const likeKey = (postId: string) => ["post-like", postId] as const;
+export const likesBatchKey = (userId: string, postIds: string[]) =>
+  ["post-likes", userId, postIds] as const;
 
 /** Whether the signed-in user has liked this post. The count lives on `posts.like_count`. */
 export function useViewerLike(postId: string, userId: string) {
@@ -36,6 +38,23 @@ export function useViewerLike(postId: string, userId: string) {
   });
 }
 
+/** Which of these posts the signed-in viewer has liked, in one round-trip (feed cards). */
+export function useViewerLikes(postIds: string[], userId: string) {
+  return useQuery({
+    queryKey: likesBatchKey(userId, postIds),
+    enabled: postIds.length > 0 && userId.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("post_likes")
+        .select("post_id")
+        .eq("user_id", userId)
+        .in("post_id", postIds);
+      if (error) throw error;
+      return new Set((data ?? []).map((row) => row.post_id));
+    },
+  });
+}
+
 export function useToggleLike(postId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -46,6 +65,7 @@ export function useToggleLike(postId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: likeKey(postId) });
+      void queryClient.invalidateQueries({ queryKey: ["post-likes"] });
       void queryClient.invalidateQueries({ queryKey: postKey(postId) });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
@@ -62,6 +82,33 @@ export function useComments(postId: string) {
       return data;
     },
   });
+}
+
+/**
+ * The first few comments of each post (oldest first), for the feed card's inline preview.
+ * One query for the whole page; posts with fewer comments simply come back shorter.
+ */
+export const FEED_COMMENT_PREVIEW = 3;
+
+export async function fetchTopComments(
+  postIds: string[],
+  limit = FEED_COMMENT_PREVIEW,
+): Promise<Map<string, PostComment[]>> {
+  if (postIds.length === 0) return new Map();
+  const { data, error } = await supabase
+    .from("post_comments")
+    .select(COMMENT_SELECT)
+    .in("post_id", postIds)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  const map = new Map<string, PostComment[]>();
+  for (const row of data ?? []) {
+    const list = map.get(row.post_id);
+    if (list && list.length >= limit) continue;
+    if (list) list.push(row);
+    else map.set(row.post_id, [row]);
+  }
+  return map;
 }
 
 function useCommentMutation<TVars>(postId: string, run: (vars: TVars) => Promise<void>) {

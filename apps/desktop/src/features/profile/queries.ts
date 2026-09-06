@@ -4,7 +4,8 @@ import type { QueryData } from "@supabase/supabase-js";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
 import type { FollowState } from "@/features/friends/queries";
-import { attachCoverUrls } from "@/features/posts/media";
+import { decoratePosts, type PostDecoration } from "@/features/posts/media";
+import { fetchTopComments, type PostComment } from "@/features/posts/social";
 import { parseProfileStats } from "@/lib/json";
 import { supabase } from "@/lib/supabase";
 
@@ -80,10 +81,11 @@ export function useFollowState(targetId: string | null | undefined) {
 
 /**
  * Published posts by one user. RLS hides whatever the viewer may not see, so a private
- * account they don't follow simply returns nothing.
+ * account they don't follow simply returns nothing. The select mirrors the feed's so the
+ * shared PostCard renders identically in both places.
  */
 const userPostsSelect =
-  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(id, kind, active_ms, started_at, session_problems(id, slug, title, difficulty, submissions(accepted, runtime_ms, runtime_display, runtime_percentile, submitted_at))), videos(id, status), post_media!post_media_post_id_fkey(id, storage_path, kind, position)" as const;
+  "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url, is_private), sessions!posts_session_id_fkey(id, kind, scope, status, active_ms, started_at, ended_at, session_problems(id, slug, title, difficulty, active_ms, opened_at, submissions(id, accepted, lang, runtime_ms, runtime_display, runtime_percentile, memory_mb, memory_display, memory_percentile, submitted_at))), videos!posts_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id), post_media!post_media_post_id_fkey(id, storage_path, kind, width, height, caption, position, created_at)" as const;
 
 function userPostsQuery(userId: string) {
   return supabase
@@ -95,9 +97,8 @@ function userPostsQuery(userId: string) {
     .limit(50);
 }
 
-export type UserPost = QueryData<ReturnType<typeof userPostsQuery>>[number] & {
-  cover_url: string | null;
-};
+export type UserPost = QueryData<ReturnType<typeof userPostsQuery>>[number] &
+  PostDecoration & { top_comments: PostComment[] };
 
 export function useUserPosts(userId: string | null | undefined) {
   return useQuery({
@@ -106,7 +107,12 @@ export function useUserPosts(userId: string | null | undefined) {
     queryFn: async () => {
       const { data, error } = await userPostsQuery(userId ?? "");
       if (error) throw error;
-      return attachCoverUrls(data ?? []);
+      const rows = data ?? [];
+      const [decorated, comments] = await Promise.all([
+        decoratePosts(rows),
+        fetchTopComments(rows.map((r) => r.id)),
+      ]);
+      return decorated.map((row) => ({ ...row, top_comments: comments.get(row.id) ?? [] }));
     },
   });
 }

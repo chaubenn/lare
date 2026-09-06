@@ -1,16 +1,16 @@
 "use client";
 
-import { Heart, MessageCircle } from "lucide-react";
+import { Heart, MessageCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOptimistic, useState, useTransition } from "react";
 import { togglePostLike } from "@/app/social-actions";
 import { cn } from "@/lib/cn";
-import { CopyLinkButton } from "./copy-link-button";
 
 /**
- * Like / comment / share row. The like flips optimistically and reconciles with the count the
- * database reports; anonymous viewers are sent to the login page instead.
+ * Like / comment row with the "View post" link inline. The like flips optimistically and
+ * reconciles with the count the database reports; anonymous viewers are sent to the login
+ * page instead.
  */
 export function PostActions({
   postId,
@@ -19,6 +19,8 @@ export function PostActions({
   liked,
   canInteract,
   commentHref,
+  viewHref,
+  showAiReview = false,
   className,
 }: {
   postId: string;
@@ -27,6 +29,8 @@ export function PostActions({
   liked: boolean;
   canInteract: boolean;
   commentHref: string;
+  viewHref?: string;
+  showAiReview?: boolean;
   className?: string;
 }) {
   const router = useRouter();
@@ -59,7 +63,7 @@ export function PostActions({
   }
 
   return (
-    <div className={cn("flex items-center gap-1 text-sm text-zinc-400", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1 text-sm text-zinc-400", className)}>
       <button
         type="button"
         onClick={onLike}
@@ -83,7 +87,21 @@ export function PostActions({
         <span className="tabular-nums">{commentCount}</span>
       </Link>
 
-      <CopyLinkButton path={`/p/${postId}`} className="ml-auto" />
+      {showAiReview && (
+        <span className="inline-flex items-center gap-1 px-2 py-1.5 text-amber-400/80">
+          <Sparkles className="size-3.5" />
+          AI review
+        </span>
+      )}
+
+      {viewHref && (
+        <Link
+          href={viewHref}
+          className="ml-auto inline-flex items-center rounded-lg px-2 py-1.5 transition-colors hover:text-zinc-100"
+        >
+          View post →
+        </Link>
+      )}
 
       {error && (
         <span role="alert" className="ml-2 text-xs text-rose-300">

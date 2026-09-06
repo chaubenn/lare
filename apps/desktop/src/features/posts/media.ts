@@ -20,42 +20,97 @@ export function requestOgSnapshot(postId: string, force = false): Promise<unknow
     .catch(() => null);
 }
 
-/** Minimal row shape the feed needs to resolve a post's cover image. */
-export interface Coverable {
+/** One carousel photo with a signed, ready-to-render URL. */
+export interface FeedImage {
+  id: string;
+  url: string;
+  caption: string | null;
+}
+
+/** Signed media URLs the feed card needs on top of the raw row. */
+export interface PostDecoration {
+  thumbnail_url: string | null;
+  images: FeedImage[];
+  /** Author-supplied cover, or null when the generated session card is used instead. */
+  cover_url: string | null;
+  /** Signed URL of the stored, pre-generated session card (post_media kind 'og'), if any. */
+  og_url: string | null;
+}
+
+interface DecoratableRow {
+  id: string;
   cover_media_id: string | null;
-  post_media: { id: string; storage_path: string; kind: "og" | "photo" }[] | null;
+  videos: { thumbnail_path: string | null } | null;
+  post_media:
+    | {
+        id: string;
+        storage_path: string;
+        kind: "og" | "photo" | null;
+        caption: string | null;
+        position: number;
+        created_at: string;
+      }[]
+    | null;
+}
+
+/** Sign storage paths in one round-trip; unsignable paths resolve to null. */
+async function signPaths(bucket: string, paths: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(paths.filter((p) => p.length > 0))];
+  const map = new Map<string, string>();
+  if (unique.length === 0) return map;
+  const { data } = await supabase.storage.from(bucket).createSignedUrls(unique, 3600);
+  for (const entry of data ?? []) {
+    if (entry.path && entry.signedUrl && !entry.error) map.set(entry.path, entry.signedUrl);
+  }
+  return map;
+}
+
+/** Author order: `position` first (what the editor drags), creation time as the tiebreak. */
+function orderMedia<T extends { position: number; created_at: string }>(rows: readonly T[]): T[] {
+  return [...rows].sort(
+    (a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at),
+  );
 }
 
 /**
- * Sign each post's cover in one round-trip: the author's chosen cover, else the pre-generated
- * session card (post_media kind 'og'). Rows come back with `cover_url` ready for an <img>.
+ * Attach signed thumbnail/photo/OG-card URLs to a batch of post rows — the same decoration
+ * the web feed does, so both apps render the identical card. One signing round-trip per
+ * bucket, whatever the page size.
  */
-export async function attachCoverUrls<T extends Coverable>(
+export async function decoratePosts<T extends DecoratableRow>(
   rows: T[],
-): Promise<(T & { cover_url: string | null })[]> {
-  const coverOf = (row: T) => {
-    const mediaRows = row.post_media ?? [];
-    return (
-      mediaRows.find((m) => m.id === row.cover_media_id) ??
-      mediaRows.find((m) => m.kind === "og") ??
-      null
-    );
-  };
-  const paths = [
-    ...new Set(
-      rows.map((row) => coverOf(row)?.storage_path).filter((path): path is string => Boolean(path)),
+): Promise<(T & PostDecoration)[]> {
+  if (rows.length === 0) return [];
+  const [thumbs, media] = await Promise.all([
+    signPaths(
+      "thumbnails",
+      rows.map((r) => r.videos?.thumbnail_path ?? ""),
     ),
-  ];
-  const urls = new Map<string, string>();
-  if (paths.length > 0) {
-    const { data } = await supabase.storage.from(POST_MEDIA_BUCKET).createSignedUrls(paths, 3600);
-    for (const entry of data ?? []) {
-      if (entry.path && entry.signedUrl && !entry.error) urls.set(entry.path, entry.signedUrl);
-    }
-  }
+    signPaths(
+      POST_MEDIA_BUCKET,
+      rows.flatMap((r) => (r.post_media ?? []).map((m) => m.storage_path)),
+    ),
+  ]);
   return rows.map((row) => {
-    const path = coverOf(row)?.storage_path;
-    return { ...row, cover_url: path ? (urls.get(path) ?? null) : null };
+    const mediaRows = orderMedia(row.post_media ?? []);
+    // Author photos only: the pre-generated session card (kind 'og') is the cover fallback,
+    // never a carousel photo.
+    const images: FeedImage[] = mediaRows
+      .filter((m) => m.kind !== "og")
+      .flatMap((m) => {
+        const url = media.get(m.storage_path);
+        return url ? [{ id: m.id, url, caption: m.caption }] : [];
+      });
+    const ogRow = mediaRows.find((m) => m.kind === "og");
+    return {
+      ...row,
+      thumbnail_url: row.videos?.thumbnail_path
+        ? (thumbs.get(row.videos.thumbnail_path) ?? null)
+        : null,
+      images,
+      cover_url: images.find((i) => i.id === row.cover_media_id)?.url ?? null,
+      og_url: ogRow ? (media.get(ogRow.storage_path) ?? null) : null,
+    };
   });
 }
 

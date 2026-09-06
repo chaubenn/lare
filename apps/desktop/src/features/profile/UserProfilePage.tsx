@@ -5,11 +5,12 @@ import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
+import { Card, PageHeader } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { PostCard } from "@/features/feed/PostCard";
 import { FollowButton } from "@/features/friends/FollowButton";
+import { useViewerLikes } from "@/features/posts/social";
 import { profileWebUrl } from "@/lib/env";
 import { openExternal } from "@/lib/open";
 import {
@@ -32,6 +33,12 @@ export function UserProfilePage() {
   const activity = useSolvedActivity(handle);
   const followState = useFollowState(profile?.id);
   const posts = useUserPosts(profile?.id);
+  const postList = posts.data ?? [];
+  const likes = useViewerLikes(
+    postList.map((p) => p.id),
+    userId,
+  );
+  const likedIds = likes.data ?? new Set<string>();
 
   if (profileQuery.isPending) return <PageSpinner />;
   if (profileQuery.isError) {
@@ -132,19 +139,17 @@ export function UserProfilePage() {
             <PageSpinner />
           ) : posts.isError ? (
             <ErrorState error={posts.error} onRetry={() => void posts.refetch()} />
-          ) : posts.data.length === 0 ? (
+          ) : postList.length === 0 ? (
             <EmptyState
               icon={<Rss className="size-8" aria-hidden />}
               title="No published sessions yet"
             />
           ) : (
-            <StackedList>
-              {posts.data.map((post) => (
-                <StackedListItem key={post.id}>
-                  <PostCard post={post} />
-                </StackedListItem>
+            <div className="space-y-4">
+              {postList.map((post) => (
+                <PostCard key={post.id} post={post} liked={likedIds.has(post.id)} />
               ))}
-            </StackedList>
+            </div>
           )}
         </div>
       )}

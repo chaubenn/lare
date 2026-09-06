@@ -2,8 +2,10 @@ import { cn } from "@lare/ui";
 import { Rss } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
+import { useUser } from "@/features/auth/AuthProvider";
+import { useViewerLikes } from "@/features/posts/social";
 import { PostCard } from "./PostCard";
 import { type FeedScope, useFeed } from "./queries";
 
@@ -18,6 +20,12 @@ export function FeedPage() {
   const scope: FeedScope = raw === "following" ? "following" : "all";
   const feed = useFeed(scope);
   const posts = feed.data?.pages.flat() ?? [];
+  const { userId } = useUser();
+  const likes = useViewerLikes(
+    posts.map((post) => post.id),
+    userId,
+  );
+  const likedIds = likes.data ?? new Set<string>();
 
   return (
     <>
@@ -77,13 +85,11 @@ export function FeedPage() {
         />
       ) : (
         <>
-          <StackedList>
+          <div className="space-y-4">
             {posts.map((post) => (
-              <StackedListItem key={post.id}>
-                <PostCard post={post} />
-              </StackedListItem>
+              <PostCard key={post.id} post={post} liked={likedIds.has(post.id)} />
             ))}
-          </StackedList>
+          </div>
           {feed.hasNextPage ? (
             <div className="flex justify-center pt-4">
               <Button

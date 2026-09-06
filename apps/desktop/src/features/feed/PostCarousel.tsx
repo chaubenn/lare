@@ -1,12 +1,11 @@
-"use client";
-
+import { cn } from "@lare/ui";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Children, type ReactNode, useRef, useState } from "react";
-import { cn } from "@/lib/cn";
 
 /**
  * Instagram-style swipe deck. Native scroll-snap does the swiping (so touch, trackpad and
  * keyboard all work without a gesture library); the arrows and dots are for pointer users.
+ * Ported from the web feed so both apps render the identical carousel.
  */
 export function PostCarousel({
   children,
