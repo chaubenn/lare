@@ -220,6 +220,10 @@ fn create_output_texture(
 /// Composites the cached cursor shape (if visible and within bounds) onto
 /// `output_texture` via a small read-write staging texture, so only the
 /// cursor-sized region touches the CPU per frame.
+// The arguments are the D3D handles plus the frame geometry the cursor is
+// clipped against; bundling them into a struct would only move the same
+// values one level down for a function with a single call site.
+#[allow(clippy::too_many_arguments)]
 fn composite_cursor(
     device: &ID3D11Device,
     context: &ID3D11DeviceContext,
@@ -318,6 +322,10 @@ fn recover_duplication(
     Ok((duplication, desktop_rect))
 }
 
+// The capture thread's entire configuration arrives here once, including two
+// `impl FnMut` callbacks that cannot live in a plain config struct without
+// generic parameters. One call site, so the long list stays.
+#[allow(clippy::too_many_arguments)]
 fn run_capture_loop(
     duplication_output: (IDXGIOutputDuplication, ID3D11Device, ID3D11DeviceContext),
     target_monitor: isize,
@@ -568,7 +576,7 @@ impl Capturer {
                     on_closed,
                 )
             })
-            .map_err(|e| NewCapturerError::Other(windows::core::Error::from(std::io::Error::from(e))))?;
+            .map_err(|e| NewCapturerError::Other(windows::core::Error::from(e)))?;
 
         Ok(Self {
             stop_flag,
