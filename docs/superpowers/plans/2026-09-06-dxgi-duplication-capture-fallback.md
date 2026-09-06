@@ -143,7 +143,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `scap_direct3d::PixelFormat` (from Task-independent existing crate), `scap_targets::Display`.
-- Produces: `pub fn find_output_for_display(device: &ID3D11Device, display: &scap_targets::Display) -> windows::core::Result<(IDXGIOutput1, windows::Win32::Foundation::RECT)>` — later tasks build on this.
+- Produces: `pub fn find_output_for_monitor(d3d_device: &ID3D11Device, target_monitor: HMONITOR) -> windows::core::Result<(IDXGIOutput1, windows::Win32::Foundation::RECT)>` — later tasks build on this (callers derive `HMONITOR` from a `Display` via `display.raw_handle().inner()`, matching Task 4's usage).
 
 `crates/cap/*` is a glob workspace member (root `Cargo.toml:9`), so no workspace-member edit is
 needed — creating the directory with a `Cargo.toml` is enough.
