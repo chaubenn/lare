@@ -264,11 +264,6 @@ export function ActivityChart({
               data={dayBars}
               margin={{ top: 8, right: 0, bottom: 0, left: 0 }}
               barCategoryGap="18%"
-              onMouseMove={(state) => {
-                const i = state.activeTooltipIndex;
-                setHover(typeof i === "number" ? i : null);
-              }}
-              onMouseLeave={() => setHover(null)}
             >
               <XAxis
                 dataKey="iso"
@@ -291,6 +286,8 @@ export function ActivityChart({
                 radius={[2, 2, 0, 0]}
                 isAnimationActive={false}
                 shape={<DayBar />}
+                onMouseEnter={(_data, i) => setHover(i)}
+                onMouseLeave={() => setHover(null)}
               >
                 {dayBars.map((day, i) => (
                   <Cell
@@ -312,11 +309,6 @@ export function ActivityChart({
               data={weekBars}
               margin={{ top: 8, right: 0, bottom: 0, left: 0 }}
               barCategoryGap="18%"
-              onMouseMove={(state) => {
-                const i = state.activeTooltipIndex;
-                setHover(typeof i === "number" ? i : null);
-              }}
-              onMouseLeave={() => setHover(null)}
             >
               <XAxis
                 dataKey="start"
@@ -337,6 +329,8 @@ export function ActivityChart({
                 radius={[2, 2, 0, 0]}
                 isAnimationActive={false}
                 shape={<WeekBar />}
+                onMouseEnter={(_data, i) => setHover(i)}
+                onMouseLeave={() => setHover(null)}
               >
                 {weekBars.map((week, i) => (
                   <Cell
