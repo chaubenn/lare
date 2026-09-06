@@ -2,7 +2,7 @@ import { formatDurationHuman } from "@lare/shared";
 import { ArrowRight, Inbox } from "lucide-react";
 import { Link } from "react-router";
 import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
-import { LogColumns, PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
+import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { formatListWhen, plural } from "@/lib/format";
 import { type SessionRow, useSessions } from "./queries";
@@ -27,16 +27,13 @@ export function SessionsPage() {
           description="Start a session from the Lare overlay on LeetCode and it will show up here."
         />
       ) : (
-        <>
-          <LogColumns columns={["Session", "Kind", "When", "Time", "Problems", ""]} />
-          <StackedList>
-            {sessions.data.map((s) => (
-              <StackedListItem key={s.id}>
-                <SessionItem session={s} />
-              </StackedListItem>
-            ))}
-          </StackedList>
-        </>
+        <StackedList columns={["Session", "Kind", "When", "Time", "Problems"]}>
+          {sessions.data.map((s) => (
+            <StackedListItem key={s.id}>
+              <SessionItem session={s} />
+            </StackedListItem>
+          ))}
+        </StackedList>
       )}
     </>
   );
@@ -58,7 +55,7 @@ function SessionItem({ session }: { session: SessionRow }) {
   const when = formatListWhen(session.started_at);
 
   return (
-    <div className="grid items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:grid-cols-[minmax(0,1.4fr)_7rem_minmax(8rem,1fr)_4.5rem_5.5rem_auto]">
+    <>
       <Link
         to={`/sessions/${session.id}`}
         className="min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
@@ -76,7 +73,10 @@ function SessionItem({ session }: { session: SessionRow }) {
       <div className="hidden sm:block">
         <KindBadge kind={session.kind} />
       </div>
-      <p className="hidden truncate text-xs text-zinc-500 sm:block" title={when.title}>
+      <p
+        className="hidden whitespace-nowrap font-mono text-xs tabular-nums text-zinc-500 sm:block"
+        title={when.title}
+      >
         {when.label}
       </p>
       <p className="hidden tabular-nums text-xs text-zinc-400 sm:block">
@@ -107,6 +107,6 @@ function SessionItem({ session }: { session: SessionRow }) {
           </Link>
         ) : null}
       </div>
-    </div>
+    </>
   );
 }

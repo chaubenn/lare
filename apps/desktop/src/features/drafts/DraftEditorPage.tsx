@@ -48,7 +48,10 @@ export function DraftEditorPage() {
       <EmptyState
         title="Already published"
         action={
-          <Link to={`/posts/${draft.data.id}`} className="text-sm text-zinc-200 underline underline-offset-2">
+          <Link
+            to={`/posts/${draft.data.id}`}
+            className="text-sm text-zinc-200 underline underline-offset-2"
+          >
             View the post
           </Link>
         }

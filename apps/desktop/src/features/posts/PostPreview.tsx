@@ -57,7 +57,7 @@ export function PostPreview({
         role="dialog"
         aria-modal="true"
         aria-label="Post preview"
-        className="relative mx-auto w-full max-w-xl space-y-3"
+        className="relative mx-auto w-full max-w-3xl space-y-3"
       >
         <div className="flex items-center justify-between gap-3">
           <div>

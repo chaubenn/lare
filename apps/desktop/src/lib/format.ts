@@ -1,4 +1,4 @@
-import { formatLocalTimestamp, formatRelativeTime } from "@lare/shared";
+import { formatLocalTimestamp } from "@lare/shared";
 
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -20,8 +20,19 @@ export function capitalize(s: string): string {
   return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Short list-row time: "2d ago", with the full local stamp available as a title. */
+/** List-row time: `dd/mm/yy h:mm am`, with the long local stamp as a title. */
 export function formatListWhen(input: string | number | Date): { label: string; title: string } {
-  const iso = input instanceof Date ? input.toISOString() : new Date(input).toISOString();
-  return { label: formatRelativeTime(iso), title: formatLocalTimestamp(input) };
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return { label: "—", title: "—" };
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear()).slice(-2);
+  const time = d
+    .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  return {
+    label: `${dd}/${mm}/${yy} ${time}`,
+    title: formatLocalTimestamp(input),
+  };
 }

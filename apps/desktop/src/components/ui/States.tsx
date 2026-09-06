@@ -3,6 +3,7 @@ import { CircleAlert, LoaderCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { errorMessage } from "@/lib/supabase";
 import { Button } from "./Button";
+import { StackedList, StackedListItem } from "./Card";
 
 export function Spinner({ className, label }: { className?: string; label?: string }) {
   return (
@@ -17,18 +18,26 @@ export function PageSpinner({ label = "Loading…" }: { label?: string }) {
   return <Spinner className="py-16" label={label} />;
 }
 
+/** Stable keys so the placeholder rows are not keyed by index. */
+const SKELETON_KEYS = ["a", "b", "c", "d", "e", "f", "g", "h"];
+
+/** Placeholder rows on the same tracks as the real list, so nothing jumps on load. */
 export function ListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <ul className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800" aria-hidden>
-      {Array.from({ length: rows }, (_, i) => (
-        <li key={i} className="flex items-center gap-3 px-3 py-2.5">
-          <span className="lare-skel h-4 w-2/5" />
-          <span className="lare-skel hidden h-3 w-16 sm:block" />
-          <span className="lare-skel hidden h-3 w-24 sm:block" />
-          <span className="lare-skel ml-auto h-3 w-12" />
-        </li>
-      ))}
-    </ul>
+    <div aria-hidden>
+      <StackedList>
+        {SKELETON_KEYS.slice(0, rows).map((key) => (
+          <StackedListItem key={key} className="hover:bg-transparent">
+            <span className="lare-skel h-4 w-3/5" />
+            <span className="lare-skel hidden h-3 w-16 sm:block" />
+            <span className="lare-skel hidden h-3 w-28 sm:block" />
+            <span className="lare-skel hidden h-3 w-10 sm:block" />
+            <span className="lare-skel hidden h-3 w-20 sm:block" />
+            <span className="lare-skel hidden h-3 w-10 justify-self-end sm:block" />
+          </StackedListItem>
+        ))}
+      </StackedList>
+    </div>
   );
 }
 

@@ -60,7 +60,7 @@ export function useDraftsRealtime() {
   const queryClient = useQueryClient();
   useEffect(() => {
     const channel = supabase
-      .channel(`posts:${userId}`)
+      .channel(`posts:${userId}:${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "posts", filter: `user_id=eq.${userId}` },

@@ -139,8 +139,10 @@ export function useVideo(videoId: string | null | undefined) {
   });
   useEffect(() => {
     if (!videoId) return;
+    // Unique topic: Strict Mode remounts (and two useVideo calls for the same id)
+    // would otherwise reuse a subscribed channel and throw on the second `.on()`.
     const channel = supabase
-      .channel(`video-${videoId}`)
+      .channel(`video-${videoId}:${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "videos", filter: `id=eq.${videoId}` },

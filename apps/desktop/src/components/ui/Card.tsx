@@ -27,12 +27,36 @@ export function SectionTitle({
   );
 }
 
+/**
+ * Shared tracks for drafts / sessions / recordings. The list is one grid; each row
+ * is `subgrid` so a wide actions cell cannot shift When/Time under the wrong header.
+ */
+export const LOG_TRACKS = "sm:grid-cols-[minmax(0,1fr)_6rem_9rem_4.5rem_7rem_minmax(7rem,auto)]";
+
+/**
+ * Rows and the header row are the same shape: full-bleed for the hover stripe and the
+ * divider, padded inside, and subgridded so every cell sits under its own label.
+ */
+const LOG_ROW =
+  "grid grid-cols-1 items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:col-span-full sm:grid-cols-subgrid";
+
 /** Shared list chrome for Sessions, Recordings, Drafts, and the feed. */
-export function StackedList({ children, className }: { children: ReactNode; className?: string }) {
+export function StackedList({
+  columns,
+  children,
+  className,
+}: {
+  columns?: string[];
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <ul className={cn("divide-y divide-zinc-800/80 rounded-xl border border-zinc-800", className)}>
-      {children}
-    </ul>
+    <div className={cn("overflow-hidden rounded-xl border border-zinc-800", className)}>
+      <ul className={cn("sm:grid sm:items-center sm:gap-x-3", LOG_TRACKS)}>
+        {columns ? <LogColumns columns={columns} /> : null}
+        {children}
+      </ul>
+    </div>
   );
 }
 
@@ -46,7 +70,8 @@ export function StackedListItem({
   return (
     <li
       className={cn(
-        "lare-row first:rounded-t-xl last:rounded-b-xl hover:bg-zinc-900/50",
+        LOG_ROW,
+        "lare-row border-t border-zinc-800/80 first:border-t-0 hover:bg-zinc-900/50 focus-within:bg-zinc-900/60",
         className,
       )}
     >
@@ -55,11 +80,14 @@ export function StackedListItem({
   );
 }
 
-/** Column labels for the denser workbench lists. Hidden on narrow panes. */
+/** Column labels on the same subgrid — and the same padding — as the rows. */
 export function LogColumns({ columns }: { columns: string[] }) {
   return (
-    <div
-      className="mb-1 hidden grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.7fr))_auto] gap-3 px-3 text-[10px] font-medium uppercase tracking-wider text-zinc-600 sm:grid"
+    <li
+      className={cn(
+        LOG_ROW,
+        "hidden py-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-600 sm:grid",
+      )}
       aria-hidden
     >
       {columns.map((col) => (
@@ -67,7 +95,8 @@ export function LogColumns({ columns }: { columns: string[] }) {
           {col}
         </span>
       ))}
-    </div>
+      <span />
+    </li>
   );
 }
 

@@ -47,7 +47,7 @@ export function FeedPage() {
         />
       </div>
 
-      <div className="mx-auto w-full max-w-xl">
+      <div className="mx-auto w-full max-w-3xl">
         {feed.isPending ? (
           <PageSpinner />
         ) : feed.isError ? (

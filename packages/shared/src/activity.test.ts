@@ -39,7 +39,8 @@ describe("buildActivityWeekBars", () => {
     const weeks = buildActivityWeekBars(SAMPLE);
     const current = weeks.filter((w) => w.current);
     expect(current).toHaveLength(1);
-    expect(current[0]?.lastDay >= "2026-01-21").toBe(true);
+    const lastDay = current[0]?.lastDay ?? "";
+    expect(lastDay >= "2026-01-21").toBe(true);
   });
 });
 

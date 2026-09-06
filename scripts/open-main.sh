@@ -28,7 +28,8 @@ desktop_running() {
 }
 
 vite_ready() {
-  curl -sf -o /dev/null http://127.0.0.1:1420/
+  # Vite binds `localhost`, which can resolve to ::1 only — probe both spellings.
+  curl -sf -o /dev/null http://localhost:1420/ || curl -sf -o /dev/null http://127.0.0.1:1420/
 }
 
 focus_window() {

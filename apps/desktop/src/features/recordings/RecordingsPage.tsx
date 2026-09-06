@@ -26,7 +26,7 @@ import {
 import { Link } from "react-router";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Button, type ButtonProps } from "@/components/ui/Button";
-import { LogColumns, PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
+import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { useUser } from "@/features/auth/AuthProvider";
@@ -98,21 +98,18 @@ export function RecordingsPage() {
           }
         />
       ) : (
-        <>
-          <LogColumns columns={["Recording", "Mode", "When", "Time", "Status", ""]} />
-          <StackedList>
-            {[...recordings.data]
-              .sort((a, b) => b.endedAt - a.endedAt)
-              .map((rec) => (
-                <StackedListItem key={rec.recordingId}>
-                  <RecordingRow
-                    recording={rec}
-                    job={jobs.find((j) => j.recordingId === rec.recordingId && isActive(j))}
-                  />
-                </StackedListItem>
-              ))}
-          </StackedList>
-        </>
+        <StackedList columns={["Recording", "Mode", "When", "Time", "Status"]}>
+          {[...recordings.data]
+            .sort((a, b) => b.endedAt - a.endedAt)
+            .map((rec) => (
+              <StackedListItem key={rec.recordingId}>
+                <RecordingRow
+                  recording={rec}
+                  job={jobs.find((j) => j.recordingId === rec.recordingId && isActive(j))}
+                />
+              </StackedListItem>
+            ))}
+        </StackedList>
       )}
     </>
   );
@@ -225,138 +222,142 @@ function RecordingRow({
     processRecording.isPending ||
     deleteRecording.isPending;
 
+  // Short enough for the Status column; the long version lives in the title attribute.
   const status = rec.error
     ? rec.error
     : !rec.uploaded
       ? "Not uploaded"
       : rec.transcribed
-        ? "Uploaded · transcribed"
+        ? "Transcribed"
         : "Uploaded";
+  const statusTitle = rec.error ? rec.error : rec.transcribed ? "Uploaded and transcribed" : status;
   const when = formatListWhen(rec.endedAt);
   // `recordedMs` leaves out the paused stretches; manifests written before it existed have 0.
   const duration = formatDurationHuman(Math.max(0, rec.recordedMs || rec.endedAt - rec.startedAt));
 
   return (
-    <article className="px-3 py-2.5" title={baseName(path)}>
-      <div className="grid items-start gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1.4fr)_7rem_minmax(8rem,1fr)_4.5rem_minmax(7rem,1fr)_auto]">
-        <div className="min-w-0">
-          <p className="truncate text-sm text-zinc-100">
-            {isInterview ? "Mock interview" : "Demo"}
-          </p>
-          <div className="mt-0.5 flex items-center gap-1.5 text-zinc-500">
-            {rec.facecam ? (
-              <Tooltip label="Facecam">
-                <Camera className="size-3" aria-label="Facecam" />
-              </Tooltip>
-            ) : null}
-            {rec.micTrack ? (
-              <Tooltip label="Microphone">
-                <Mic className="size-3" aria-label="Microphone" />
-              </Tooltip>
-            ) : rec.mode === "studio" ? (
-              <Tooltip label="No microphone">
-                <MicOff className="size-3" aria-label="No microphone" />
-              </Tooltip>
-            ) : null}
-          </div>
-        </div>
-        <p className="hidden truncate text-xs capitalize text-zinc-400 sm:block">{rec.mode}</p>
-        <p className="hidden truncate text-xs text-zinc-500 sm:block" title={when.title}>
-          {when.label}
-        </p>
-        <p className="hidden tabular-nums text-xs text-zinc-400 sm:block">{duration}</p>
-        <p
-          className={`hidden truncate text-xs sm:block ${rec.error ? "text-rose-400" : "text-zinc-400"}`}
-        >
-          {status}
-        </p>
-        <p className="truncate text-xs text-zinc-500 sm:hidden" title={when.title}>
-          {rec.mode}
-          <span aria-hidden> · </span>
-          {when.label}
-          <span aria-hidden> · </span>
-          <span className={rec.error ? "text-rose-400" : undefined}>{status}</span>
-        </p>
+    <>
+      <div className="flex min-w-0 items-center gap-1.5" title={baseName(path)}>
+        <p className="truncate text-sm text-zinc-100">{isInterview ? "Mock interview" : "Demo"}</p>
+        {rec.facecam ? (
+          <Tooltip label="Facecam">
+            <Camera className="size-3 shrink-0 text-zinc-500" aria-label="Facecam" />
+          </Tooltip>
+        ) : null}
+        {rec.micTrack ? (
+          <Tooltip label="Microphone">
+            <Mic className="size-3 shrink-0 text-zinc-500" aria-label="Microphone" />
+          </Tooltip>
+        ) : rec.mode === "studio" ? (
+          <Tooltip label="No microphone">
+            <MicOff className="size-3 shrink-0 text-zinc-500" aria-label="No microphone" />
+          </Tooltip>
+        ) : null}
+      </div>
+      <p className="hidden truncate text-xs capitalize text-zinc-400 sm:block">{rec.mode}</p>
+      <p
+        className="hidden whitespace-nowrap font-mono text-xs tabular-nums text-zinc-500 sm:block"
+        title={when.title}
+      >
+        {when.label}
+      </p>
+      <p className="hidden tabular-nums text-xs text-zinc-400 sm:block">{duration}</p>
+      <p
+        className={`hidden truncate text-xs sm:block ${rec.error ? "text-rose-400" : "text-zinc-400"}`}
+        title={statusTitle}
+      >
+        {status}
+      </p>
+      <p className="truncate text-xs text-zinc-500 sm:hidden" title={when.title}>
+        {rec.mode}
+        <span aria-hidden> · </span>
+        {when.label}
+        <span aria-hidden> · </span>
+        <span className={rec.error ? "text-rose-400" : undefined}>{status}</span>
+      </p>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:col-start-6">
-          {hasEditor ? (
-            <LinkButton
-              to={editorHref}
-              disabled={busy}
-              icon={<Scissors className="size-3.5" aria-hidden />}
-            >
-              Edit
-            </LinkButton>
-          ) : null}
-          {canUpload ? (
-            <Button
-              size="sm"
-              variant="primary"
-              icon={<Upload className="size-3.5" aria-hidden />}
-              disabled={busy}
-              loading={uploadDemo.isPending}
-              onClick={() => uploadDemo.mutate()}
-            >
-              Upload
-            </Button>
-          ) : null}
-          {canProcess ? (
-            <Button
-              size="sm"
-              variant="primary"
-              icon={<Play className="size-3.5" aria-hidden />}
-              disabled={busy}
-              loading={processRecording.isPending}
-              onClick={() => processRecording.mutate()}
-            >
-              {rec.transcribed || rec.exportPath || rec.error ? "Resume" : "Process"}
-            </Button>
-          ) : null}
-          {rec.postId ? (
-            <LinkButton
-              to={`/drafts/${rec.postId}`}
-              variant="ghost"
-              className="px-2"
-              aria-label="Open draft"
-              tooltipAlign="end"
-              icon={<SquarePen className="size-3.5" aria-hidden />}
-            />
-          ) : null}
-          {rec.sessionId ? (
-            <LinkButton
-              to={`/sessions/${rec.sessionId}`}
-              variant="ghost"
-              className="px-2"
-              aria-label="Open session"
-              tooltipAlign="end"
-              icon={<ListChecks className="size-3.5" aria-hidden />}
-            />
-          ) : null}
+      <div className="flex flex-wrap items-center justify-end gap-1">
+        {hasEditor ? (
+          <LinkButton
+            to={editorHref}
+            disabled={busy}
+            icon={<Scissors className="size-3.5" aria-hidden />}
+          >
+            Edit
+          </LinkButton>
+        ) : null}
+        {canUpload ? (
           <Button
             size="sm"
+            variant="primary"
+            icon={<Upload className="size-3.5" aria-hidden />}
+            disabled={busy}
+            loading={uploadDemo.isPending}
+            onClick={() => uploadDemo.mutate()}
+          >
+            Upload
+          </Button>
+        ) : null}
+        {canProcess ? (
+          <Button
+            size="sm"
+            variant="primary"
+            icon={<Play className="size-3.5" aria-hidden />}
+            disabled={busy}
+            loading={processRecording.isPending}
+            onClick={() => processRecording.mutate()}
+          >
+            {rec.transcribed || rec.exportPath || rec.error ? "Resume" : "Process"}
+          </Button>
+        ) : null}
+        {rec.postId ? (
+          <LinkButton
+            to={`/drafts/${rec.postId}`}
             variant="ghost"
             className="px-2"
-            aria-label={`Show in ${FILE_MANAGER}`}
+            aria-label="Open draft"
             tooltipAlign="end"
-            icon={<FolderOpen className="size-3.5" aria-hidden />}
-            onClick={() => void reveal()}
+            icon={<SquarePen className="size-3.5" aria-hidden />}
           />
-          <Button
-            size="sm"
+        ) : null}
+        {rec.sessionId ? (
+          <LinkButton
+            to={`/sessions/${rec.sessionId}`}
             variant="ghost"
-            className="px-2 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
-            aria-label="Delete recording"
+            className="px-2"
+            aria-label="Open session"
             tooltipAlign="end"
-            icon={<Trash2 className="size-3.5" aria-hidden />}
-            disabled={busy}
-            loading={deleteRecording.isPending}
-            onClick={() => void confirmDelete()}
+            icon={<ListChecks className="size-3.5" aria-hidden />}
           />
-        </div>
+        ) : null}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="px-2"
+          aria-label={`Show in ${FILE_MANAGER}`}
+          tooltipAlign="end"
+          icon={<FolderOpen className="size-3.5" aria-hidden />}
+          onClick={() => void reveal()}
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          className="px-2 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+          aria-label="Delete recording"
+          tooltipAlign="end"
+          icon={<Trash2 className="size-3.5" aria-hidden />}
+          disabled={busy}
+          loading={deleteRecording.isPending}
+          onClick={() => void confirmDelete()}
+        />
       </div>
 
-      {job ? <JobProgress job={job} /> : null}
-    </article>
+      {job ? (
+        <div className="col-span-full">
+          <JobProgress job={job} />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -364,7 +365,7 @@ function RecordingRow({
 function JobProgress({ job }: { job: Job }) {
   const percent = job.percent === null ? null : Math.min(100, Math.max(0, job.percent));
   return (
-    <div className="mt-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3 text-xs">
+    <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3 text-xs">
       <div className="flex items-center gap-2">
         <LoaderCircle className="size-3.5 shrink-0 animate-spin text-sky-400" aria-hidden />
         <span className="shrink-0 font-medium text-zinc-200">{job.label}</span>
