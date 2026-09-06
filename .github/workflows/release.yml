@@ -186,6 +186,9 @@ jobs:
         with:
           name: extension-chrome-mv3
           path: apps/extension/.output/*.zip
+          # wxt writes to `.output`, and upload-artifact skips dotted paths by default —
+          # without this the step finds nothing and only warns.
+          include-hidden-files: true
       - name: Attach to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
