@@ -95,6 +95,7 @@ impl ScreenCaptureFormat for Direct3DCapture {
 
 pub enum ScreenFrame {
     Captured(scap_direct3d::Frame),
+    Duplicated(scap_dxgi::Frame),
     Scaled(ScaledScreenFrame),
 }
 
@@ -112,6 +113,7 @@ impl ScreenFrame {
     pub fn texture(&self) -> &ID3D11Texture2D {
         match self {
             ScreenFrame::Captured(frame) => frame.texture(),
+            ScreenFrame::Duplicated(frame) => frame.texture(),
             ScreenFrame::Scaled(scaled) => &scaled.texture,
         }
     }
@@ -119,6 +121,7 @@ impl ScreenFrame {
     pub fn width(&self) -> u32 {
         match self {
             ScreenFrame::Captured(frame) => frame.width(),
+            ScreenFrame::Duplicated(frame) => frame.width(),
             ScreenFrame::Scaled(scaled) => scaled.width,
         }
     }
@@ -126,6 +129,7 @@ impl ScreenFrame {
     pub fn height(&self) -> u32 {
         match self {
             ScreenFrame::Captured(frame) => frame.height(),
+            ScreenFrame::Duplicated(frame) => frame.height(),
             ScreenFrame::Scaled(scaled) => scaled.height,
         }
     }
@@ -135,6 +139,34 @@ impl ScreenFrame {
             ScreenFrame::Captured(frame) => {
                 use scap_ffmpeg::AsFFmpeg;
                 frame.as_ffmpeg()
+            }
+            ScreenFrame::Duplicated(frame) => {
+                let buffer = frame.as_buffer()?;
+                let width = buffer.width();
+                let height = buffer.height();
+                let stride = buffer.stride() as usize;
+                let mut ff_frame = ffmpeg::frame::Video::new(ffmpeg::format::Pixel::BGRA, width, height);
+                let dest_stride = ff_frame.stride(0);
+                let dest_bytes = ff_frame.data_mut(0);
+                let row_length = (width * 4) as usize;
+                let src_data = buffer.data();
+
+                for row in 0..height as usize {
+                    let src_start = row * stride;
+                    let dst_start = row * dest_stride;
+                    let copy_len = row_length.min(
+                        src_data
+                            .len()
+                            .saturating_sub(src_start)
+                            .min(dest_bytes.len().saturating_sub(dst_start)),
+                    );
+                    if copy_len > 0 {
+                        dest_bytes[dst_start..dst_start + copy_len]
+                            .copy_from_slice(&src_data[src_start..src_start + copy_len]);
+                    }
+                }
+
+                Ok(ff_frame)
             }
             ScreenFrame::Scaled(scaled) => {
                 let ffmpeg_pixel = match scaled.pixel_format {
@@ -507,7 +539,28 @@ struct CreateCapturerParams<'a> {
     first_frame: FirstScreenFrame,
 }
 
-fn create_d3d_capturer(
+enum ActiveCapturer {
+    Wgc(scap_direct3d::Capturer),
+    Dxgi(scap_dxgi::Capturer),
+}
+
+impl ActiveCapturer {
+    fn start(&mut self) -> windows::core::Result<()> {
+        match self {
+            ActiveCapturer::Wgc(c) => c.start(),
+            ActiveCapturer::Dxgi(c) => c.start(),
+        }
+    }
+
+    fn stop(&mut self) -> windows::core::Result<()> {
+        match self {
+            ActiveCapturer::Wgc(c) => c.stop(),
+            ActiveCapturer::Dxgi(c) => c.stop(),
+        }
+    }
+}
+
+fn try_create_wgc_capturer(
     params: &CreateCapturerParams,
     error_tx: &mpsc::Sender<CaptureClosureEvent>,
 ) -> anyhow::Result<scap_direct3d::Capturer> {
@@ -651,6 +704,101 @@ fn create_d3d_capturer(
         Some(params.d3d_device.clone()),
     )
     .map_err(|e| anyhow!("{e}"))
+}
+
+fn try_create_dxgi_capturer(
+    params: &CreateCapturerParams,
+    error_tx: &mpsc::Sender<CaptureClosureEvent>,
+) -> anyhow::Result<scap_dxgi::Capturer> {
+    let display = Display::from_id(params.display_id)
+        .ok_or_else(|| anyhow!("Display not found for ID: {:?}", params.display_id))?;
+
+    let dxgi_settings = scap_dxgi::Settings {
+        crop: params.settings.crop,
+    };
+
+    let video_frame_counter = params.video_frame_counter.clone();
+    let video_drop_counter = params.video_drop_counter.clone();
+    let video_decimated_counter = params.video_decimated_counter.clone();
+    let mut cadence_gate = params.cadence_interval_hns.map(FrameCadenceGate::new);
+    let mut tx = params.video_tx.clone();
+    let stall_health_tx = params.stall_health_tx.clone();
+    let first_frame = params.first_frame.clone();
+
+    let mut err_tx = error_tx.clone();
+    let device_for_callback = params.d3d_device.clone();
+
+    scap_dxgi::Capturer::new(
+        &display,
+        dxgi_settings,
+        move |frame: scap_dxgi::Frame| {
+            let capture_time = cap_timestamp::PerformanceCounterTimestamp::now();
+            let timestamp = cap_timestamp::Timestamp::PerformanceCounter(capture_time);
+
+            if let Some(gate) = cadence_gate.as_mut()
+                && !gate.admit(0)
+            {
+                video_decimated_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                return Ok(());
+            }
+
+            match output_pipeline::send_with_stall_budget_futures(
+                &mut tx,
+                VideoFrame {
+                    frame: ScreenFrame::Duplicated(frame),
+                    timestamp,
+                },
+                "screen-video",
+                &stall_health_tx,
+            ) {
+                output_pipeline::StallSendOutcome::Sent => {
+                    video_frame_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                    first_frame.complete(Ok(()));
+                }
+                output_pipeline::StallSendOutcome::StalledAndDropped { .. }
+                | output_pipeline::StallSendOutcome::Disconnected => {
+                    video_drop_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                }
+            }
+            Ok(())
+        },
+        move || {
+            let kind = classify_capture_closure(&device_for_callback);
+            let message = match kind {
+                CaptureClosureKind::DeviceRemoved { hresult } => {
+                    format!("d3d11 device removed (hresult=0x{hresult:08x})")
+                }
+                CaptureClosureKind::TargetLost => "capture target lost".to_string(),
+                CaptureClosureKind::Transient => "capture closed".to_string(),
+            };
+            drop(err_tx.try_send(CaptureClosureEvent { kind, message }));
+            Ok(())
+        },
+        params.d3d_device.clone(),
+    )
+    .map_err(|e| anyhow!("{e}"))
+}
+
+fn create_d3d_capturer(
+    params: &CreateCapturerParams,
+    error_tx: &mpsc::Sender<CaptureClosureEvent>,
+) -> anyhow::Result<ActiveCapturer> {
+    match try_create_wgc_capturer(params, error_tx) {
+        Ok(c) => Ok(ActiveCapturer::Wgc(c)),
+        Err(wgc_err) => {
+            warn!(
+                error = %wgc_err,
+                "WGC capture unavailable, falling back to DXGI Desktop Duplication"
+            );
+            try_create_dxgi_capturer(params, error_tx)
+                .map(ActiveCapturer::Dxgi)
+                .map_err(|dxgi_err| {
+                    anyhow!(
+                        "WGC failed ({wgc_err}); DXGI duplication fallback also failed ({dxgi_err})"
+                    )
+                })
+        }
+    }
 }
 
 impl output_pipeline::VideoSource for VideoSource {

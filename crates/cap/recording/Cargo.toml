@@ -98,6 +98,7 @@ cap-mediafoundation-ffmpeg = { path = "../mediafoundation-ffmpeg" }
 cap-mediafoundation-utils = { path = "../mediafoundation-utils" }
 cap-camera-windows = { path = "../camera-windows" }
 scap-direct3d = { path = "../scap-direct3d" }
+scap-dxgi = { path = "../scap-dxgi" }
 scap-cpal = { path = "../scap-cpal" }
 
 [target.'cfg(target_os = "linux")'.dependencies]

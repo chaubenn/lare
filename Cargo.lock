@@ -1350,6 +1350,7 @@ dependencies = [
  "ringbuf",
  "scap-cpal",
  "scap-direct3d",
+ "scap-dxgi",
  "scap-ffmpeg",
  "scap-screencapturekit",
  "scap-targets",
@@ -7225,6 +7226,18 @@ dependencies = [
  "tracing",
  "windows 0.60.0",
  "windows-numerics 0.2.0",
+ "workspace-hack",
+]
+
+[[package]]
+name = "scap-dxgi"
+version = "0.1.0"
+dependencies = [
+ "scap-direct3d",
+ "scap-targets",
+ "thiserror 2.0.16",
+ "tracing",
+ "windows 0.60.0",
  "workspace-hack",
 ]
 
