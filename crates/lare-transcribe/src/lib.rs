@@ -670,11 +670,17 @@ where
         .map_err(|e| anyhow!("whisper state: {e}"))?;
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    // whisper.cpp's GGML thread pool has well-documented hangs on Windows at higher
+    // thread counts; cap lower there. Other platforms keep the wider cap.
+    #[cfg(target_os = "windows")]
+    const MAX_THREADS: usize = 4;
+    #[cfg(not(target_os = "windows"))]
+    const MAX_THREADS: usize = 8;
     let threads = opts.threads.unwrap_or_else(|| {
         std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(4)
-            .min(8)
+            .min(MAX_THREADS)
     });
     params.set_n_threads(threads as i32);
     params.set_translate(false);
