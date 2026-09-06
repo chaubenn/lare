@@ -13,6 +13,14 @@ followers, attach demo videos, and run AI-graded mock interviews.
 
 Docs: [architecture](docs/architecture.md) · [QA checklist](docs/qa.md) · [privacy](docs/privacy.md)
 
+## What's new in v0.2.2
+
+- The desktop feed and profiles now render the same post card as the web: swipe from the session
+  card to a per-problem breakdown, your photos and the demo video, all in one deck.
+- Likes, a copy-link button and an inline preview of the first comments sit on every card, so you
+  can read and react without opening the post.
+- The carousel arrows moved outside the image, where they no longer cover the session card.
+
 ## What's new in v0.2.1
 
 - Pre-generated OG session cards for every post: rendered once, stored with the post and attached
