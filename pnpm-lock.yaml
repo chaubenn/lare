@@ -249,6 +249,9 @@ importers:
       '@lare/shared':
         specifier: workspace:*
         version: link:../shared
+      lucide-react:
+        specifier: ^1.40.0
+        version: 1.40.0(react@19.2.8)
       recharts:
         specifier: ^3.10.1
         version: 3.10.1(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react-is@19.2.8)(react@19.2.8)(redux@5.0.1)
