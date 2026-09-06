@@ -13,6 +13,17 @@ followers, attach demo videos, and run AI-graded mock interviews.
 
 Docs: [architecture](docs/architecture.md) · [QA checklist](docs/qa.md) · [privacy](docs/privacy.md)
 
+## What's new in v0.3.0
+
+- Windows screen recording no longer fails when Game DVR / Windows Graphics Capture is disabled:
+  the recorder now falls back to DXGI Desktop Duplication, with cursor compositing and recovery
+  from access-lost events (resolution changes, secure desktop switches).
+- Camera and microphone grants work on macOS again — the local dev stack now runs as a signed
+  .app bundle so the system attributes (and remembers) the permission prompts to Lare.
+- Stopping a recording no longer takes the app down with it.
+- Tighter app chrome, aligned log tables and a real post column in the feed.
+- Refreshed app icon set regenerated from the 1024x1024 source.
+
 ## What's new in v0.2.3
 
 - Mock interviews recorded with the facecam unchecked still produce a transcript and an AI review.
