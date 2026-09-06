@@ -748,6 +748,7 @@ impl output_pipeline::VideoSource for VideoSource {
                     }
                     Err(e) => {
                         error!("Failed to create D3D capturer: {}", e);
+                        first_frame.complete(Err(format!("Failed to create D3D capturer: {e}")));
                         return Err(e);
                     }
                 };
@@ -1596,5 +1597,17 @@ mod first_screen_frame_tests {
             .await
             .unwrap_err();
         assert!(error.to_string().contains("closed before its first frame"));
+    }
+
+    #[tokio::test]
+    async fn early_capturer_creation_failure_reports_its_own_message() {
+        let (signal, receiver) = signal();
+        // Simulates what create_d3d_capturer's early-failure branch must do:
+        // report the real error instead of just dropping the sender.
+        signal.complete(Err("Failed to create D3D capturer: boom".into()));
+        let error = wait_for_first_screen_frame(receiver, Duration::from_millis(20))
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("Failed to create D3D capturer: boom"));
     }
 }
