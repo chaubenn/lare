@@ -13,12 +13,14 @@ if [ -z "$identity" ] && security find-identity -v -p codesigning 2>/dev/null | 
   identity="Lare Development"
 fi
 
+# Local debug bundles skip updater artifacts: createUpdaterArtifacts needs TAURI_SIGNING_PRIVATE_KEY,
+# which only the release workflow has, and a dev build never feeds the updater anyway.
 if [ -n "$identity" ]; then
   echo "Signing with $identity"
-  APPLE_SIGNING_IDENTITY="$identity" pnpm --filter @lare/desktop tauri build --debug --bundles app
+  APPLE_SIGNING_IDENTITY="$identity" pnpm --filter @lare/desktop tauri build --debug --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}'
 else
   echo "warning: no code signing identity found; permission grants will not survive rebuilds"
-  pnpm --filter @lare/desktop tauri build --debug --bundles app
+  pnpm --filter @lare/desktop tauri build --debug --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}'
 fi
 
 open target/debug/bundle/macos/Lare.app
