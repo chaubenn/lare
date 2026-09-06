@@ -34,14 +34,20 @@ use tracing::*;
 pub struct Direct3DCapture;
 
 impl Direct3DCapture {
-    pub const PIXEL_FORMAT: scap_direct3d::PixelFormat = scap_direct3d::PixelFormat::R8G8B8A8Unorm;
+    // B8G8R8A8Unorm, not R8G8B8A8Unorm: this must match DXGI Desktop Duplication's
+    // native (non-negotiable) format, since the DXGI fallback and WGC share this one
+    // pixel format for the whole pipeline (input_config.pixel_format configures the
+    // encoder's color-conversion context once, not per-frame). WGC supports capturing
+    // in either format, so it's changed to match DXGI here rather than the other way
+    // around, which is what a bare DXGI_FORMAT_R8G8B8A8_UNORM capture can't do.
+    pub const PIXEL_FORMAT: scap_direct3d::PixelFormat = scap_direct3d::PixelFormat::B8G8R8A8Unorm;
 }
 
 impl ScreenCaptureFormat for Direct3DCapture {
     type VideoFormat = scap_direct3d::Frame;
 
     fn pixel_format() -> ffmpeg::format::Pixel {
-        scap_direct3d::PixelFormat::R8G8B8A8Unorm.as_ffmpeg()
+        scap_direct3d::PixelFormat::B8G8R8A8Unorm.as_ffmpeg()
     }
 
     fn audio_info() -> AudioInfo {
