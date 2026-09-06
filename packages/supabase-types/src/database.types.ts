@@ -103,13 +103,146 @@ export type Database = {
           },
         ]
       }
+      post_comments: {
+        Row: {
+          body: string
+          created_at: string
+          edited_at: string | null
+          id: string
+          post_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          post_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          post_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_likes: {
+        Row: {
+          created_at: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_media: {
+        Row: {
+          caption: string | null
+          created_at: string
+          height: number | null
+          id: string
+          position: number
+          post_id: string
+          storage_path: string
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          position?: number
+          post_id: string
+          storage_path: string
+          user_id: string
+          width?: number | null
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          position?: number
+          post_id?: string
+          storage_path?: string
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_media_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_media_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posts: {
         Row: {
           body: string | null
+          comment_count: number
+          cover_media_id: string | null
           created_at: string
           id: string
           include_ai_insights: boolean
+          like_count: number
           published_at: string | null
+          show_video: boolean
           session_id: string | null
           status: Database["public"]["Enums"]["post_status"]
           title: string | null
@@ -121,10 +254,14 @@ export type Database = {
         }
         Insert: {
           body?: string | null
+          comment_count?: number
+          cover_media_id?: string | null
           created_at?: string
           id?: string
           include_ai_insights?: boolean
+          like_count?: number
           published_at?: string | null
+          show_video?: boolean
           session_id?: string | null
           status?: Database["public"]["Enums"]["post_status"]
           title?: string | null
@@ -136,10 +273,14 @@ export type Database = {
         }
         Update: {
           body?: string | null
+          comment_count?: number
+          cover_media_id?: string | null
           created_at?: string
           id?: string
           include_ai_insights?: boolean
+          like_count?: number
           published_at?: string | null
+          show_video?: boolean
           session_id?: string | null
           status?: Database["public"]["Enums"]["post_status"]
           title?: string | null
@@ -150,6 +291,13 @@ export type Database = {
           visibility?: Database["public"]["Enums"]["post_visibility"]
         }
         Relationships: [
+          {
+            foreignKeyName: "posts_cover_media_id_fkey"
+            columns: ["cover_media_id"]
+            isOneToOne: false
+            referencedRelation: "post_media"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "posts_session_id_fkey"
             columns: ["session_id"]
@@ -554,11 +702,15 @@ export type Database = {
         Args: { before?: string; page_size?: number; scope?: string }
         Returns: {
           body: string | null
+          comment_count: number
+          cover_media_id: string | null
           created_at: string
           id: string
           include_ai_insights: boolean
+          like_count: number
           published_at: string | null
           session_id: string | null
+          show_video: boolean
           status: Database["public"]["Enums"]["post_status"]
           title: string | null
           updated_at: string
@@ -580,6 +732,7 @@ export type Database = {
         Args: { target_handle: string }
         Returns: Database["public"]["Enums"]["follow_status"]
       }
+      toggle_post_like: { Args: { post: string }; Returns: Json }
     }
     Enums: {
       follow_status: "pending" | "accepted"

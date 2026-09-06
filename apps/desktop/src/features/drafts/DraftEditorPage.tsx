@@ -9,8 +9,10 @@ import { useToast } from "@/components/toast/ToastProvider";
 import { KindBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
-import { Input, Label, Select, Textarea } from "@/components/ui/Field";
+import { Input, Label, Select, Textarea, Toggle } from "@/components/ui/Field";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
+import { useUser } from "@/features/auth/AuthProvider";
+import { PostMediaPanel } from "@/features/posts/PostMediaPanel";
 import { copyText } from "@/lib/clipboard";
 import { postWebUrl } from "@/lib/env";
 import { formatDateTime, plural } from "@/lib/format";
@@ -80,6 +82,7 @@ async function confirmDelete(): Promise<boolean> {
 function DraftEditor({ draft }: { draft: Draft }) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { userId } = useUser();
   const publish = usePublishDraft();
   const save = useSaveDraft();
   const remove = useDeleteDraft();
@@ -87,15 +90,20 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const [title, setTitle] = useState(() => defaultTitle(draft));
   const [body, setBody] = useState(draft.body ?? "");
   const [visibility, setVisibility] = useState<Post["visibility"]>(draft.visibility);
+  const [showVideo, setShowVideo] = useState(draft.show_video);
+  const [coverMediaId, setCoverMediaId] = useState<string | null>(draft.cover_media_id);
 
   const session = draft.sessions;
   const problems = session?.session_problems ?? [];
   const busy = publish.isPending || save.isPending || remove.isPending;
+  const hasVideo = Boolean(draft.video_id) && draft.video_kind !== "none";
+  // Photos are written as soon as they are uploaded; the rest of the post is saved by the form.
+  const edit = { id: draft.id, title, body, visibility, showVideo, coverMediaId };
 
   const doPublish = async () => {
     if (busy) return;
     try {
-      const { id } = await publish.mutateAsync({ id: draft.id, title, body, visibility });
+      const { id } = await publish.mutateAsync(edit);
       const copied = await copyText(postWebUrl(id));
       toast({
         title: copied ? "Published — link copied" : "Published",
@@ -110,7 +118,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
 
   const doSave = async () => {
     try {
-      await save.mutateAsync({ id: draft.id, title, body, visibility });
+      await save.mutateAsync(edit);
       toast({ title: "Draft saved", variant: "success" });
     } catch (err) {
       toast({ title: "Couldn't save", description: errorMessage(err), variant: "error" });
@@ -208,6 +216,15 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 <option value="private">Only me</option>
               </Select>
             </div>
+            {hasVideo ? (
+              <Toggle
+                id="draft-show-video"
+                checked={showVideo}
+                onChange={setShowVideo}
+                label="Show the demo video on the post"
+                description="Adds the recording as the last slide of the post's carousel."
+              />
+            ) : null}
             <div className="flex items-center justify-between gap-3 pt-1">
               <Button variant="ghost" size="sm" onClick={() => void doSave()} disabled={busy}>
                 Save draft
@@ -237,6 +254,13 @@ function DraftEditor({ draft }: { draft: Draft }) {
 
         <aside className="space-y-4">
           <DemoVideoPanel draft={draft} />
+          <PostMediaPanel
+            postId={draft.id}
+            userId={userId}
+            coverMediaId={coverMediaId}
+            onCoverChange={setCoverMediaId}
+            disabled={busy}
+          />
         </aside>
       </form>
     </div>

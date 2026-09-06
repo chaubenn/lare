@@ -1,5 +1,6 @@
 import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
-import { ArrowLeft, Copy, ExternalLink, Lock } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Lock, Pencil } from "lucide-react";
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -10,11 +11,14 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { VideoEmbed } from "@/components/VideoEmbed";
-import { useAuth } from "@/features/auth/AuthProvider";
+import { useUser } from "@/features/auth/AuthProvider";
 import { copyText } from "@/lib/clipboard";
 import { postWebUrl } from "@/lib/env";
 import { formatDateTime, plural } from "@/lib/format";
 import { openExternal } from "@/lib/open";
+import { usePostMedia } from "./media";
+import { PostEditPanel } from "./PostEditPanel";
+import { CommentsSection, PostActions } from "./PostSocial";
 import { type PostDetail, useInterviewReview, usePost } from "./queries";
 
 export function PostPage() {
@@ -40,9 +44,12 @@ export function PostPage() {
 }
 
 function PostView({ post }: { post: PostDetail }) {
-  const { userId } = useAuth();
+  // The route lives under RequireAuth, so the viewer is always signed in here.
+  const { userId } = useUser();
   const { toast } = useToast();
   const review = useInterviewReview(post.session_id);
+  const media = usePostMedia(post.id);
+  const [editing, setEditing] = useState(false);
   const author = post.profiles;
   const session = post.sessions;
   const problems = session?.session_problems ?? [];
@@ -79,6 +86,16 @@ function PostView({ post }: { post: PostDetail }) {
               Only me
             </Badge>
           ) : null}
+          {isMine ? (
+            <Button
+              size="sm"
+              icon={<Pencil className="size-3.5" aria-hidden />}
+              onClick={() => setEditing((v) => !v)}
+              aria-expanded={editing}
+            >
+              {editing ? "Close editor" : "Edit post"}
+            </Button>
+          ) : null}
           <Button
             size="sm"
             icon={<Copy className="size-3.5" aria-hidden />}
@@ -95,6 +112,10 @@ function PostView({ post }: { post: PostDetail }) {
           </Button>
         </div>
       </div>
+
+      {editing && isMine ? (
+        <PostEditPanel post={post} userId={userId} onDone={() => setEditing(false)} />
+      ) : null}
 
       <header>
         <div className="flex items-center gap-3">
@@ -120,7 +141,39 @@ function PostView({ post }: { post: PostDetail }) {
             {post.body}
           </p>
         ) : null}
+        <div className="mt-3">
+          <PostActions
+            postId={post.id}
+            userId={userId}
+            likeCount={post.like_count}
+            commentCount={post.comment_count}
+          />
+        </div>
       </header>
+
+      {(media.data ?? []).length > 0 ? (
+        <section>
+          <SectionTitle>Photos</SectionTitle>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {(media.data ?? []).map((image) =>
+              image.url ? (
+                <li key={image.id} className="overflow-hidden rounded-xl border border-zinc-800">
+                  <img
+                    src={image.url}
+                    alt={image.caption ?? ""}
+                    className="aspect-video w-full object-cover"
+                  />
+                  {image.caption ? (
+                    <p className="border-t border-zinc-800 px-3 py-2 text-xs text-zinc-400">
+                      {image.caption}
+                    </p>
+                  ) : null}
+                </li>
+              ) : null,
+            )}
+          </ul>
+        </section>
+      ) : null}
 
       {session ? (
         <Card>
@@ -150,13 +203,20 @@ function PostView({ post }: { post: PostDetail }) {
         </Card>
       ) : null}
 
-      {post.video_kind !== "none" || post.videos ? (
+      {(post.video_kind !== "none" || post.videos) && (post.show_video || isMine) ? (
         <section>
           <SectionTitle>
             {post.video_kind === "highlights" ? "Highlights" : "Demo video"}
           </SectionTitle>
           {post.videos ? (
-            <VideoEmbed video={post.videos} />
+            <>
+              <VideoEmbed video={post.videos} />
+              {!post.show_video && isMine ? (
+                <p className="mt-2 text-xs text-zinc-500">
+                  Hidden from the post — turn it back on with "Edit post".
+                </p>
+              ) : null}
+            </>
           ) : (
             <div className="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500">
               No video attached.
@@ -175,6 +235,8 @@ function PostView({ post }: { post: PostDetail }) {
       ) : null}
 
       {review.data ? <AiReviewSection review={review.data} /> : null}
+
+      <CommentsSection postId={post.id} userId={userId} isPostOwner={isMine} />
     </div>
   );
 }

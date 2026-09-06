@@ -1,31 +1,5 @@
 /** Pure helpers shared by server and client components (no data access here). */
 
-export interface BestRun {
-  runtimeLabel: string;
-  beats: number | null;
-}
-
-/** Fastest accepted submission, e.g. "1219 ms" + percentile for "beats 17.99%". */
-export function bestAcceptedRun(
-  submissions: ReadonlyArray<{
-    accepted: boolean;
-    runtime_ms: number | null;
-    runtime_display: string | null;
-    runtime_percentile: number | null;
-  }>,
-): BestRun | null {
-  const accepted = submissions.filter((s) => s.accepted);
-  if (accepted.length === 0) return null;
-  const best = accepted.reduce((a, b) => {
-    const ra = a.runtime_ms ?? Number.POSITIVE_INFINITY;
-    const rb = b.runtime_ms ?? Number.POSITIVE_INFINITY;
-    return rb < ra ? b : a;
-  });
-  const runtimeLabel =
-    best.runtime_display ?? (best.runtime_ms !== null ? `${best.runtime_ms} ms` : "Accepted");
-  return { runtimeLabel, beats: best.runtime_percentile };
-}
-
 export function sessionKindLabel(kind: "practice" | "interview" | null | undefined): string {
   return kind === "interview" ? "Mock interview" : "Practice session";
 }

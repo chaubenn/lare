@@ -10,6 +10,8 @@
     "./edits": "./src/edits.ts",
     "./timer": "./src/timer.ts",
     "./leetcode": "./src/leetcode.ts",
+    "./media": "./src/media.ts",
+    "./overview": "./src/overview.ts",
     "./protocol": "./src/protocol.ts",
     "./session": "./src/session.ts",
     "./ai-review": "./src/ai-review.ts",

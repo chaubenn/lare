@@ -11,10 +11,12 @@ export function Feed({
   initialItems,
   initialCursor,
   scope,
+  viewerId,
 }: {
   initialItems: PostCardData[];
   initialCursor: string | null;
   scope: FeedScope;
+  viewerId: string | null;
 }) {
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
@@ -41,7 +43,7 @@ export function Feed({
   return (
     <div className="space-y-4">
       {items.map((post) => (
-        <PostCard key={post.id} post={post} />
+        <PostCard key={post.id} post={post} viewerId={viewerId} />
       ))}
 
       {error && (

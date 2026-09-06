@@ -1,4 +1,4 @@
-import { excerptFromHtml, formatDurationHuman } from "@lare/shared";
+import { buildSessionOverview, excerptFromHtml, formatDurationHuman } from "@lare/shared";
 import { Clock, ListChecks, Lock } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -7,16 +7,18 @@ import { type ReactNode, Suspense } from "react";
 import { Avatar } from "@/components/avatar";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { InterviewReview } from "@/components/interview-review";
+import { PostActions } from "@/components/post-actions";
+import { PostSlides } from "@/components/post-slides";
 import { ProblemSection } from "@/components/problem-section";
 import { Skeleton } from "@/components/skeleton";
 import { TimeAgo } from "@/components/time-ago";
 import { Transcript } from "@/components/transcript";
-import { VideoEmbed } from "@/components/video-embed";
 import { parseTranscriptSegments, toReviewView } from "@/lib/parse";
 import { sessionKindLabel } from "@/lib/post-utils";
-import { getPostDetail } from "@/lib/posts";
+import { fetchComments, getPostDetail } from "@/lib/posts";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
+import { Comments } from "./comments";
 import { OwnerControls } from "./owner-controls";
 
 type Params = { params: Promise<{ id: string }> };
@@ -62,14 +64,30 @@ export default async function PostPage({ params }: Params) {
   const problems = [...(session?.session_problems ?? [])].sort((a, b) =>
     a.opened_at.localeCompare(b.opened_at),
   );
+  const overview = buildSessionOverview(
+    session?.session_problems ?? [],
+    session?.active_ms ?? null,
+  );
   const authorName = author.display_name || (author.handle ? `@${author.handle}` : "Unknown");
   const title = post.title?.trim() || "Untitled session";
-  const showVideo = post.video_kind !== "none" && post.videos !== null;
 
   return (
     <article className="space-y-6">
-      {isOwner && (
-        <OwnerControls postId={post.id} status={post.status} visibility={post.visibility} />
+      {isOwner && viewer && (
+        <OwnerControls
+          postId={post.id}
+          userId={viewer.id}
+          status={post.status}
+          visibility={post.visibility}
+          title={post.title ?? ""}
+          body={post.body ?? ""}
+          showVideo={post.show_video}
+          includeAiInsights={post.include_ai_insights}
+          hasVideo={Boolean(post.videos) && post.video_kind !== "none"}
+          isInterview={session?.kind === "interview"}
+          coverMediaId={post.cover_media_id}
+          images={post.images}
+        />
       )}
 
       <header>
@@ -114,8 +132,21 @@ export default async function PostPage({ params }: Params) {
             <CopyLinkButton path={`/p/${post.id}`} />
           </div>
         </div>
+      </header>
 
-        <h1 className="mt-5 text-2xl font-bold leading-tight text-zinc-50 sm:text-3xl">{title}</h1>
+      <PostSlides post={post} title={title} />
+
+      <PostActions
+        postId={post.id}
+        likeCount={post.like_count}
+        commentCount={post.comment_count}
+        liked={post.viewer_liked}
+        canInteract={Boolean(viewer)}
+        commentHref="#comments"
+      />
+
+      <div>
+        <h1 className="text-2xl font-bold leading-tight text-zinc-50 sm:text-3xl">{title}</h1>
         {post.body?.trim() && (
           <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-300">
             {post.body}
@@ -133,24 +164,13 @@ export default async function PostPage({ params }: Params) {
           )}
           <SummaryChip
             icon={<ListChecks className="size-3.5" />}
-            label={`${problems.length} ${problems.length === 1 ? "problem" : "problems"}`}
+            label={`${overview.solved}/${overview.total} solved`}
           />
           {post.visibility === "private" && (
             <SummaryChip icon={<Lock className="size-3.5" />} label="Only me" />
           )}
         </dl>
-      </header>
-
-      {showVideo && post.videos && (
-        <section aria-label="Video">
-          <VideoEmbed
-            libraryId={post.videos.library_id}
-            bunnyVideoId={post.videos.bunny_video_id}
-            status={post.videos.status}
-            title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "full recording"}`}
-          />
-        </section>
-      )}
+      </div>
 
       {problems.length > 0 ? (
         <div className="space-y-4">
@@ -168,6 +188,14 @@ export default async function PostPage({ params }: Params) {
           <SessionInsights sessionId={session.id} />
         </Suspense>
       )}
+
+      <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+        <CommentSection
+          postId={post.id}
+          viewerId={viewer?.id ?? null}
+          isPostOwner={Boolean(isOwner)}
+        />
+      </Suspense>
     </article>
   );
 }
@@ -181,6 +209,22 @@ function SummaryChip({ icon, label, title }: { icon?: ReactNode; label: string; 
       {icon}
       <dd>{label}</dd>
     </div>
+  );
+}
+
+async function CommentSection({
+  postId,
+  viewerId,
+  isPostOwner,
+}: {
+  postId: string;
+  viewerId: string | null;
+  isPostOwner: boolean;
+}) {
+  const supabase = await createClient();
+  const comments = await fetchComments(supabase, postId);
+  return (
+    <Comments postId={postId} comments={comments} viewerId={viewerId} isPostOwner={isPostOwner} />
   );
 }
 

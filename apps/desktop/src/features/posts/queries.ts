@@ -1,5 +1,6 @@
+import type { Post } from "@lare/supabase-types";
 import type { QueryData } from "@supabase/supabase-js";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { parseAiReview } from "@/lib/json";
 import { supabase } from "@/lib/supabase";
 
@@ -38,6 +39,39 @@ export function useInterviewReview(sessionId: string | null | undefined) {
         .maybeSingle();
       if (error) throw error;
       return data ? parseAiReview(data) : null;
+    },
+  });
+}
+
+export interface PostEdit {
+  id: string;
+  title: string;
+  body: string;
+  visibility: Post["visibility"];
+  showVideo: boolean;
+  coverMediaId: string | null;
+}
+
+/** Edit an already published post. RLS restricts the update to its owner. */
+export function useUpdatePost() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, title, body, visibility, showVideo, coverMediaId }: PostEdit) => {
+      const { error } = await supabase
+        .from("posts")
+        .update({
+          title: title.trim() || null,
+          body: body.trim() || null,
+          visibility,
+          show_video: showVideo,
+          cover_media_id: coverMediaId,
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({ queryKey: postKey(vars.id) });
+      void queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
   });
 }

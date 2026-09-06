@@ -186,7 +186,7 @@ jobs:
         run: |
           zip=$(ls apps/extension/.output/*-chrome.zip | head -n1)
           cp "$zip" Lare-Chrome-Extension.zip
-          gh release upload "$TAG" "$zip" Lare-Chrome-Extension.zip --clobber
+          gh release upload "$TAG" Lare-Chrome-Extension.zip --clobber
 
   publish:
     name: Publish release
@@ -207,3 +207,18 @@ jobs:
             grep -qx "$required" assets.txt || { echo "::error::missing asset $required"; exit 1; }
           done
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      - name: Trim duplicate assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          # Keep only what people need to run the app — the four stable installers — plus
+          # latest.json and the versioned updater artifacts it points at (setup exe + .sig,
+          # .app.tar.gz + .sig). Everything else (duplicate dmgs, msi, raw extension zip) goes.
+          for asset in $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'); do
+            case "$asset" in
+              latest.json|Lare-macOS-*|Lare-Windows-x64-Setup.exe|Lare-Chrome-Extension.zip) continue ;;
+              *_x64-setup.exe|*_x64-setup.exe.sig|*.app.tar.gz|*.app.tar.gz.sig) continue ;;
+              *) gh release delete-asset "$TAG" "$asset" --repo "$GITHUB_REPOSITORY" --yes ;;
+            esac
+          done

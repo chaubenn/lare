@@ -87,7 +87,13 @@ export default async function HomePage({
         </div>
       ) : (
         // Keyed so switching scope resets the paging state instead of reusing the old page.
-        <Feed key={scope} initialItems={items} initialCursor={nextCursor} scope={scope} />
+        <Feed
+          key={scope}
+          initialItems={items}
+          initialCursor={nextCursor}
+          scope={scope}
+          viewerId={viewer.id}
+        />
       )}
     </div>
   );

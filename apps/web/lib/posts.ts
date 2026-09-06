@@ -13,12 +13,15 @@ export const FEED_PAGE_SIZE = 10;
 /** Columns needed by `PostCard`. Keep it lean: no code, no distributions, no descriptions. */
 export const POST_CARD_SELECT = `
   id, user_id, title, body, status, visibility, video_id, video_kind, include_ai_insights,
+  show_video, cover_media_id, like_count, comment_count,
   published_at, created_at, updated_at, session_id,
   profiles!posts_user_id_fkey(handle, display_name, avatar_url, is_private),
   sessions!posts_session_id_fkey(id, kind, scope, status, active_ms, started_at, ended_at,
     session_problems(id, slug, title, difficulty, active_ms, opened_at,
-      submissions(id, accepted, runtime_ms, runtime_display, runtime_percentile, submitted_at))),
-  videos!posts_video_id_fkey(id, status, thumbnail_path, duration_ms)
+      submissions(id, accepted, lang, runtime_ms, runtime_display, runtime_percentile,
+        memory_mb, memory_display, memory_percentile, submitted_at))),
+  videos!posts_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id),
+  post_media!post_media_post_id_fkey(id, storage_path, width, height, caption, position, created_at)
 ` as const;
 
 /** Everything `/p/[id]` renders. */
@@ -26,7 +29,8 @@ export const POST_DETAIL_SELECT = `
   *,
   profiles!posts_user_id_fkey(id, handle, display_name, avatar_url, is_private),
   sessions!posts_session_id_fkey(*, session_problems(*, submissions(*))),
-  videos!posts_video_id_fkey(*)
+  videos!posts_video_id_fkey(*),
+  post_media!post_media_post_id_fkey(*)
 ` as const;
 
 function postCardQuery(supabase: Client) {
@@ -37,39 +41,128 @@ function postDetailQuery(supabase: Client) {
 }
 
 export type PostCardRow = QueryData<ReturnType<typeof postCardQuery>>[number];
-export type PostDetail = QueryData<ReturnType<typeof postDetailQuery>>[number];
-export type PostCardData = PostCardRow & { thumbnail_url: string | null };
+export type PostDetailRow = QueryData<ReturnType<typeof postDetailQuery>>[number];
+
+/** One carousel photo with a signed, ready-to-render URL. */
+export interface PostImage {
+  id: string;
+  url: string;
+  width: number | null;
+  height: number | null;
+  caption: string | null;
+}
+
+/** Everything the card and the post page need on top of the raw row. */
+export interface PostSocial {
+  thumbnail_url: string | null;
+  images: PostImage[];
+  /** Author-supplied cover, or null when the generated session card is used instead. */
+  cover_url: string | null;
+  viewer_liked: boolean;
+}
+
+export type PostCardData = PostCardRow & PostSocial;
+export type PostDetail = PostDetailRow & PostSocial;
 
 export type PostCardSession = NonNullable<PostCardRow["sessions"]>;
 export type PostCardProblem = PostCardSession["session_problems"][number];
 
-/** Sign thumbnail paths in one round-trip; unsignable paths resolve to null. */
-export async function signThumbnails(
+/** Sign storage paths in one round-trip; unsignable paths resolve to null. */
+async function signPaths(
   supabase: Client,
+  bucket: string,
   paths: string[],
 ): Promise<Map<string, string>> {
   const unique = [...new Set(paths.filter((p) => p.length > 0))];
   const map = new Map<string, string>();
   if (unique.length === 0) return map;
-  const { data } = await supabase.storage.from("thumbnails").createSignedUrls(unique, 3600);
+  const { data } = await supabase.storage.from(bucket).createSignedUrls(unique, 3600);
   for (const entry of data ?? []) {
     if (entry.path && entry.signedUrl && !entry.error) map.set(entry.path, entry.signedUrl);
   }
   return map;
 }
 
-export async function attachThumbnails(
+type MediaRow = {
+  id: string;
+  storage_path: string;
+  width: number | null;
+  height: number | null;
+  caption: string | null;
+  position: number;
+  created_at: string;
+};
+
+type DecoratableRow = {
+  id: string;
+  cover_media_id: string | null;
+  videos: { thumbnail_path: string | null } | null;
+  post_media: MediaRow[] | null;
+};
+
+/** Author order: `position` first (what the editor drags), creation time as the tiebreak. */
+function orderMedia(rows: readonly MediaRow[]): MediaRow[] {
+  return [...rows].sort(
+    (a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at),
+  );
+}
+
+/**
+ * Attach signed thumbnail/photo URLs and the viewer's like state to a batch of post rows.
+ * One signing round-trip per bucket and one query for likes, whatever the page size.
+ */
+export async function decoratePosts<T extends DecoratableRow>(
   supabase: Client,
-  rows: PostCardRow[],
-): Promise<PostCardData[]> {
-  const paths = rows.map((r) => r.videos?.thumbnail_path ?? "").filter(Boolean);
-  const signed = await signThumbnails(supabase, paths);
-  return rows.map((row) => ({
-    ...row,
-    thumbnail_url: row.videos?.thumbnail_path
-      ? (signed.get(row.videos.thumbnail_path) ?? null)
-      : null,
-  }));
+  rows: T[],
+): Promise<(T & PostSocial)[]> {
+  if (rows.length === 0) return [];
+
+  const [thumbs, media, likedIds] = await Promise.all([
+    signPaths(
+      supabase,
+      "thumbnails",
+      rows.map((r) => r.videos?.thumbnail_path ?? "").filter(Boolean),
+    ),
+    signPaths(
+      supabase,
+      "post-media",
+      rows.flatMap((r) => (r.post_media ?? []).map((m) => m.storage_path)),
+    ),
+    likedPostIds(
+      supabase,
+      rows.map((r) => r.id),
+    ),
+  ]);
+
+  return rows.map((row) => {
+    const images: PostImage[] = orderMedia(row.post_media ?? []).flatMap((m) => {
+      const url = media.get(m.storage_path);
+      return url ? [{ id: m.id, url, width: m.width, height: m.height, caption: m.caption }] : [];
+    });
+    return {
+      ...row,
+      thumbnail_url: row.videos?.thumbnail_path
+        ? (thumbs.get(row.videos.thumbnail_path) ?? null)
+        : null,
+      images,
+      cover_url: images.find((i) => i.id === row.cover_media_id)?.url ?? null,
+      viewer_liked: likedIds.has(row.id),
+    };
+  });
+}
+
+/** Which of these posts the signed-in viewer has already liked (empty set when anonymous). */
+async function likedPostIds(supabase: Client, postIds: string[]): Promise<Set<string>> {
+  if (postIds.length === 0) return new Set();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims.sub;
+  if (!userId) return new Set();
+  const { data } = await supabase
+    .from("post_likes")
+    .select("post_id")
+    .eq("user_id", userId)
+    .in("post_id", postIds);
+  return new Set((data ?? []).map((row) => row.post_id));
 }
 
 /** "all" is every post the viewer is allowed to see; "following" narrows it to accepted followees. */
@@ -97,7 +190,7 @@ export async function fetchFeedPage(
     .overrideTypes<PostCardRow[], { merge: false }>();
   if (error) throw new Error(`feed failed: ${error.message}`);
   const rows = data ?? [];
-  const items = await attachThumbnails(supabase, rows);
+  const items = await decoratePosts(supabase, rows);
   const last = rows.at(-1);
   const nextCursor =
     rows.length === FEED_PAGE_SIZE && last?.published_at ? last.published_at : null;
@@ -112,7 +205,7 @@ export async function fetchUserPosts(supabase: Client, userId: string): Promise<
     .order("published_at", { ascending: false })
     .limit(50);
   if (error) throw new Error(`posts failed: ${error.message}`);
-  return attachThumbnails(supabase, data ?? []);
+  return decoratePosts(supabase, data ?? []);
 }
 
 /** Full post for `/p/[id]`, deduped between `generateMetadata` and the page. Null = not visible. */
@@ -121,5 +214,27 @@ export const getPostDetail = cache(async (id: string): Promise<PostDetail | null
   const supabase = await createClient();
   const { data, error } = await postDetailQuery(supabase).eq("id", id).maybeSingle();
   if (error) throw new Error(`post failed: ${error.message}`);
-  return data ?? null;
+  if (!data) return null;
+  const [decorated] = await decoratePosts(supabase, [data]);
+  return decorated ?? null;
 });
+
+/** Comments on a post, oldest first, with their authors. RLS mirrors the post's visibility. */
+export const COMMENT_SELECT = `
+  id, post_id, user_id, body, edited_at, created_at,
+  profiles!post_comments_user_id_fkey(handle, display_name, avatar_url)
+` as const;
+
+function commentQuery(supabase: Client) {
+  return supabase.from("post_comments").select(COMMENT_SELECT);
+}
+export type PostCommentRow = QueryData<ReturnType<typeof commentQuery>>[number];
+
+export async function fetchComments(supabase: Client, postId: string): Promise<PostCommentRow[]> {
+  const { data, error } = await commentQuery(supabase)
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(`comments failed: ${error.message}`);
+  return data ?? [];
+}

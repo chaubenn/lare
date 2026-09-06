@@ -125,7 +125,7 @@ export default async function ProfilePage({ params }: Params) {
               </div>
             }
           >
-            <ProfilePosts userId={profile.id} isSelf={isSelf} />
+            <ProfilePosts userId={profile.id} isSelf={isSelf} viewerId={viewer?.id ?? null} />
           </Suspense>
         ) : (
           <div className={`${cardClass} px-6 py-10 text-center`}>
@@ -171,7 +171,15 @@ function Stats({ stats }: { stats: ProfileStats | null }) {
   );
 }
 
-async function ProfilePosts({ userId, isSelf }: { userId: string; isSelf: boolean }) {
+async function ProfilePosts({
+  userId,
+  isSelf,
+  viewerId,
+}: {
+  userId: string;
+  isSelf: boolean;
+  viewerId: string | null;
+}) {
   const supabase = await createClient();
   const posts = await fetchUserPosts(supabase, userId);
   if (posts.length === 0) {
@@ -184,7 +192,7 @@ async function ProfilePosts({ userId, isSelf }: { userId: string; isSelf: boolea
   return (
     <div className="space-y-4">
       {posts.map((post) => (
-        <PostCard key={post.id} post={post} />
+        <PostCard key={post.id} post={post} viewerId={viewerId} />
       ))}
     </div>
   );

@@ -54,6 +54,18 @@ export function PostCard({ post }: { post: FeedPost | UserPost }) {
               video
             </>
           ) : null}
+          {post.like_count > 0 ? (
+            <>
+              <span aria-hidden> · </span>
+              {plural(post.like_count, "like")}
+            </>
+          ) : null}
+          {post.comment_count > 0 ? (
+            <>
+              <span aria-hidden> · </span>
+              {plural(post.comment_count, "comment")}
+            </>
+          ) : null}
           {post.visibility === "private" ? (
             <>
               <span aria-hidden> · </span>

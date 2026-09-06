@@ -71,8 +71,9 @@ export function VideoEmbed({
           src={src}
           loading="lazy"
           className="aspect-video w-full"
-          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-          allowFullScreen
+          // `allow` supersedes the legacy allowfullscreen attribute; setting both makes the
+          // player log "Allow attribute will take precedence over 'allowfullscreen'".
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
         />
       </div>
     );

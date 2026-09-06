@@ -2,9 +2,10 @@
 
 import { Check, Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/cn";
 import { buttonSecondary } from "@/lib/styles";
 
-export function CopyLinkButton({ path }: { path: string }) {
+export function CopyLinkButton({ path, className }: { path: string; className?: string }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -24,7 +25,11 @@ export function CopyLinkButton({ path }: { path: string }) {
   }
 
   return (
-    <button type="button" onClick={copy} className={`${buttonSecondary} px-3 py-1.5 text-xs`}>
+    <button
+      type="button"
+      onClick={copy}
+      className={cn(buttonSecondary, "px-3 py-1.5 text-xs", className)}
+    >
       {copied ? <Check className="size-3.5 text-emerald-400" /> : <Link2 className="size-3.5" />}
       {copied ? "Copied" : "Copy link"}
     </button>

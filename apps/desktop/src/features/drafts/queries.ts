@@ -81,12 +81,16 @@ export interface PublishInput {
   title: string;
   body: string;
   visibility: Post["visibility"];
+  /** Show the attached demo video as a slide on the post. */
+  showVideo: boolean;
+  /** Photo used as the cover; null falls back to the generated session card. */
+  coverMediaId: string | null;
 }
 
 export function usePublishDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, title, body, visibility }: PublishInput) => {
+    mutationFn: async ({ id, title, body, visibility, showVideo, coverMediaId }: PublishInput) => {
       const { data, error } = await supabase
         .from("posts")
         .update({
@@ -95,6 +99,8 @@ export function usePublishDraft() {
           title: title.trim() || null,
           body: body.trim() || null,
           visibility,
+          show_video: showVideo,
+          cover_media_id: coverMediaId,
         })
         .eq("id", id)
         .select("id")
@@ -113,10 +119,16 @@ export function usePublishDraft() {
 export function useSaveDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, title, body, visibility }: PublishInput) => {
+    mutationFn: async ({ id, title, body, visibility, showVideo, coverMediaId }: PublishInput) => {
       const { error } = await supabase
         .from("posts")
-        .update({ title: title.trim() || null, body: body.trim() || null, visibility })
+        .update({
+          title: title.trim() || null,
+          body: body.trim() || null,
+          visibility,
+          show_video: showVideo,
+          cover_media_id: coverMediaId,
+        })
         .eq("id", id);
       if (error) throw error;
     },

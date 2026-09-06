@@ -13,6 +13,14 @@ followers, attach demo videos, and run AI-graded mock interviews.
 
 Docs: [architecture](docs/architecture.md) · [QA checklist](docs/qa.md) · [privacy](docs/privacy.md)
 
+## What's new in v0.2.0
+
+- Posts are social: like, comment and edit published posts, on the web and in the desktop app.
+- Instagram-style post cards: a generated session overview card (problems solved, time
+  complexity, session kind) you can swipe through with attached photos and your demo video.
+- Custom cover images for posts, and an optional toggle to show/hide the demo video on the card.
+- Fixed videos failing to play on the website (embed token authentication is now proxied).
+
 ## Install
 
 Two pieces: the desktop app and the Chrome extension. About two minutes.
@@ -83,10 +91,12 @@ site URL and the Bunny library id. Server secrets never live in clients.
 The Release workflow builds installers for macOS (Apple Silicon + Intel) and Windows x64 and the
 extension zip, signs the updater bundles with `TAURI_SIGNING_PRIVATE_KEY`, writes `latest.json`
 and publishes the GitHub release as **latest**. Installed apps (tauri-plugin-updater) read
-`releases/latest/download/latest.json` on launch and self-update. Stable download names
-(`Lare-macOS-AppleSilicon.dmg`, `Lare-macOS-Intel.dmg`, `Lare-Windows-x64-Setup.exe`,
-`Lare-Chrome-Extension.zip`) are re-uploaded alongside the versioned files so the README links
-never change. Running the workflow manually produces a draft release that is never marked latest.
+`releases/latest/download/latest.json` on launch and self-update. The release ships only the four
+stable download names (`Lare-macOS-AppleSilicon.dmg`, `Lare-macOS-Intel.dmg`,
+`Lare-Windows-x64-Setup.exe`, `Lare-Chrome-Extension.zip`) — everything people need to run the
+app — plus `latest.json` and the signed updater artifacts it references; duplicate versioned
+installers are deleted after publishing. Running the workflow manually produces a draft release
+that is never marked latest.
 
 The updater public key lives in `tauri.conf.json` (`plugins.updater.pubkey`); the private key is
 the `TAURI_SIGNING_PRIVATE_KEY` repository secret. Losing it means shipped apps can no longer

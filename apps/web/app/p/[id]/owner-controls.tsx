@@ -1,21 +1,32 @@
 "use client";
 
-import { Eye, EyeOff, Globe, LoaderCircle, Lock, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Globe, LoaderCircle, Lock, Pencil, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
+import type { PostImage } from "@/lib/posts";
 import { buttonDanger, buttonSecondary } from "@/lib/styles";
 import { deletePost, setPostStatus, setPostVisibility } from "./actions";
+import { PostEditor } from "./post-editor";
 
-export function OwnerControls({
-  postId,
-  status,
-  visibility,
-}: {
+export interface OwnerControlsProps {
   postId: string;
+  userId: string;
   status: "draft" | "published";
   visibility: "public" | "private";
-}) {
+  title: string;
+  body: string;
+  showVideo: boolean;
+  includeAiInsights: boolean;
+  hasVideo: boolean;
+  isInterview: boolean;
+  coverMediaId: string | null;
+  images: PostImage[];
+}
+
+export function OwnerControls(props: OwnerControlsProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const { postId, status, visibility } = props;
 
   function run(action: () => Promise<{ error: string | null }>) {
     setError(null);
@@ -39,6 +50,16 @@ export function OwnerControls({
         </span>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setEditing((v) => !v)}
+            aria-expanded={editing}
+            className={small}
+          >
+            <Pencil className="size-3.5" />
+            {editing ? "Close editor" : "Edit post"}
+          </button>
           <button
             type="button"
             disabled={pending}
@@ -85,6 +106,26 @@ export function OwnerControls({
           {pending && <LoaderCircle className="size-4 animate-spin text-zinc-500" />}
         </div>
       </div>
+
+      {editing && (
+        <div className="mt-3">
+          <PostEditor
+            postId={postId}
+            userId={props.userId}
+            title={props.title}
+            body={props.body}
+            visibility={visibility}
+            showVideo={props.showVideo}
+            includeAiInsights={props.includeAiInsights}
+            hasVideo={props.hasVideo}
+            isInterview={props.isInterview}
+            coverMediaId={props.coverMediaId}
+            images={props.images}
+            onDone={() => setEditing(false)}
+          />
+        </div>
+      )}
+
       {error && (
         <p role="alert" className="mt-2 text-xs text-rose-300">
           {error}
