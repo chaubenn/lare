@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::recorder::Recorder;
 
@@ -96,6 +96,8 @@ pub fn on_exit_requested(app: &AppHandle, api: &tauri::ExitRequestApi, code: Opt
 #[cfg(unix)]
 pub fn install_signal_handlers(app: &AppHandle) {
     use tokio::signal::unix::{SignalKind, signal};
+    // Module-scoped so the import does not go unused on Windows, which has no signal handling.
+    use tracing::info;
 
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
