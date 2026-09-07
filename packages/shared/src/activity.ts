@@ -215,6 +215,5 @@ export function maxPage(itemCount: number, pageSize: number): number {
 export function describeActivityWeek(week: ActivityWeek): string {
   const range = formatWeekRange(week.firstDay, week.lastDay);
   if (week.count === 0) return `No problems solved ${range}`;
-  const days = week.daysActive === 1 ? "1 day active" : `${week.daysActive} days active`;
-  return `${week.count} problem${week.count === 1 ? "" : "s"} · ${days} · ${range}`;
+  return `${week.count} problem${week.count === 1 ? "" : "s"} solved · ${range}`;
 }

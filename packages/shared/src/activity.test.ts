@@ -54,11 +54,23 @@ describe("formatWeekRange", () => {
 });
 
 describe("describeActivityWeek", () => {
-  it("names the count and active days", () => {
+  it("names the count and the week", () => {
     const week = buildActivityWeekBars(SAMPLE).find((w) => w.count === 4);
     expect(week).toBeDefined();
-    expect(describeActivityWeek(week!)).toContain("4 problems");
-    expect(describeActivityWeek(week!)).toContain("2 days active");
+    expect(describeActivityWeek(week!)).toContain("4 problems solved");
+    expect(describeActivityWeek(week!)).not.toContain("days active");
+  });
+
+  it("uses the singular for a week with one solve", () => {
+    const one: SolvedActivity = {
+      ...SAMPLE,
+      days: [{ day: "2026-01-08", count: 1 }],
+      total: 1,
+      max: 1,
+    };
+    const week = buildActivityWeekBars(one).find((w) => w.count === 1);
+    expect(week).toBeDefined();
+    expect(describeActivityWeek(week!)).toContain("1 problem solved");
   });
 });
 

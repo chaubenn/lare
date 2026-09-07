@@ -94,13 +94,9 @@ function WeekTooltip({
     <TooltipCard flip={flip}>
       <p className="font-medium">{formatWeekRange(week.firstDay, week.lastDay)}</p>
       <p className="mt-1 tabular-nums text-zinc-300">
-        {week.count === 0 ? "No problems" : `${week.count} problem${week.count === 1 ? "" : "s"}`}
-      </p>
-      <p className="text-zinc-500">
-        {week.daysActive === 0
-          ? "No active days"
-          : `${week.daysActive} day${week.daysActive === 1 ? "" : "s"} active`}
-        {week.maxDay > 1 ? ` · best day ${week.maxDay}` : ""}
+        {week.count === 0
+          ? "No problems solved"
+          : `${week.count} problem${week.count === 1 ? "" : "s"} solved`}
       </p>
     </TooltipCard>
   );
