@@ -178,6 +178,12 @@ export interface UseDraggableOptions {
   /** Current position (left/top of the element). */
   position: DraggableAnchor;
   onMove: (next: DraggableAnchor) => void;
+  /**
+   * Fired as the drag begins. Return an anchor to override the grab origin when
+   * `position` may be stale (e.g. the element is anchored by right/bottom, so
+   * its real left/top is whatever the current layout resolved to).
+   */
+  onGrab?: () => DraggableAnchor | undefined;
   onRelease?: (next: DraggableAnchor, velocity: { x: number; y: number }) => void;
   bounds?: { minX: number; maxX: number; minY: number; maxY: number };
   /** Snap targets after release (corners, edges). */
@@ -191,10 +197,10 @@ export interface UseDraggableOptions {
  */
 export function useDraggable(
   ref: RefObject<HTMLElement | null>,
-  { position, onMove, onRelease, bounds, snapTo, disabled = false }: UseDraggableOptions,
+  { position, onMove, onGrab, onRelease, bounds, snapTo, disabled = false }: UseDraggableOptions,
 ) {
-  const state = useRef({ position, onMove, onRelease, bounds, snapTo, disabled });
-  state.current = { position, onMove, onRelease, bounds, snapTo, disabled };
+  const state = useRef({ position, onMove, onGrab, onRelease, bounds, snapTo, disabled });
+  state.current = { position, onMove, onGrab, onRelease, bounds, snapTo, disabled };
 
   const grab = useRef({ x: 0, y: 0, pointerX: 0, pointerY: 0 });
   const samples = useRef<Sample[]>([]);
@@ -220,9 +226,10 @@ export function useDraggable(
       const target = event.target as HTMLElement | null;
       if (target?.closest("button, a, input, textarea, select, [role='button']")) return;
       dragging.current = true;
+      const origin = state.current.onGrab?.() ?? state.current.position;
       grab.current = {
-        x: state.current.position.x,
-        y: state.current.position.y,
+        x: origin.x,
+        y: origin.y,
         pointerX: event.clientX,
         pointerY: event.clientY,
       };

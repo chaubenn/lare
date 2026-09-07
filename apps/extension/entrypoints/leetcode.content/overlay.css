@@ -38,9 +38,10 @@
   color: var(--text);
   pointer-events: none;
 }
-.lare-root[data-placed="1"] {
-  right: auto;
-  bottom: auto;
+/* Parked HUD: the alignment and stack order follow the anchored corner so the
+   FAB stays closest to it and the menu opens inward. */
+.lare-root[data-h="left"] {
+  align-items: flex-start;
 }
 .lare-root * {
   box-sizing: border-box;
@@ -109,6 +110,12 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
+}
+.lare-root[data-v="top"] .lare-launcher {
+  flex-direction: column-reverse;
+}
+.lare-root[data-h="left"] .lare-launcher {
+  align-items: flex-start;
 }
 
 .lare-menu {

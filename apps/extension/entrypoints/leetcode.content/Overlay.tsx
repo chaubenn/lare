@@ -4,6 +4,7 @@ import { useDraggable } from "@lare/ui/gesture";
 import { SPRING } from "@lare/ui/motion";
 import { AnimatePresence, m } from "motion/react";
 import {
+  type CSSProperties,
   type RefObject,
   useCallback,
   useEffect,
@@ -18,6 +19,7 @@ const HUD_KEY = "lare:hud-pos";
 const HUD_INSET = 16;
 
 type Anchor = { x: number; y: number };
+type Corner = { h: "left" | "right"; v: "top" | "bottom" };
 
 function defaultPos(el: HTMLElement): Anchor {
   return {
@@ -51,6 +53,32 @@ function nearestCorner(pos: Anchor, el: HTMLElement): Anchor {
   return best;
 }
 
+/**
+ * Which corner the HUD is parked in, from the midpoint of its current box. The
+ * result drives edge anchoring (see `anchorStyle`) rather than left/top, so the
+ * menu and the active pill grow *into* the viewport instead of past its edge.
+ */
+function cornerOf(pos: Anchor, el: HTMLElement): Corner {
+  return {
+    h: pos.x + el.offsetWidth / 2 > window.innerWidth / 2 ? "right" : "left",
+    v: pos.y + el.offsetHeight / 2 > window.innerHeight / 2 ? "bottom" : "top",
+  };
+}
+
+/**
+ * Pin the two edges nearest the parked corner. Anchoring by left/top instead
+ * would fix the box's top-left corner at a position measured while the HUD was
+ * collapsed, so opening the menu would push its lower half off-screen.
+ */
+function anchorStyle(corner: Corner): CSSProperties {
+  return {
+    left: corner.h === "left" ? HUD_INSET : "auto",
+    right: corner.h === "right" ? HUD_INSET : "auto",
+    top: corner.v === "top" ? HUD_INSET : "auto",
+    bottom: corner.v === "bottom" ? HUD_INSET : "auto",
+  };
+}
+
 function clampToViewport(pos: Anchor, el: HTMLElement): Anchor {
   const maxX = Math.max(HUD_INSET, window.innerWidth - el.offsetWidth - HUD_INSET);
   const maxY = Math.max(HUD_INSET, window.innerHeight - el.offsetHeight - HUD_INSET);
@@ -62,32 +90,49 @@ function clampToViewport(pos: Anchor, el: HTMLElement): Anchor {
 
 function useHudPosition(ref: RefObject<HTMLElement | null>) {
   const [pos, setPos] = useState<Anchor | null>(null);
+  const [corner, setCorner] = useState<Corner>({ h: "right", v: "bottom" });
+  const [dragging, setDragging] = useState(false);
   const [ready, setReady] = useState(false);
+
+  // Park at a corner: `pos` stays the left/top the drag math works in, while
+  // `corner` is what actually gets rendered once the pointer is released.
+  const park = useCallback((next: Anchor, el: HTMLElement) => {
+    const snapped = nearestCorner(next, el);
+    setPos(snapped);
+    setCorner(cornerOf(snapped, el));
+    return snapped;
+  }, []);
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     let cancelled = false;
     void chrome.storage.local.get(HUD_KEY).then((raw) => {
-      if (cancelled || !ref.current) return;
+      const current = ref.current;
+      if (cancelled || !current) return;
       const saved = raw[HUD_KEY] as Anchor | undefined;
-      if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
-        setPos(clampToViewport(saved, ref.current));
-      } else {
-        setPos(defaultPos(ref.current));
-      }
+      const start =
+        saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
+          ? clampToViewport(saved, current)
+          : defaultPos(current);
+      park(start, current);
       setReady(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [ref]);
+  }, [park, ref]);
 
   useEffect(() => {
     const onResize = () => {
       const el = ref.current;
       if (!el) return;
-      setPos((p) => (p ? nearestCorner(p, el) : p));
+      setPos((p) => {
+        if (!p) return p;
+        const snapped = nearestCorner(p, el);
+        setCorner(cornerOf(snapped, el));
+        return snapped;
+      });
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -106,17 +151,37 @@ function useHudPosition(ref: RefObject<HTMLElement | null>) {
 
   useDraggable(ref, {
     position: pos ?? { x: 0, y: 0 },
+    onGrab: () => {
+      setDragging(true);
+      const el = ref.current;
+      if (!el) return;
+      // Parked, the box hangs off right/bottom, so `pos` (measured while the HUD
+      // was collapsed) is not where it actually sits. Hand back the live rect.
+      const rect = el.getBoundingClientRect();
+      const origin = { x: rect.left, y: rect.top };
+      setPos(origin);
+      return origin;
+    },
     onMove: setPos,
     onRelease: (next) => {
-      setPos(next);
-      void chrome.storage.local.set({ [HUD_KEY]: next });
+      setDragging(false);
+      const target = ref.current ? park(next, ref.current) : next;
+      void chrome.storage.local.set({ [HUD_KEY]: target });
     },
     bounds,
     snapTo,
     disabled: !ready,
   });
 
-  return { pos, ready };
+  // Mid-drag the HUD follows the pointer by left/top; parked, it hangs off the
+  // two edges of its corner so opening the menu can never overflow the viewport.
+  const style: CSSProperties | undefined = !ready
+    ? undefined
+    : dragging && pos
+      ? { left: pos.x, top: pos.y, right: "auto", bottom: "auto" }
+      : anchorStyle(corner);
+
+  return { corner, style };
 }
 
 function kindLabel(kind: "practice" | "interview", scope: "session" | "problem"): string {
@@ -164,7 +229,7 @@ export function Overlay({ controller }: { controller: PageController }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
-  const { pos, ready } = useHudPosition(rootRef);
+  const { corner, style: hudStyle } = useHudPosition(rootRef);
 
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -247,12 +312,7 @@ export function Overlay({ controller }: { controller: PageController }) {
     : 0;
 
   return (
-    <div
-      className="lare-root"
-      ref={rootRef}
-      data-placed={ready ? "1" : undefined}
-      style={ready && pos ? { left: pos.x, top: pos.y } : undefined}
-    >
+    <div className="lare-root" ref={rootRef} data-h={corner.h} data-v={corner.v} style={hudStyle}>
       <div className="lare-toasts" aria-live="polite" aria-relevant="additions">
         {page.toasts.map((t) => (
           <div key={t.id} className={`lare-toast lare-toast--${t.kind}`}>
@@ -375,7 +435,7 @@ export function Overlay({ controller }: { controller: PageController }) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={SPRING.ui}
-                style={{ transformOrigin: "bottom right" }}
+                style={{ transformOrigin: `${corner.v} ${corner.h}` }}
               >
                 {!auth ? (
                   <>
