@@ -589,6 +589,28 @@ impl Recorder {
         res
     }
 
+    /// Release everything the OS can see Lare holding: the ScreenCaptureKit stream, the camera
+    /// and the microphone. Run on every way out of the process (see [`crate::shutdown`]).
+    ///
+    /// The take is stopped, not discarded — quitting mid-recording keeps the video, which is why
+    /// this goes through [`Recorder::stop`] rather than something cheaper. It is idempotent:
+    /// `stop` answers a second caller from `last_finish` instead of erroring.
+    pub async fn shutdown(&self) {
+        if self.active.lock().await.is_some() {
+            info!("stopping the recording before the app exits");
+            match self.stop(None).await {
+                Ok(p) => info!(recording = %p.recording_id, "recording saved on the way out"),
+                Err(e) => warn!(%e, "could not save the recording on the way out"),
+            }
+        }
+        // The feeds outlive individual recordings, so the camera light and the microphone stay
+        // on until they are asked to stop even when nothing was being recorded.
+        if let Some(feeds) = self.feeds.get() {
+            feeds.release_mic().await;
+            feeds.release_camera().await;
+        }
+    }
+
     /// Finish recordings a previous run left behind — a project with a start manifest but no
     /// completed one, which is what a crash or a force-quit leaves. Runs once at launch, before
     /// the Recordings page asks for the list, so an interrupted take simply turns up in it.
@@ -599,7 +621,12 @@ impl Recorder {
         let mut recovered = 0;
         for entry in entries.flatten() {
             let dir = entry.path();
-            if !dir.is_dir() || dir.join("lare-recording.json").exists() {
+            // `lare-unrecoverable.json` is the tombstone below: a project with nothing in it is
+            // retried once, not on every launch for the rest of the install's life.
+            if !dir.is_dir()
+                || dir.join("lare-recording.json").exists()
+                || dir.join("lare-unrecoverable.json").exists()
+            {
                 continue;
             }
             let Ok(text) = std::fs::read_to_string(dir.join("lare-started.json")) else {
@@ -615,12 +642,15 @@ impl Recorder {
             let output_mp4 = match lare_recording::finalize_project(mode, &dir) {
                 Ok(output) => output,
                 Err(e) => {
-                    warn!(dir = %dir.display(), error = %format!("{e:#}"), "could not recover recording");
+                    let reason = format!("{e:#}");
+                    warn!(dir = %dir.display(), error = %reason, "could not recover recording");
+                    write_unrecoverable(&dir, &reason);
                     continue;
                 }
             };
             if mode == RecordingMode::Instant && output_mp4.is_none() {
                 warn!(dir = %dir.display(), "nothing recoverable in the project");
+                write_unrecoverable(&dir, "no display segments were written before the process died");
                 continue;
             }
             // The kill took the pause bookkeeping with it, so the wall clock is the best guess
@@ -809,6 +839,13 @@ fn write_manifest(project: &Path, payload: &StatePayload, facecam: bool) {
         "facecam": facecam,
     });
     let _ = std::fs::write(project.join("lare-started.json"), manifest.to_string());
+}
+
+/// Tombstone for a project [`Recorder::recover_incomplete`] could not finish, so the next launch
+/// walks past it instead of redoing the same failing work (and the directory says why).
+fn write_unrecoverable(project: &Path, reason: &str) {
+    let note = serde_json::json!({ "reason": reason, "at": now_ms() });
+    let _ = std::fs::write(project.join("lare-unrecoverable.json"), note.to_string());
 }
 
 fn write_completed(project: &Path, payload: &CompletedPayload) {

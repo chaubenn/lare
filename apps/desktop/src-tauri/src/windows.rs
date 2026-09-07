@@ -44,6 +44,18 @@ fn is_main_thread() -> bool {
         .is_some_and(|id| *id == std::thread::current().id())
 }
 
+static QUITTING: AtomicBool = AtomicBool::new(false);
+
+/// Called by [`crate::shutdown`] before it tears the recording down.
+///
+/// `run_on_main_thread` posts an application-defined `NSEvent` that only tao's own event loop
+/// dequeues, and by then the main thread is inside AppKit's `applicationShouldTerminate:` run
+/// loop, which never gets back to tao. An off-main [`on_main`] call would block until the process
+/// died. Hiding a window on the way out is moot anyway, so they stop marshalling.
+pub fn mark_quitting() {
+    QUITTING.store(true, Ordering::SeqCst);
+}
+
 /// Run window work on the AppKit/UI thread. Blocks the caller until done when off-main.
 fn on_main<T, F>(app: &AppHandle, f: F) -> Result<T, String>
 where
@@ -52,6 +64,9 @@ where
 {
     if is_main_thread() {
         return f(app);
+    }
+    if QUITTING.load(Ordering::SeqCst) {
+        return Err("Lare is quitting".into());
     }
     let (tx, rx) = std::sync::mpsc::channel();
     let app2 = app.clone();

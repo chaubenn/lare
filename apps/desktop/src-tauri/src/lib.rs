@@ -5,6 +5,7 @@ pub mod commands;
 pub mod deeplink;
 pub mod recorder;
 pub mod recording;
+pub mod shutdown;
 pub mod windows;
 pub mod ws_server;
 
@@ -194,6 +195,7 @@ pub fn run() {
             commands::recording_cancel,
             commands::recordings_list,
             commands::recording_delete,
+            commands::clear_screen_sharing,
             commands::open_recorder_window,
             commands::hide_recorder_window,
             commands::open_camera_window,
@@ -262,6 +264,11 @@ pub fn run() {
             // Local server + event bridge.
             tauri::async_runtime::spawn(forward_server_events(app.handle().clone(), events));
             tauri::async_runtime::spawn(ws_server::run_forever(server_ctx));
+
+            // Ctrl-C under `pnpm dev:desktop`, `killall Lare`, logout: none of these reach the
+            // event loop, and a process that dies with a capture open leaves macOS showing Lare
+            // as sharing the screen forever (see `shutdown`).
+            shutdown::install_signal_handlers(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -284,6 +291,16 @@ pub fn run() {
                 _ => {}
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Lare");
+        .build(tauri::generate_context!())
+        .expect("error while building Lare")
+        .run(|app, event| match event {
+            // The NSApp delegate exists by now, so the quit hook can be attached to it.
+            tauri::RunEvent::Ready => shutdown::install_terminate_handler(app),
+            // Closing the main window and `AppHandle::exit`; `NSApp terminate:` arrives at the
+            // delegate hook instead. Both funnel into the same teardown.
+            tauri::RunEvent::ExitRequested { ref api, code, .. } => {
+                shutdown::on_exit_requested(app, api, code)
+            }
+            _ => {}
+        });
 }

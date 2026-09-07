@@ -246,6 +246,12 @@ export const recorder = {
   resume: () => invoke<RecorderStatus>("recording_resume"),
   stop: () => invoke<CompletedRecording>("recording_stop"),
   cancel: () => invoke<void>("recording_cancel"),
+  /**
+   * Release the screen/camera/microphone and clear a capture session macOS is still crediting to
+   * Lare after a hard kill. Restarts `replayd` on macOS, so any *other* app's screen recording
+   * stops too — always confirm before calling.
+   */
+  clearScreenSharing: () => invoke<void>("clear_screen_sharing"),
   list: () => invoke<CompletedRecording[]>("recordings_list"),
   delete: (recordingId: string) => invoke<void>("recording_delete", { recordingId }),
 

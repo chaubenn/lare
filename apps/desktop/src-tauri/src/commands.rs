@@ -149,6 +149,39 @@ pub async fn recording_cancel(rec: Rec<'_>) -> Result<(), String> {
     rec.cancel(None).await
 }
 
+/// Clear a screen-sharing session macOS is still attributing to Lare.
+///
+/// A run that was killed outright (`kill -9`, a crash, a debugger stop) never got to call
+/// `stopCapture`, and macOS holds the ScreenCaptureKit session open on its behalf: Control Center
+/// keeps Lare in its screen-sharing menu with nothing listed under "Currently Sharing", and its
+/// own Stop Sharing button messages the process that is no longer there. Every ordinary exit now
+/// releases the stream (see [`crate::shutdown`]); this is the way out of a session an earlier
+/// build — or a hard kill — left behind.
+///
+/// Restarting `replayd`, the per-user daemon that owns every capture session, is what actually
+/// drops it; launchd starts it again with the next capture. Any *other* app's screen recording or
+/// screen share stops too, which is why this is behind an explicit button and a confirmation.
+#[tauri::command]
+pub async fn clear_screen_sharing(rec: Rec<'_>) -> Result<(), String> {
+    let recorder = rec.inner().clone();
+    recorder.shutdown().await;
+    #[cfg(target_os = "macos")]
+    {
+        // SIGKILL, not SIGTERM: `replayd` ignores a plain `killall` (it exits 0 and the daemon
+        // carries on with the same pid). launchd brings it straight back with an empty session
+        // table, which is what actually clears the indicator.
+        let status = tokio::process::Command::new("/usr/bin/killall")
+            .args(["-KILL", "replayd"])
+            .status()
+            .await
+            .map_err(|e| format!("could not restart replayd: {e}"))?;
+        // A non-zero exit only means no daemon was running, i.e. nothing was holding a session;
+        // the recording side has been released either way.
+        info!(code = status.code(), "restarted replayd to clear a stale screen-sharing session");
+    }
+    Ok(())
+}
+
 /// Completed recordings on disk (newest first), including ones not yet uploaded.
 #[tauri::command]
 pub fn recordings_list(rec: Rec<'_>) -> Vec<CompletedPayload> {
