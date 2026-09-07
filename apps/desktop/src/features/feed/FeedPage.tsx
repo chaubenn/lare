@@ -47,7 +47,10 @@ export function FeedPage() {
         />
       </div>
 
-      <div className="mx-auto w-full max-w-3xl">
+      {/* `max-w-xl` is the web feed's column width (components/feed.tsx). The card and the
+          carousel are already shared verbatim, so matching the column is what makes a post the
+          same size in both apps. */}
+      <div className="mx-auto w-full max-w-xl">
         {feed.isPending ? (
           <PageSpinner />
         ) : feed.isError ? (
