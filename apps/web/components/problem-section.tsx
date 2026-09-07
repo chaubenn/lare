@@ -6,15 +6,52 @@ import {
   problemUrl,
 } from "@lare/shared";
 import type { SessionProblem, Submission } from "@lare/supabase-types";
+
+type SubmissionView = Pick<
+  Submission,
+  | "id"
+  | "accepted"
+  | "lang"
+  | "lang_verbose"
+  | "status_display"
+  | "status_code"
+  | "runtime_ms"
+  | "runtime_display"
+  | "runtime_percentile"
+  | "memory_mb"
+  | "memory_display"
+  | "memory_percentile"
+  | "total_testcases"
+  | "total_correct"
+  | "submitted_at"
+> & {
+  code?: Submission["code"];
+  runtime_distribution?: Submission["runtime_distribution"];
+  memory_distribution?: Submission["memory_distribution"];
+};
+
+import { CodeBlock } from "@lare/ui/CodeBlock";
+import { DifficultyBadge } from "@lare/ui/DifficultyBadge";
+import { Card } from "@lare/ui/primitives";
+import { SubmissionStats } from "@lare/ui/SubmissionStats";
 import { Check, Clock, ExternalLink, X } from "lucide-react";
 import { parseTopicTags, toDistribution } from "@/lib/parse";
 import { sortSubmissions } from "@/lib/post-utils";
 import { sanitizeHtml } from "@/lib/sanitize";
-import { cardClass } from "@/lib/styles";
 import { TimeAgo } from "./time-ago";
-import { CodeBlock, DifficultyBadge, SubmissionStats } from "./ui";
 
-export type ProblemWithSubmissions = SessionProblem & { submissions: Submission[] };
+export type ProblemWithSubmissions = Pick<
+  SessionProblem,
+  | "id"
+  | "slug"
+  | "title"
+  | "difficulty"
+  | "frontend_id"
+  | "active_ms"
+  | "opened_at"
+  | "description_html"
+  | "topic_tags"
+> & { submissions: SubmissionView[] };
 
 export function ProblemSection({
   problem,
@@ -29,7 +66,7 @@ export function ProblemSection({
   const summary = excerptFromHtml(problem.description_html, 140);
 
   return (
-    <section className={`${cardClass} p-4 sm:p-5`} aria-labelledby={`problem-${problem.id}`}>
+    <Card className="p-4 sm:p-5" aria-labelledby={`problem-${problem.id}`}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -98,22 +135,28 @@ export function ProblemSection({
           ))
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 
-function statusLabel(s: Submission): string {
+function statusLabel(s: SubmissionView): string {
   if (s.status_display) return s.status_display;
   if (s.accepted) return "Accepted";
   return (s.status_code !== null && LEETCODE_STATUS[s.status_code]) || "Unknown";
 }
 
-function langLabel(s: Submission): string | null {
+function langLabel(s: SubmissionView): string | null {
   if (s.lang && LANGUAGE_LABELS[s.lang]) return LANGUAGE_LABELS[s.lang] ?? null;
   return s.lang_verbose ?? s.lang;
 }
 
-function SubmissionCard({ submission, expanded }: { submission: Submission; expanded: boolean }) {
+function SubmissionCard({
+  submission,
+  expanded,
+}: {
+  submission: SubmissionView;
+  expanded: boolean;
+}) {
   const runtimeDist = toDistribution(submission.runtime_distribution);
   const memoryDist = toDistribution(submission.memory_distribution);
   const showStats =

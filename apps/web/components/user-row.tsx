@@ -1,3 +1,4 @@
+import { Tooltip } from "@lare/ui/primitives";
 import { Lock } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -57,13 +58,12 @@ export function UserRow({
             <span className="text-sm font-semibold text-zinc-100">{name}</span>
           )}
           {person.is_private && (
-            <span
-              className="inline-flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
-              title="Private account — you have to request to follow"
-            >
-              <Lock className="size-3" />
-              Private
-            </span>
+            <Tooltip label="Private account — you have to request to follow">
+              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-tertiary)]">
+                <Lock className="size-3" />
+                Private
+              </span>
+            </Tooltip>
           )}
         </div>
         <p className="truncate text-xs text-zinc-500">

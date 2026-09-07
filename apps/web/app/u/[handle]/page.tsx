@@ -1,17 +1,17 @@
 import { formatDurationHuman, parseSolvedActivity } from "@lare/shared";
 import type { Profile } from "@lare/supabase-types";
+import { ActivityChart } from "@lare/ui/ActivityChart";
+import { Card, Container, Tooltip } from "@lare/ui/primitives";
 import { Lock } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { ActivityGrid } from "@/components/activity-grid";
 import { Avatar } from "@/components/avatar";
 import { FollowButton, type FollowState } from "@/components/follow-button";
 import { PostCard } from "@/components/post-card";
 import { PostCardSkeleton } from "@/components/skeleton";
 import { type ProfileStats, parseProfileStats } from "@/lib/parse";
 import { fetchUserPosts } from "@/lib/posts";
-import { cardClass } from "@/lib/styles";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 
@@ -76,20 +76,19 @@ export default async function ProfilePage({ params }: Params) {
   const name = profile.display_name || `@${profile.handle}`;
 
   return (
-    <div className="space-y-4">
+    <Container width="page" className="space-y-4">
       <header className="flex flex-wrap items-start gap-4">
         <Avatar src={profile.avatar_url} name={name} size="md" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-lg font-semibold text-zinc-50">{name}</h1>
+            <h1 className="lare-heading text-[var(--text)]">{name}</h1>
             {profile.is_private && (
-              <span
-                className="inline-flex items-center gap-1 rounded-full border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
-                title="Private account"
-              >
-                <Lock className="size-3" />
-                Private
-              </span>
+              <Tooltip label="Private account">
+                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-tertiary)]">
+                  <Lock className="size-3" />
+                  Private
+                </span>
+              </Tooltip>
             )}
           </div>
           <p className="text-sm text-zinc-500">@{profile.handle}</p>
@@ -111,7 +110,7 @@ export default async function ProfilePage({ params }: Params) {
 
       <Stats stats={stats} />
 
-      {visible && activity?.visible && <ActivityGrid activity={activity} />}
+      {visible && activity?.visible && <ActivityChart activity={activity} />}
 
       <section aria-label="Posts">
         {visible ? (
@@ -126,7 +125,7 @@ export default async function ProfilePage({ params }: Params) {
             <ProfilePosts userId={profile.id} isSelf={isSelf} viewerId={viewer?.id ?? null} />
           </Suspense>
         ) : (
-          <div className={`${cardClass} px-6 py-10 text-center`}>
+          <Card className="px-6 py-10 text-center">
             <Lock className="mx-auto size-6 text-zinc-600" />
             <h2 className="mt-3 text-base font-semibold text-zinc-100">This account is private</h2>
             <p className="mt-1 text-sm text-zinc-400">
@@ -134,10 +133,10 @@ export default async function ProfilePage({ params }: Params) {
                 ? "Your follow request is waiting for approval."
                 : "Request to follow, and their sessions and solved-problem activity appear here once they accept."}
             </p>
-          </div>
+          </Card>
         )}
       </section>
-    </div>
+    </Container>
   );
 }
 
@@ -181,9 +180,9 @@ async function ProfilePosts({
   const posts = await fetchUserPosts(supabase, userId);
   if (posts.length === 0) {
     return (
-      <div className={`${cardClass} px-6 py-10 text-center text-sm text-zinc-400`}>
+      <Card className="px-6 py-10 text-center text-sm text-[var(--text-secondary)]">
         {isSelf ? "You haven't published a session yet." : "No published sessions yet."}
-      </div>
+      </Card>
     );
   }
   return (

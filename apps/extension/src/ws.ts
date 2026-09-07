@@ -124,27 +124,40 @@ export class DesktopClient {
     return true;
   }
 
-  /** Wait for a message satisfying `predicate` (or reject on error / timeout). */
+  /** Wait for a message satisfying `predicate` (or reject on error / timeout / abort). */
   waitFor<T extends AppToExt>(
     predicate: (msg: AppToExt) => msg is T,
     timeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<T> {
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException("Aborted", "AbortError"));
+        return;
+      }
       const timer = setTimeout(() => {
-        off();
+        cleanup();
         reject(new Error("Timed out waiting for the desktop app"));
       }, timeoutMs);
+      const onAbort = () => {
+        cleanup();
+        reject(new DOMException("Aborted", "AbortError"));
+      };
       const off = this.onMessage((msg) => {
         if (predicate(msg)) {
-          clearTimeout(timer);
-          off();
+          cleanup();
           resolve(msg);
         } else if (msg.type === "error") {
-          clearTimeout(timer);
-          off();
+          cleanup();
           reject(new Error(msg.message));
         }
       });
+      const cleanup = () => {
+        clearTimeout(timer);
+        off();
+        signal?.removeEventListener("abort", onAbort);
+      };
+      signal?.addEventListener("abort", onAbort);
     });
   }
 

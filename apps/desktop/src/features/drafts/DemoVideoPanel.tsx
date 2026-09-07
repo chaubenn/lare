@@ -1,3 +1,4 @@
+import { Progress } from "@lare/ui/primitives";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Camera, Mic, Monitor, Scissors, Trash2, Video } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -251,14 +252,7 @@ function JobProgress({
     <div className="space-y-2">
       <p className="text-sm text-zinc-300">{label}</p>
       <p className="text-xs text-zinc-500">{detail ?? "Working…"}</p>
-      {percent !== null ? (
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
-          <div
-            className="h-full rounded-full bg-sky-500 transition-[width]"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      ) : null}
+      {percent !== null ? <Progress value={percent} label={label} /> : null}
     </div>
   );
 }

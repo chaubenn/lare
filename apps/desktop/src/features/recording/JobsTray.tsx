@@ -4,9 +4,10 @@
  */
 
 import { cn } from "@lare/ui";
+import { Progress } from "@lare/ui/primitives";
 import { CircleAlert, CircleCheck, LoaderCircle, X } from "lucide-react";
 import { Link } from "react-router";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/Button";
 import { clearFinishedJobs, isActive, removeJob, STAGE_LABEL, useJobs } from "./jobs";
 
 export function JobsTray() {
@@ -16,7 +17,7 @@ export function JobsTray() {
   return (
     <aside
       aria-label="Background jobs"
-      className="border-t border-zinc-800/80 bg-zinc-950/95 px-3 py-2 text-xs text-zinc-300"
+      className="lare-material-regular border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-secondary)]"
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-1.5">
         {jobs.slice(0, 4).map((job) => {
@@ -24,27 +25,34 @@ export function JobsTray() {
           return (
             <div key={job.id} className="flex items-center gap-2">
               {job.stage === "error" ? (
-                <CircleAlert className="size-3.5 shrink-0 text-rose-400" aria-hidden />
+                <CircleAlert className="size-3.5 shrink-0 text-[var(--lare-danger)]" aria-hidden />
               ) : job.stage === "done" ? (
-                <CircleCheck className="size-3.5 shrink-0 text-emerald-400" aria-hidden />
+                <CircleCheck
+                  className="size-3.5 shrink-0 text-[var(--lare-status-run)]"
+                  aria-hidden
+                />
               ) : (
-                <LoaderCircle className="size-3.5 shrink-0 animate-spin text-sky-400" aria-hidden />
+                <LoaderCircle
+                  className="size-3.5 shrink-0 animate-spin text-[var(--lare-info)]"
+                  aria-hidden
+                />
               )}
-              <span className="shrink-0 font-medium text-zinc-200">{job.label}</span>
-              <span className="truncate text-zinc-500">{job.detail ?? STAGE_LABEL[job.stage]}</span>
+              <span className="shrink-0 font-medium text-[var(--text)]">{job.label}</span>
+              <span className="truncate text-[var(--text-tertiary)]">
+                {job.detail ?? STAGE_LABEL[job.stage]}
+              </span>
               {active && job.percent !== null ? (
-                <span className="ml-auto h-1.5 w-32 shrink-0 overflow-hidden rounded-full bg-zinc-800">
-                  <span
-                    className="block h-full rounded-full bg-sky-500 transition-[width]"
-                    style={{ width: `${Math.min(100, Math.max(0, job.percent))}%` }}
-                  />
-                </span>
+                <Progress
+                  value={job.percent}
+                  label={`${job.label} progress`}
+                  className="ml-auto h-1.5 w-32 shrink-0"
+                />
               ) : null}
               {job.postId && job.stage === "done" ? (
                 <Link
                   to={`/drafts/${job.postId}`}
                   className={cn(
-                    "shrink-0 text-emerald-400 hover:underline",
+                    "shrink-0 text-[var(--lare-status-run)] hover:underline",
                     job.percent !== null && "ml-2",
                   )}
                 >
@@ -52,16 +60,17 @@ export function JobsTray() {
                 </Link>
               ) : null}
               {!active ? (
-                <Tooltip label="Dismiss" align="end" className="ml-auto shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => removeJob(job.id)}
-                    aria-label="Dismiss"
-                    className="rounded p-0.5 text-zinc-500 hover:text-zinc-200"
-                  >
-                    <X className="size-3.5" aria-hidden />
-                  </button>
-                </Tooltip>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="ml-auto size-7 shrink-0"
+                  aria-label="Dismiss"
+                  tooltip="Dismiss"
+                  tooltipAlign="end"
+                  onClick={() => removeJob(job.id)}
+                >
+                  <X className="size-3.5" aria-hidden />
+                </Button>
               ) : null}
             </div>
           );
@@ -70,7 +79,7 @@ export function JobsTray() {
           <button
             type="button"
             onClick={clearFinishedJobs}
-            className="self-end text-[11px] text-zinc-500 hover:text-zinc-300"
+            className="lare-micro self-end text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
           >
             Clear finished
           </button>

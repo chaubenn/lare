@@ -1,9 +1,9 @@
+import { Card, Container, PageHeader } from "@lare/ui/primitives";
 import { LogOut } from "lucide-react";
 import type { Metadata } from "next";
 import { signOut } from "@/app/auth/actions";
 import { AvatarUploader } from "@/components/avatar-uploader";
 import { PendingButton } from "@/components/pending-button";
-import { buttonSecondary, cardClass } from "@/lib/styles";
 import { requireViewer } from "@/lib/viewer";
 import { SettingsForm } from "./settings-form";
 
@@ -13,33 +13,34 @@ export default async function SettingsPage() {
   const viewer = await requireViewer("/settings");
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-zinc-50">Settings</h1>
-        <p className="mt-1 text-sm text-zinc-400">How you appear to other people on Lare.</p>
-      </div>
+    <Container width="prose" className="space-y-6">
+      <PageHeader title="Settings" subtitle="How you appear to other people on Lare." />
 
-      <section className={`${cardClass} p-5`}>
+      <Card className="p-5">
         <AvatarUploader
           userId={viewer.profile.id}
           avatarUrl={viewer.profile.avatar_url}
           name={viewer.profile.display_name ?? viewer.profile.handle}
         />
         <SettingsForm profile={viewer.profile} />
-      </section>
+      </Card>
 
-      <section className={`${cardClass} flex flex-wrap items-center justify-between gap-3 p-5`}>
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
         <div>
-          <h2 className="text-sm font-semibold text-zinc-100">{viewer.email ?? "Signed in"}</h2>
-          <p className="text-xs text-zinc-500">You'll need to sign in again on this device.</p>
+          <h2 className="text-sm font-semibold text-[var(--text)]">
+            {viewer.email ?? "Signed in"}
+          </h2>
+          <p className="text-xs text-[var(--text-tertiary)]">
+            You'll need to sign in again on this device.
+          </p>
         </div>
         <form action={signOut}>
-          <PendingButton className={buttonSecondary}>
+          <PendingButton>
             <LogOut className="size-4" />
             Sign out
           </PendingButton>
         </form>
-      </section>
-    </div>
+      </Card>
+    </Container>
   );
 }

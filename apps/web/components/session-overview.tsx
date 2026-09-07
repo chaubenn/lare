@@ -1,7 +1,7 @@
 import { formatBeats, formatDurationHuman, type SessionOverview } from "@lare/shared";
+import { cn } from "@lare/ui/cn";
+import { DifficultyBadge } from "@lare/ui/DifficultyBadge";
 import { Check, Clock, ListChecks, Minus } from "lucide-react";
-import { cn } from "@/lib/cn";
-import { DifficultyBadge } from "./ui";
 
 /**
  * The second slide of a post: the same session the cover card summarises, one row per problem
@@ -15,14 +15,15 @@ export function SessionOverviewSlide({
   overview: SessionOverview;
   kind: "practice" | "interview" | null | undefined;
   className?: string;
+  active?: boolean;
 }) {
   const beats = formatBeats(overview.bestPercentile);
   const avg = formatBeats(overview.avgPercentile);
 
   return (
-    <div className={cn("flex size-full flex-col gap-3 bg-zinc-950/70 p-4 sm:p-5", className)}>
+    <div className={cn("flex size-full flex-col gap-3 bg-[var(--surface)] p-4 sm:p-5", className)}>
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
           {kind === "interview" ? "Interview breakdown" : "Session breakdown"}
         </h3>
         <div className="flex items-center gap-3 text-xs text-zinc-500">
@@ -46,7 +47,9 @@ export function SessionOverviewSlide({
             <span
               className={cn(
                 "inline-flex size-5 shrink-0 items-center justify-center rounded-full",
-                problem.solved ? "bg-emerald-500/15 text-emerald-400" : "bg-zinc-800 text-zinc-500",
+                problem.solved
+                  ? "bg-[color-mix(in_oklab,var(--lare-diff-easy)_15%,transparent)] text-[var(--lare-diff-easy)]"
+                  : "bg-[var(--surface-sunken)] text-[var(--text-tertiary)]",
               )}
               aria-hidden
             >
@@ -68,7 +71,9 @@ export function SessionOverviewSlide({
             <div className="shrink-0 text-right text-xs">
               {problem.solved ? (
                 <>
-                  <div className="text-emerald-400">{problem.runtimeLabel ?? "Accepted"}</div>
+                  <div className="text-[var(--lare-diff-easy)]">
+                    {problem.runtimeLabel ?? "Accepted"}
+                  </div>
                   {problem.runtimePercentile !== null && (
                     <div className="text-zinc-500">
                       beats {formatBeats(problem.runtimePercentile)}

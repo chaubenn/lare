@@ -7,13 +7,14 @@ import {
   postMediaPath,
   rejectPostImage,
 } from "@lare/shared";
-import { ChevronLeft, ChevronRight, ImagePlus, LoaderCircle, Star, Trash2 } from "lucide-react";
+import { cn } from "@lare/ui/cn";
+import { Button, FieldError, Input, Label, Select, Textarea } from "@lare/ui/primitives";
+import { ChevronLeft, ChevronRight, ImagePlus, Star, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
-import { cn } from "@/lib/cn";
+import { FormToast } from "@/components/form-toast";
 import type { PostImage } from "@/lib/posts";
-import { buttonPrimary, buttonSecondary, inputClass, labelClass } from "@/lib/styles";
 import { createClient } from "@/lib/supabase/client";
 import {
   registerPostImage,
@@ -159,48 +160,39 @@ export function PostEditor(props: PostEditorProps) {
       }}
       className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4"
     >
-      <div>
-        <label htmlFor="edit-title" className={labelClass}>
-          Title
-        </label>
-        <input
+      <div className="space-y-1.5">
+        <Label htmlFor="edit-title">Title</Label>
+        <Input
           id="edit-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={140}
-          className={`${inputClass} mt-1`}
           placeholder="Give this session a title"
         />
       </div>
 
-      <div>
-        <label htmlFor="edit-body" className={labelClass}>
-          Caption
-        </label>
-        <textarea
+      <div className="space-y-1.5">
+        <Label htmlFor="edit-body">Caption</Label>
+        <Textarea
           id="edit-body"
           value={body}
           onChange={(e) => setBody(e.target.value)}
           maxLength={5000}
           rows={4}
-          className={`${inputClass} mt-1 min-h-24 resize-y`}
           placeholder="What did you learn? What was the approach?"
         />
       </div>
 
-      <div>
-        <label htmlFor="edit-visibility" className={labelClass}>
-          Visibility
-        </label>
-        <select
+      <div className="space-y-1.5">
+        <Label htmlFor="edit-visibility">Visibility</Label>
+        <Select
           id="edit-visibility"
           value={visibility}
           onChange={(e) => setVisibility(e.target.value as "public" | "private")}
-          className={`${inputClass} mt-1`}
         >
           <option value="public">Followers and everyone (if your account is public)</option>
           <option value="private">Only me</option>
-        </select>
+        </Select>
       </div>
 
       {props.hasDemoVideo && (
@@ -254,7 +246,7 @@ export function PostEditor(props: PostEditorProps) {
       )}
 
       <fieldset className="space-y-2">
-        <legend className={labelClass}>Photos</legend>
+        <legend className="lare-label text-[var(--text-tertiary)]">Photos</legend>
         <p className="text-xs text-zinc-500">
           The first slide is your cover — pick a photo with the star, or leave it unset to use the
           generated session card. {images.length}/{MAX_POST_IMAGES} used.
@@ -275,7 +267,6 @@ export function PostEditor(props: PostEditorProps) {
                     src={image.url}
                     alt={image.caption ?? ""}
                     fill
-                    unoptimized
                     sizes="200px"
                     className="object-cover"
                   />
@@ -345,40 +336,28 @@ export function PostEditor(props: PostEditorProps) {
           className="hidden"
           onChange={(e) => void upload(e.target.files)}
         />
-        <button
+        <Button
           type="button"
+          size="sm"
           disabled={busy || images.length >= MAX_POST_IMAGES}
+          loading={uploading}
           onClick={() => fileInput.current?.click()}
-          className={`${buttonSecondary} px-3 py-1.5 text-xs`}
+          icon={uploading ? undefined : <ImagePlus className="size-3.5" />}
         >
-          {uploading ? (
-            <LoaderCircle className="size-3.5 animate-spin" />
-          ) : (
-            <ImagePlus className="size-3.5" />
-          )}
           Add photos
-        </button>
+        </Button>
       </fieldset>
 
-      {error && (
-        <p role="alert" className="text-xs text-rose-300">
-          {error}
-        </p>
-      )}
+      <FormToast error={error} />
+      <FieldError>{error}</FieldError>
 
       <div className="flex items-center gap-2">
-        <button type="submit" disabled={busy} className={`${buttonPrimary} px-4 py-1.5 text-xs`}>
-          {pending && <LoaderCircle className="size-3.5 animate-spin" />}
+        <Button type="submit" variant="primary" size="sm" disabled={busy} loading={pending}>
           Save changes
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={props.onDone}
-          className={`${buttonSecondary} px-4 py-1.5 text-xs`}
-        >
+        </Button>
+        <Button type="button" size="sm" disabled={busy} onClick={props.onDone}>
           Done
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -433,20 +412,21 @@ function IconButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
       type="button"
-      title={label}
+      variant="ghost"
+      size="icon"
       aria-label={label}
+      tooltip={label}
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "rounded p-1 text-zinc-400 transition-colors hover:text-zinc-100 disabled:opacity-40",
-        active && "text-amber-300",
-        danger && "hover:text-rose-300",
+        active && "text-[var(--lare-status-pause)]",
+        danger && "hover:text-[var(--lare-danger)]",
       )}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 

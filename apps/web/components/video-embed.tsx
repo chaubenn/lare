@@ -2,10 +2,11 @@
 
 import { formatDurationHuman } from "@lare/shared";
 import type { Video } from "@lare/supabase-types";
+import { cn } from "@lare/ui/cn";
+import { useToast } from "@lare/ui/primitives";
 import { CircleAlert, LoaderCircle, Play, Video as VideoIcon } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
-import { cn } from "@/lib/cn";
 
 export interface VideoEmbedProps {
   videoId: string;
@@ -17,6 +18,8 @@ export interface VideoEmbedProps {
   className?: string;
   /** Load the player immediately instead of waiting for a click on the poster. */
   autoLoad?: boolean;
+  /** When false the iframe is not mounted (carousel keeps posters on off-screen slides). */
+  active?: boolean;
 }
 
 const STATUS_LABEL: Record<Video["status"], string> = {
@@ -44,7 +47,9 @@ export function VideoEmbed({
   title = "Session recording",
   className,
   autoLoad = false,
+  active = true,
 }: VideoEmbedProps) {
+  const { error: toastError } = useToast();
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,11 +63,13 @@ export function VideoEmbed({
       if (!res.ok || !body.embedUrl) throw new Error(body.error ?? "Couldn't load the player.");
       setSrc(body.embedUrl);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't load the player.");
+      const message = e instanceof Error ? e.message : "Couldn't load the player.";
+      setError(message);
+      toastError(message);
     } finally {
       setLoading(false);
     }
-  }, [videoId]);
+  }, [toastError, videoId]);
 
   const ready = status === "ready" && Boolean(bunnyVideoId);
   useEffect(() => {
@@ -100,7 +107,7 @@ export function VideoEmbed({
         className,
       )}
     >
-      {src ? (
+      {src && active ? (
         <iframe
           src={src}
           title={title}
@@ -124,7 +131,6 @@ export function VideoEmbed({
               src={posterUrl}
               alt=""
               fill
-              unoptimized
               sizes="(max-width: 768px) 100vw, 768px"
               className="object-cover opacity-80 transition-opacity group-hover:opacity-100"
             />

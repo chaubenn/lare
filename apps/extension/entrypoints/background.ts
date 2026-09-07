@@ -4,14 +4,17 @@ import {
   activeMs,
   type EditEvent,
   type ProblemInfo,
+  type RecordingState,
   type TrackedProblem,
   timerStatus,
 } from "@lare/shared";
+import { brand } from "@lare/ui/tokens";
 import { getAuthInfo, signInWithOtp, signInWithProvider, signOut, verifyOtp } from "@/src/auth";
 import { appendEvents } from "@/src/editsDb";
 import {
   type CapturedSubmission,
   type QuestionDetails,
+  type RecordingInfo,
   type RuntimeRequest,
   RuntimeRequestSchema,
   type RuntimeResponse,
@@ -32,6 +35,8 @@ import { DesktopClient } from "@/src/ws";
 
 const TICK_ALARM = "lare-tick";
 const desktop = new DesktopClient();
+let recording: RecordingInfo | null = null;
+let startAbort: AbortController | null = null;
 
 export default defineBackground(() => {
   chrome.runtime.onInstalled.addListener(() => {
@@ -112,6 +117,12 @@ async function handle(req: RuntimeRequest): Promise<RuntimeResponse> {
       return { ok: true };
     }
 
+    case "CANCEL_START":
+      return cancelStart();
+
+    case "RETRY_SYNC":
+      return retrySync();
+
     case "START_SESSION":
       return startSession(req);
 
@@ -160,42 +171,59 @@ async function startSession(
 
   if (req.kind === "interview") {
     if (!req.problem) throw new Error("Open a LeetCode problem to start a mock interview");
-    await desktop.connect(userId, 2000).catch(() => {
-      throw new Error("Open the Lare desktop app to start a mock interview");
-    });
-    const ack = desktop.ack;
-    if (ack?.userId && ack.userId !== userId) {
-      throw new Error("The desktop app is signed in as a different user");
-    }
-    if (ack && !ack.recordingCapable) {
-      throw new Error("Grant Lare screen-recording permission in the desktop app first");
-    }
-    desktop.send({
-      type: "session.start",
-      sessionId,
-      kind: "interview",
-      scope: req.scope,
-      startedAt: now,
-      problem: req.problem,
-      facecam: req.facecam,
-      mic: true,
-    });
-    const state = await desktop.waitFor(
-      (m): m is Extract<AppToExt, { type: "recording.state" }> =>
-        m.type === "recording.state" && (m.state === "recording" || m.state === "error"),
-      30_000,
-    );
-    if (state.state === "error") {
-      throw new Error(state.message ?? "The desktop app could not start recording");
-    }
-    if (tp) {
-      desktop.send({
-        type: "problem.open",
-        sessionId,
-        sessionProblemId: tp.sessionProblemId,
-        at: now,
-        problem: req.problem,
+    startAbort = new AbortController();
+    const signal = startAbort.signal;
+    await setRecording("starting");
+    try {
+      await desktop.connect(userId, 2000).catch(() => {
+        throw new Error("Open the Lare desktop app to start a mock interview");
       });
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      const ack = desktop.ack;
+      if (ack?.userId && ack.userId !== userId) {
+        throw new Error("The desktop app is signed in as a different user");
+      }
+      if (ack && !ack.recordingCapable) {
+        throw new Error("Grant Lare screen-recording permission in the desktop app first");
+      }
+      desktop.send({
+        type: "session.start",
+        sessionId,
+        kind: "interview",
+        scope: req.scope,
+        startedAt: now,
+        problem: req.problem,
+        facecam: req.facecam,
+        mic: true,
+      });
+      const state = await desktop.waitFor(
+        (m): m is Extract<AppToExt, { type: "recording.state" }> =>
+          m.type === "recording.state" && (m.state === "recording" || m.state === "error"),
+        30_000,
+        signal,
+      );
+      if (state.state === "error") {
+        throw new Error(state.message ?? "The desktop app could not start recording");
+      }
+      if (tp) {
+        desktop.send({
+          type: "problem.open",
+          sessionId,
+          sessionProblemId: tp.sessionProblemId,
+          at: now,
+          problem: req.problem,
+        });
+      }
+    } catch (e) {
+      desktop.send({ type: "session.end", sessionId, at: Date.now() });
+      if (e instanceof DOMException && e.name === "AbortError") {
+        await setRecording("idle");
+        return { ok: true, ...(await snapshot()) };
+      }
+      await setRecording("error", e instanceof Error ? e.message : String(e));
+      throw e;
+    } finally {
+      startAbort = null;
     }
   }
 
@@ -318,6 +346,7 @@ async function endSession(): Promise<RuntimeResponse> {
   }
 
   if (session.kind !== "interview") desktop.close();
+  await setRecording("idle");
   await chrome.alarms.clear(TICK_ALARM);
   await refreshBadge();
   return { ok: true, postId, ...(await snapshot()) };
@@ -522,9 +551,55 @@ async function probeDesktop(userId: string | null): Promise<boolean> {
 }
 
 async function onDesktopMessage(msg: AppToExt): Promise<void> {
-  if (msg.type === "recording.state" && msg.state === "error") {
+  if (msg.type !== "recording.state") return;
+  recording = { state: msg.state, message: msg.message ?? null };
+  if (msg.state === "error") {
     await broadcast({ kind: "error", text: msg.message ?? "Recording error in the desktop app" });
+  } else {
+    await broadcast();
   }
+}
+
+async function setRecording(state: RecordingState, message?: string | null): Promise<void> {
+  recording = state === "idle" ? null : { state, message: message ?? null };
+  await broadcast();
+}
+
+async function cancelStart(): Promise<RuntimeResponse> {
+  startAbort?.abort();
+  if (!startAbort) await setRecording("idle");
+  return { ok: true, ...(await snapshot()) };
+}
+
+async function retrySync(): Promise<RuntimeResponse> {
+  const userId = await currentUserId();
+  if (!userId) throw new Error("Sign in to Lare first");
+  const state = await loadState();
+  const session = state.session;
+  if (!session || !state.pendingSync.includes(session.sessionId)) {
+    throw new Error("Nothing to retry");
+  }
+  let endedAt = Date.now();
+  for (let i = session.events.length - 1; i >= 0; i--) {
+    const event = session.events[i];
+    if (event?.type === "end") {
+      endedAt = event.t;
+      break;
+    }
+  }
+  const postId = await finalizeSession(session, userId, endedAt);
+  await withState(async (s) => ({
+    state: {
+      ...s,
+      session: null,
+      pendingSync: s.pendingSync.filter((id) => id !== session.sessionId),
+    },
+    result: undefined,
+  }));
+  await chrome.alarms.clear(TICK_ALARM);
+  await refreshBadge();
+  await broadcast({ kind: "success", text: "Session saved. Draft is ready in Lare." });
+  return { ok: true, postId, ...(await snapshot()) };
 }
 
 async function resumeAfterRestart(): Promise<void> {
@@ -547,6 +622,7 @@ async function snapshot(): Promise<RuntimeSnapshot> {
     state: { ...state, appConnected: desktop.connected },
     auth,
     appConnected: desktop.connected,
+    recording,
   };
 }
 
@@ -570,7 +646,12 @@ async function refreshBadge(): Promise<void> {
   const status = timerStatus(session.events);
   const minutes = Math.floor(activeMs(session.events, Date.now()) / 60_000);
   await chrome.action.setBadgeBackgroundColor({
-    color: status === "paused" ? "#a16207" : session.kind === "interview" ? "#dc2626" : "#16a34a",
+    color:
+      status === "paused"
+        ? brand.statusPause
+        : session.kind === "interview"
+          ? brand.statusStop
+          : brand.statusRun,
   });
   await chrome.action.setBadgeText({ text: status === "paused" ? "II" : `${minutes}m` });
 }

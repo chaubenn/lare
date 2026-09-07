@@ -1,3 +1,5 @@
+"use client";
+
 import { type Distribution, formatBeats } from "@lare/shared";
 import { useState } from "react";
 import { cn } from "./cn";
@@ -25,7 +27,12 @@ export function SubmissionStats(props: SubmissionStatsProps) {
   const userValue = tab === "runtime" ? props.runtimeMs : props.memoryMb;
 
   return (
-    <div className={cn("rounded-xl border border-zinc-800 bg-zinc-950/60 p-3", props.className)}>
+    <div
+      className={cn(
+        "rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface)_60%,transparent)] p-3",
+        props.className,
+      )}
+    >
       <div className="grid grid-cols-2 gap-2">
         <StatTab
           active={tab === "runtime"}
@@ -51,7 +58,7 @@ export function SubmissionStats(props: SubmissionStatsProps) {
           className="mt-3"
         />
       ) : (
-        <div className="mt-3 flex h-24 items-center justify-center text-xs text-zinc-500">
+        <div className="mt-3 flex h-24 items-center justify-center text-xs text-[var(--text-tertiary)]">
           Distribution not available for this submission
         </div>
       )}
@@ -77,16 +84,18 @@ function StatTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-lg border px-3 py-2 text-left transition-colors",
-        active ? "border-zinc-700 bg-zinc-900" : "border-transparent hover:bg-zinc-900/60",
+        "lare-press rounded-[var(--lare-r-2)] border px-3 py-2 text-left transition-colors",
+        active
+          ? "border-[var(--border-strong)] bg-[var(--surface-raised)]"
+          : "border-transparent hover:bg-[color-mix(in_oklab,var(--surface-raised)_60%,transparent)]",
       )}
     >
-      <div className="text-xs text-zinc-400">{label}</div>
+      <div className="text-xs text-[var(--text-secondary)]">{label}</div>
       <div className="mt-0.5 flex items-baseline gap-2">
-        <span className="text-lg font-semibold text-zinc-100">{value}</span>
+        <span className="text-lg font-semibold text-[var(--text)]">{value}</span>
         {beats && (
-          <span className="text-xs text-zinc-400">
-            Beats <span className="font-semibold text-zinc-200">{beats}</span>
+          <span className="text-xs text-[var(--text-secondary)]">
+            Beats <span className="font-semibold text-[var(--text)]">{beats}</span>
           </span>
         )}
       </div>

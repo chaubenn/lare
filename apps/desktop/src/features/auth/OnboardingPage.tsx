@@ -1,3 +1,4 @@
+import { HANDLE_RE } from "@lare/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { useToast } from "@/components/toast/ToastProvider";
@@ -6,7 +7,7 @@ import { FieldError, Input, Label, Toggle } from "@/components/ui/Field";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { profileQueryKey, useAuth, useUser } from "./AuthProvider";
 
-export const HANDLE_RE = /^[a-z0-9_]{3,20}$/;
+export { HANDLE_RE };
 
 export function OnboardingPage() {
   const { userId, session } = useUser();

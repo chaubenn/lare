@@ -1,9 +1,8 @@
 "use client";
 
+import { Button } from "@lare/ui/primitives";
 import { Check, Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/cn";
-import { buttonSecondary } from "@/lib/styles";
 
 export function CopyLinkButton({ path, className }: { path: string; className?: string }) {
   const [copied, setCopied] = useState(false);
@@ -25,13 +24,13 @@ export function CopyLinkButton({ path, className }: { path: string; className?: 
   }
 
   return (
-    <button
-      type="button"
-      onClick={copy}
-      className={cn(buttonSecondary, "px-3 py-1.5 text-xs", className)}
-    >
-      {copied ? <Check className="size-3.5 text-emerald-400" /> : <Link2 className="size-3.5" />}
+    <Button type="button" size="sm" onClick={copy} className={className}>
+      {copied ? (
+        <Check className="size-3.5 text-[var(--lare-status-run)]" />
+      ) : (
+        <Link2 className="size-3.5" />
+      )}
       {copied ? "Copied" : "Post Link"}
-    </button>
+    </Button>
   );
 }

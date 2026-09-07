@@ -5,6 +5,7 @@ import {
   CodeIterationSchema,
   type Distribution,
   DistributionSchema,
+  HANDLE_RE,
   MomentSchema,
   parseDistribution,
   ScoreSchema,
@@ -133,7 +134,7 @@ export function parseProfileStats(raw: Json | null | undefined): ProfileStats | 
 // ---------------------------------------------------------------------------
 // Handles
 // ---------------------------------------------------------------------------
-export const HANDLE_RE = /^[a-z0-9_]{3,20}$/;
+export { HANDLE_RE };
 export const HandleSchema = z
   .string()
   .trim()

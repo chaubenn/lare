@@ -1,10 +1,9 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
+import { Button, useToast } from "@lare/ui/primitives";
 import { useState, useTransition } from "react";
 import { loadFeedPage } from "@/app/feed-actions";
 import type { FeedScope, PostCardData } from "@/lib/posts";
-import { buttonSecondary } from "@/lib/styles";
 import { PostCard } from "./post-card";
 
 export function Feed({
@@ -18,14 +17,13 @@ export function Feed({
   scope: FeedScope;
   viewerId: string | null;
 }) {
+  const { error: toastError } = useToast();
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
-  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function loadMore() {
     if (!cursor) return;
-    setError(null);
     startTransition(async () => {
       try {
         const page = await loadFeedPage(cursor, scope);
@@ -35,7 +33,7 @@ export function Feed({
         });
         setCursor(page.nextCursor);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Couldn't load more posts.");
+        toastError(e instanceof Error ? e.message : "Couldn't load more posts.");
       }
     });
   }
@@ -46,22 +44,17 @@ export function Feed({
         <PostCard key={post.id} post={post} viewerId={viewerId} />
       ))}
 
-      {error && (
-        <p role="alert" className="text-center text-sm text-rose-300">
-          {error}
-        </p>
-      )}
-
       {cursor ? (
         <div className="flex justify-center pt-2">
-          <button type="button" onClick={loadMore} disabled={pending} className={buttonSecondary}>
-            {pending && <LoaderCircle className="size-4 animate-spin" />}
+          <Button type="button" onClick={loadMore} loading={pending}>
             Load more
-          </button>
+          </Button>
         </div>
       ) : (
         items.length > 0 && (
-          <p className="pt-2 text-center text-xs text-zinc-600">You're all caught up.</p>
+          <p className="pt-2 text-center text-xs text-[var(--text-tertiary)]">
+            You're all caught up.
+          </p>
         )
       )}
     </div>

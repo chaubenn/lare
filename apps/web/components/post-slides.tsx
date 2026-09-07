@@ -105,14 +105,23 @@ export function PostSlides({
   );
 }
 
-function CoverSlide({ src, custom, title }: { src: string; custom: boolean; title: string }) {
+function CoverSlide({
+  src,
+  custom,
+  title,
+}: {
+  src: string;
+  custom: boolean;
+  title: string;
+  active?: boolean;
+}) {
   return (
-    <div className="relative size-full bg-zinc-950">
+    <div className="relative size-full bg-[var(--surface)]">
       <Image
         src={src}
         alt={`${title} — session overview`}
         fill
-        unoptimized
+        priority
         sizes="(max-width: 768px) 100vw, 768px"
         className={custom ? "object-cover" : "object-contain"}
       />
@@ -120,14 +129,13 @@ function CoverSlide({ src, custom, title }: { src: string; custom: boolean; titl
   );
 }
 
-function PhotoSlide({ image }: { image: PostImage }) {
+function PhotoSlide({ image }: { image: PostImage; active?: boolean }) {
   return (
-    <figure className="relative size-full bg-zinc-950">
+    <figure className="relative size-full bg-[var(--surface)]">
       <Image
         src={image.url}
         alt={image.caption ?? ""}
         fill
-        unoptimized
         sizes="(max-width: 768px) 100vw, 768px"
         className="object-contain"
       />

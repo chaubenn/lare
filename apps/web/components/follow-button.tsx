@@ -1,10 +1,11 @@
 "use client";
 
-import { Check, Clock, LoaderCircle, UserPlus } from "lucide-react";
+import { Button, buttonClass, FieldError } from "@lare/ui/primitives";
+import { Check, Clock, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { buttonPrimary, buttonSecondary } from "@/lib/styles";
+import { FormToast } from "@/components/form-toast";
 import { createClient } from "@/lib/supabase/client";
 
 export type FollowState = "none" | "pending" | "accepted";
@@ -29,7 +30,7 @@ export function FollowButton({
     return (
       <Link
         href={`/login?next=${encodeURIComponent(`/u/${targetHandle}`)}`}
-        className={`${buttonSecondary} px-3 py-1.5 text-xs`}
+        className={buttonClass("secondary", "sm")}
       >
         <UserPlus className="size-3.5" />
         Sign in to follow
@@ -71,51 +72,49 @@ export function FollowButton({
     });
   }
 
-  const spinner = pending ? <LoaderCircle className="size-3.5 animate-spin" /> : null;
-
   return (
     <div className="flex flex-col items-end gap-1">
+      <FormToast error={error} />
       {state === "none" && (
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="sm"
           onClick={follow}
-          disabled={pending}
-          className={`${buttonPrimary} px-3 py-1.5 text-xs`}
+          loading={pending}
+          icon={<UserPlus className="size-3.5" />}
         >
-          {spinner ?? <UserPlus className="size-3.5" />}
           Follow
-        </button>
+        </Button>
       )}
       {state === "pending" && (
-        <button
+        <Button
           type="button"
+          size="sm"
           onClick={unfollow}
-          disabled={pending}
-          title="Cancel request"
-          className={`${buttonSecondary} group px-3 py-1.5 text-xs`}
+          loading={pending}
+          tooltip="Cancel request"
+          icon={<Clock className="size-3.5" />}
+          className="group"
         >
-          {spinner ?? <Clock className="size-3.5" />}
           <span className="group-hover:hidden">Requested</span>
           <span className="hidden group-hover:inline">Cancel request</span>
-        </button>
+        </Button>
       )}
       {state === "accepted" && (
-        <button
+        <Button
           type="button"
+          size="sm"
           onClick={unfollow}
-          disabled={pending}
-          className={`${buttonSecondary} group px-3 py-1.5 text-xs hover:border-rose-500/40 hover:text-rose-300`}
+          loading={pending}
+          icon={<Check className="size-3.5 group-hover:hidden" />}
+          className="group hover:border-[color-mix(in_oklab,var(--lare-danger)_40%,transparent)] hover:text-[var(--lare-danger)]"
         >
-          {spinner ?? <Check className="size-3.5 group-hover:hidden" />}
           <span className="group-hover:hidden">Following</span>
           <span className="hidden group-hover:inline">Unfollow</span>
-        </button>
+        </Button>
       )}
-      {error && (
-        <p role="alert" className="text-xs text-rose-300">
-          {error}
-        </p>
-      )}
+      <FieldError>{error}</FieldError>
     </div>
   );
 }

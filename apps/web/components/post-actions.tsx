@@ -1,11 +1,12 @@
 "use client";
 
+import { cn } from "@lare/ui/cn";
+import { useToast } from "@lare/ui/primitives";
 import { Heart, MessageCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOptimistic, useState, useTransition } from "react";
 import { togglePostLike } from "@/app/social-actions";
-import { cn } from "@/lib/cn";
 
 /**
  * Like / comment row with the "View post" link inline. The like flips optimistically and
@@ -34,6 +35,7 @@ export function PostActions({
   className?: string;
 }) {
   const router = useRouter();
+  const { error: toastError } = useToast();
   const [state, setState] = useState({ liked, count: likeCount });
   const [optimistic, applyOptimistic] = useOptimistic(
     state,
@@ -56,6 +58,7 @@ export function PostActions({
       const result = await togglePostLike(postId, state.liked);
       if (result.error) {
         setError(result.error);
+        toastError(result.error);
         return;
       }
       setState({ liked: result.liked, count: result.count });
@@ -103,11 +106,7 @@ export function PostActions({
         </Link>
       )}
 
-      {error && (
-        <span role="alert" className="ml-2 text-xs text-rose-300">
-          {error}
-        </span>
-      )}
+      {error ? <span className="sr-only">{error}</span> : null}
     </div>
   );
 }

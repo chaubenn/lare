@@ -1,12 +1,12 @@
-import { cn } from "@/lib/cn";
+import { cn } from "@lare/ui/cn";
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-xl bg-zinc-900", className)} />;
+  return <div className={cn("lare-skel", className)} />;
 }
 
 export function PostCardSkeleton() {
   return (
-    <div className="space-y-3 rounded-2xl border border-zinc-900 p-4">
+    <div className="space-y-3 rounded-[var(--lare-r-4)] border border-[var(--border)] p-4">
       <div className="flex items-center gap-3">
         <Skeleton className="size-10 rounded-full" />
         <div className="space-y-1.5">

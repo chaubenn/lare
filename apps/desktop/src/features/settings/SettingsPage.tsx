@@ -1,6 +1,7 @@
 import {
   AVATAR_BUCKET,
   avatarPath,
+  HANDLE_RE,
   rejectAvatarInput,
   resizeAvatarImage,
   WS_PORT,
@@ -16,7 +17,6 @@ import { Button } from "@/components/ui/Button";
 import { Card, PageHeader, SectionTitle } from "@/components/ui/Card";
 import { FieldError, Input, Label, Textarea, Toggle } from "@/components/ui/Field";
 import { profileQueryKey, useAuth, useUser } from "@/features/auth/AuthProvider";
-import { HANDLE_RE } from "@/features/auth/OnboardingPage";
 import { useExtensionStatus } from "@/features/shell/useExtensionStatus";
 import { copyText } from "@/lib/clipboard";
 import { errorMessage, supabase } from "@/lib/supabase";

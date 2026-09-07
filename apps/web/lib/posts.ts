@@ -3,7 +3,7 @@ import "server-only";
 import type { Database } from "@lare/supabase-types";
 import type { QueryData, SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
-import { isUuid } from "@/lib/post-utils";
+import { isUuid, sortSubmissions } from "@/lib/post-utils";
 import { createClient } from "@/lib/supabase/server";
 
 type Client = SupabaseClient<Database>;
@@ -26,14 +26,27 @@ export const POST_CARD_SELECT = `
   post_media!post_media_post_id_fkey(id, storage_path, kind, width, height, caption, position, created_at)
 ` as const;
 
-/** Everything `/p/[id]` renders. */
+const SUBMISSION_LIST_SELECT = `
+  id, accepted, lang, lang_verbose, status_display, status_code,
+  runtime_ms, runtime_display, runtime_percentile,
+  memory_mb, memory_display, memory_percentile,
+  total_testcases, total_correct, submitted_at
+`;
+
+/** Columns `/p/[id]` actually renders. Code + distribution blobs are hydrated only for the expanded submission. */
 export const POST_DETAIL_SELECT = `
-  *,
+  id, user_id, title, body, status, visibility, video_id, video_kind, include_ai_insights,
+  show_video, demo_video_id, show_demo_video, include_og_card, og_show_ai_scores,
+  cover_media_id, like_count, comment_count,
+  published_at, created_at, updated_at, session_id,
   profiles!posts_user_id_fkey(id, handle, display_name, avatar_url, is_private),
-  sessions!posts_session_id_fkey(*, session_problems(*, submissions(*))),
-  videos!posts_video_id_fkey(*),
-  demo_videos:videos!posts_demo_video_id_fkey(*),
-  post_media!post_media_post_id_fkey(*)
+  sessions!posts_session_id_fkey(id, kind, scope, status, active_ms, started_at, ended_at,
+    session_problems(id, slug, title, difficulty, frontend_id, active_ms, opened_at,
+      description_html, topic_tags,
+      submissions(${SUBMISSION_LIST_SELECT}))),
+  videos!posts_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id),
+  demo_videos:videos!posts_demo_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id),
+  post_media!post_media_post_id_fkey(id, storage_path, kind, width, height, caption, position, created_at)
 ` as const;
 
 function postCardQuery(supabase: Client) {
@@ -251,8 +264,48 @@ export const getPostDetail = cache(async (id: string): Promise<PostDetail | null
   if (error) throw new Error(`post failed: ${error.message}`);
   if (!data) return null;
   const [decorated] = await decoratePosts(supabase, [data]);
-  return decorated ?? null;
+  return decorated ? hydrateExpandedSubmissions(supabase, decorated) : null;
 });
+
+type ExpandablePost = {
+  sessions: {
+    session_problems: {
+      submissions: Array<{ id: string; accepted: boolean; submitted_at: string }>;
+    }[];
+  } | null;
+};
+
+/** First submission per problem (accepted, then newest) gets code + distribution blobs. */
+async function hydrateExpandedSubmissions<T extends ExpandablePost>(
+  supabase: Client,
+  post: T,
+): Promise<T> {
+  const problems = post.sessions?.session_problems ?? [];
+  const firstIds = problems.flatMap((problem) => {
+    const first = sortSubmissions(problem.submissions)[0];
+    return first ? [first.id] : [];
+  });
+  if (firstIds.length === 0) return post;
+  const { data } = await supabase
+    .from("submissions")
+    .select("id, code, runtime_distribution, memory_distribution")
+    .in("id", firstIds);
+  const extra = new Map((data ?? []).map((row) => [row.id, row]));
+  if (!post.sessions) return post;
+  return {
+    ...post,
+    sessions: {
+      ...post.sessions,
+      session_problems: problems.map((problem) => ({
+        ...problem,
+        submissions: problem.submissions.map((submission) => {
+          const more = extra.get(submission.id);
+          return more ? { ...submission, ...more } : submission;
+        }),
+      })),
+    },
+  };
+}
 
 /** Comments on a post, oldest first, with their authors. RLS mirrors the post's visibility. */
 export const COMMENT_SELECT = `
@@ -288,7 +341,8 @@ export async function fetchTopComments(
   if (postIds.length === 0) return new Map();
   const { data, error } = await commentQuery(supabase)
     .in("post_id", postIds)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .limit(postIds.length * limit);
   if (error) throw new Error(`comments failed: ${error.message}`);
   const map = new Map<string, PostCommentRow[]>();
   for (const row of data ?? []) {

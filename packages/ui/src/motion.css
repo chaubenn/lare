@@ -1,6 +1,8 @@
 /* transitions.dev motion tokens + the product-facing recipes we actually use. */
 
-:root {
+:root,
+:host {
+  --ease-linear: linear;
   --duration-stagger: 40ms;
   --duration-micro: 80ms;
   --duration-quick: 150ms;
@@ -49,26 +51,72 @@
   --tabs-text-active: var(--lare-ink);
   --tabs-bar-bg: var(--lare-ink-2);
   --tabs-pill-bg: var(--lare-bone);
+  --press-scale: 0.97;
+  --press-dur: 100ms;
 }
 
+/* Gentler equivalent: keep short opacity, drop transforms / overshoot / parallax. */
 @media (prefers-reduced-motion: reduce) {
-  :root {
+  :root,
+  :host {
     --duration-stagger: 0ms;
-    --duration-micro: 0ms;
-    --duration-quick: 0ms;
-    --duration-fast: 0ms;
-    --duration-medium: 0ms;
-    --duration-slow: 0ms;
-    --duration-very-slow: 0ms;
-    --dropdown-open-dur: 0ms;
-    --toast-open: 0ms;
-    --stagger-dur: 0ms;
-    --tabs-dur: 0ms;
-    --badge-pop-dur: 0ms;
+    --duration-micro: 80ms;
+    --duration-quick: 120ms;
+    --duration-fast: 120ms;
+    --duration-medium: 120ms;
+    --duration-slow: 120ms;
+    --duration-very-slow: 120ms;
+    --dropdown-open-dur: 120ms;
+    --toast-open: 120ms;
+    --stagger-dur: 120ms;
+    --stagger-distance: 0px;
+    --stagger-blur: 0px;
+    --tabs-dur: 120ms;
+    --badge-pop-dur: 120ms;
     --learn-in: 0ms;
-    --tt-in-dur: 0ms;
-    --tt-out-dur: 0ms;
+    --learn-shift: 0px;
+    --tt-in-dur: 80ms;
+    --tt-out-dur: 50ms;
     --tt-delay: 0ms;
+    --press-scale: 1;
+    --scale-medium: 1;
+    --scale-small: 1;
+    --toast-scale: 1;
+    --toast-distance: 0px;
+    --toast-blur: 0px;
+    --tt-scale: 1;
+    --ease-bounce: linear;
+  }
+
+  .lare-reveal > *,
+  .lare-dropdown,
+  .lare-toast-in,
+  .lare-badge-pop {
+    animation-name: lare-fade;
+  }
+
+  .t-tabs-pill,
+  .t-tab,
+  .t-tt {
+    transition-property: opacity, background-color, color, border-color;
+  }
+
+  .lare-skel::after {
+    animation: lare-skel-fade 1.2s var(--ease-linear) infinite;
+  }
+
+  .lare-press:active,
+  .lare-press[data-pressed="true"] {
+    transform: none;
+  }
+}
+
+@keyframes lare-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
@@ -158,6 +206,39 @@
   transform: translateX(var(--learn-shift));
 }
 
+/* Pointer-down response on every pressable control. */
+.lare-press {
+  transition: transform var(--press-dur) var(--ease-smooth-out);
+}
+.lare-press:active,
+.lare-press[data-pressed="true"] {
+  transform: scale(var(--press-scale));
+}
+
+/* Fade where content meets floating chrome, instead of a 1px border. */
+.lare-edge {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 1.25rem);
+  mask-image: linear-gradient(to bottom, transparent, #000 1.25rem);
+}
+
+.lare-material-thin {
+  background: var(--lare-material-thin);
+  -webkit-backdrop-filter: blur(var(--lare-material-thin-blur));
+  backdrop-filter: blur(var(--lare-material-thin-blur));
+}
+
+.lare-material-regular {
+  background: var(--lare-material-regular);
+  -webkit-backdrop-filter: blur(var(--lare-material-regular-blur));
+  backdrop-filter: blur(var(--lare-material-regular-blur));
+}
+
+.lare-material-thick {
+  background: var(--lare-material-thick);
+  -webkit-backdrop-filter: blur(var(--lare-material-thick-blur));
+  backdrop-filter: blur(var(--lare-material-thick-blur));
+}
+
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
 
 .t-tabs {
@@ -166,9 +247,9 @@
   align-items: center;
   gap: 3px;
   padding: 3px;
-  border-radius: 10px;
+  border-radius: var(--lare-r-3);
   background: var(--tabs-bar-bg);
-  border: 1px solid var(--lare-line);
+  border: 1px solid var(--border);
 }
 .t-tab {
   position: relative;
@@ -179,7 +260,7 @@
   padding: 4px 12px;
   color: var(--tabs-text-muted);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--lare-r-2);
   z-index: 1;
   transition: color var(--tabs-dur) var(--tabs-ease);
   font: inherit;
@@ -188,10 +269,14 @@
   white-space: nowrap;
 }
 .t-tab:not([aria-selected="true"]):hover {
-  color: var(--lare-bone);
+  color: var(--text);
 }
 .t-tab[aria-selected="true"] {
   color: var(--tabs-text-active);
+}
+.t-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
 }
 .t-tabs-pill {
   position: absolute;
@@ -200,7 +285,7 @@
   height: 30px;
   width: 0;
   background: var(--tabs-pill-bg);
-  border-radius: 8px;
+  border-radius: var(--lare-r-2);
   transform: translateX(0);
   transition:
     transform var(--tabs-dur) var(--tabs-ease),
@@ -221,16 +306,16 @@
   transform: translate(-50%, 0) scale(var(--tt-scale));
   transform-origin: 50% 100%;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--lare-r-2);
   background: var(--tt-bg);
   color: var(--tt-fg);
-  border: 1px solid var(--lare-line);
+  border: 1px solid var(--border);
   white-space: nowrap;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--lare-shadow-1);
   opacity: 0;
   pointer-events: none;
   z-index: 50;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.3;
   transition:
     opacity var(--tt-out-dur) var(--tt-out-ease),
@@ -267,8 +352,8 @@
 .lare-skel {
   position: relative;
   overflow: hidden;
-  background: var(--lare-ink-2);
-  border-radius: 8px;
+  background: var(--surface-raised);
+  border-radius: var(--lare-r-2);
 }
 .lare-skel::after {
   content: "";
@@ -292,16 +377,22 @@
   }
 }
 
+@keyframes lare-skel-fade {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
 .lare-row {
   transition: background-color var(--duration-fast) var(--ease-smooth-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .t-tabs-pill,
-  .t-tab,
-  .t-tt,
-  .lare-skel::after {
-    transition: none !important;
-    animation: none !important;
+  .lare-learn svg {
+    transition: none;
   }
 }

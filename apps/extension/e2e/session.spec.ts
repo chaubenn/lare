@@ -76,10 +76,10 @@ test("practice problem: start, edit, submit, pause, end -> synced draft", async 
   await overlay.getByRole("button", { name: /Start problem/ }).click();
 
   // Active pill with a running timer.
-  const pill = overlay.locator(".lare-pill");
+  const pill = overlay.getByTestId("lare-pill");
   await expect(pill).toBeVisible();
-  await expect(pill.locator(".lare-time")).toHaveText(/^0:0[0-9]$/);
-  await expect(pill.locator(".lare-kind")).toHaveText("Problem");
+  await expect(pill.getByTestId("lare-time")).toHaveText(/^0:0[0-9]$/);
+  await expect(pill.getByTestId("lare-kind")).toHaveText("Problem");
 
   // Type into the code editor (not the plaintext testcase editor).
   await focusEditorEnd(page, "editor");
@@ -100,9 +100,9 @@ test("practice problem: start, edit, submit, pause, end -> synced draft", async 
   // Pause freezes the timer; resume continues.
   await pill.getByRole("button", { name: "Pause" }).click();
   await expect(pill.getByRole("button", { name: "Resume" })).toBeVisible();
-  const frozen = await pill.locator(".lare-time").textContent();
+  const frozen = await pill.getByTestId("lare-time").textContent();
   await page.waitForTimeout(2200);
-  expect(await pill.locator(".lare-time").textContent()).toBe(frozen);
+  expect(await pill.getByTestId("lare-time").textContent()).toBe(frozen);
   await pill.getByRole("button", { name: "Resume" }).click();
   await expect(pill.getByRole("button", { name: "Pause" })).toBeVisible();
 
@@ -110,8 +110,8 @@ test("practice problem: start, edit, submit, pause, end -> synced draft", async 
   await pill.getByRole("button", { name: "End" }).click();
   await pill.getByRole("button", { name: "Confirm end" }).click();
   await expect(overlay.getByText(/Session saved/)).toBeVisible();
-  await expect(overlay.locator(".lare-fab")).toBeVisible();
-  await expect(overlay.locator(".lare-menu")).toHaveCount(0);
+  await expect(overlay.getByTestId("lare-fab")).toBeVisible();
+  await expect(overlay.getByTestId("lare-menu")).toHaveCount(0);
 
   // ---- assert what the service worker wrote to (mock) Supabase ----------------
   const reqs = await recorded();

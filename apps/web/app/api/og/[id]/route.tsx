@@ -11,6 +11,7 @@ import {
   type SessionOverview,
 } from "@lare/shared";
 import type { Database } from "@lare/supabase-types";
+import { brand, DIFFICULTY_COLOUR, semantic } from "@lare/ui/tokens";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
@@ -25,16 +26,11 @@ const emblemSrc = readFile(join(process.cwd(), "public/brand/emblem-512.png")).t
 
 const SIZE = { width: 1200, height: 630 };
 
-const INK = "#0c0c0b";
-const INK_2 = "#161615";
-const LINE = "#2a2a27";
-const MUTED = "#8a8780";
-const BONE = "#f0ece4";
-const DIFFICULTY_COLOUR: Record<string, string> = {
-  Easy: "#34d399",
-  Medium: "#fbbf24",
-  Hard: "#fb7185",
-};
+const INK = brand.ink;
+const INK_2 = brand.ink2;
+const LINE = brand.line;
+const MUTED = brand.muted;
+const BONE = brand.bone;
 
 /** Overall plus the five skill percentages, in the order they are drawn. */
 interface AiScores {
@@ -199,7 +195,7 @@ function ProblemRow({ problem }: { problem: ProblemOverview }) {
         style={{
           display: "flex",
           fontSize: 21,
-          color: problem.solved ? "#a7c4b5" : MUTED,
+          color: problem.solved ? semantic.diffEasy : MUTED,
         }}
       >
         {right || "—"}
@@ -247,11 +243,13 @@ function ScoreChip({ label, value, lead }: { label: string; value: number; lead?
         flex: 1,
         padding: "10px 8px",
         borderRadius: 14,
-        background: lead ? "#1d241f" : INK_2,
-        border: `1px solid ${lead ? "#34d399" : LINE}`,
+        background: lead ? brand.ink3 : INK_2,
+        border: `1px solid ${lead ? semantic.diffEasy : LINE}`,
       }}
     >
-      <div style={{ fontSize: 26, fontWeight: 700, color: lead ? "#34d399" : BONE }}>{value}%</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: lead ? semantic.diffEasy : BONE }}>
+        {value}%
+      </div>
       <div style={{ fontSize: 14, letterSpacing: 1, textTransform: "uppercase", color: MUTED }}>
         {truncate(label, 16)}
       </div>
@@ -360,7 +358,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
             <Stat
               label="Solved"
               value={`${overview.solved}/${overview.total}`}
-              accent={overview.solved === overview.total && overview.total > 0 ? "#34d399" : BONE}
+              accent={
+                overview.solved === overview.total && overview.total > 0 ? semantic.diffEasy : BONE
+              }
             />
             <Stat label="Active" value={formatDurationHuman(overview.activeMs)} />
             <Stat label="Best runtime" value={beats ? `beats ${beats}` : "—"} />
@@ -400,7 +400,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
           <div style={{ fontSize: 60, fontWeight: 800, lineHeight: 1.1, letterSpacing: -1.5 }}>
             A LeetCode session on Lare
           </div>
-          <div style={{ fontSize: 26, color: "#d4d4d8" }}>
+          <div style={{ fontSize: 26, color: brand.soft }}>
             Log sessions, share the solve, follow friends.
           </div>
         </div>

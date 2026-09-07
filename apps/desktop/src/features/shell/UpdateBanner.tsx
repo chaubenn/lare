@@ -1,7 +1,7 @@
+import { Progress } from "@lare/ui/primitives";
 import { ArrowDownToLine, X } from "lucide-react";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/Button";
-import { Tooltip } from "@/components/ui/Tooltip";
 import { checkForUpdate, dismissUpdate, installUpdate, useUpdateState } from "@/lib/updater";
 
 /** Delay before the launch check so it never competes with the first paint / auth round-trip. */
@@ -51,35 +51,30 @@ export function UpdateBanner() {
   return (
     <div
       role="status"
-      className="flex h-9 shrink-0 items-center gap-3 border-b border-zinc-800/80 bg-zinc-900/80 px-3 text-xs text-zinc-300"
+      className="lare-material-regular flex h-9 shrink-0 items-center gap-3 border-b border-[var(--border)] px-3 text-xs text-[var(--text-secondary)]"
     >
-      <ArrowDownToLine className="size-3.5 text-sky-400" aria-hidden />
+      <ArrowDownToLine className="size-3.5 text-[var(--lare-info)]" aria-hidden />
       <span className="min-w-0 flex-1 truncate">
         Lare v{state.version} is available.
         {state.status === "available" ? " It installs in the background and relaunches." : ""}
       </span>
       {state.status === "downloading" && state.progress !== null ? (
-        <span className="h-1 w-24 overflow-hidden rounded-full bg-zinc-800" aria-hidden>
-          <span
-            className="block h-full bg-sky-400 transition-[width]"
-            style={{ width: `${Math.round(state.progress * 100)}%` }}
-          />
-        </span>
+        <Progress value={state.progress * 100} label="Download progress" className="h-1 w-24" />
       ) : null}
       <Button size="sm" variant="primary" loading={busy} onClick={() => void installUpdate()}>
         {label}
       </Button>
       {!busy ? (
-        <Tooltip label="Later" align="end">
-          <button
-            type="button"
-            aria-label="Dismiss update"
-            onClick={dismissUpdate}
-            className="rounded p-0.5 text-zinc-500 hover:text-zinc-200"
-          >
-            <X className="size-4" aria-hidden />
-          </button>
-        </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Dismiss update"
+          tooltip="Later"
+          tooltipAlign="end"
+          onClick={dismissUpdate}
+        >
+          <X className="size-4" aria-hidden />
+        </Button>
       ) : null}
     </div>
   );

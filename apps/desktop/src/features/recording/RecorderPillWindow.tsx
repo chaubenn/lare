@@ -4,6 +4,7 @@
  * fetched on mount so the pill is correct even if it opened after the recording started.
  */
 
+import { formatDuration } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Pause, Play, Square, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -31,15 +32,10 @@ function useElapsed(status: RecorderStatus | null, since: number): number {
   return running ? base + Math.max(0, now - since) : base;
 }
 
-function fmt(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const mm = String(m).padStart(2, "0");
-  const ss = String(s).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
+/**
+ * Window position uses `data-tauri-drag-region` (native Tauri drag). `useDraggable` would
+ * fight that and risk breaking recording, so snap/rubber-band stay with the OS drag.
+ */
 
 export function RecorderPillWindow() {
   const [status, setStatus] = useState<RecorderStatus | null>(null);
@@ -96,14 +92,14 @@ export function RecorderPillWindow() {
         <span
           className={cn(
             "size-3 shrink-0 rounded-full",
-            state === "recording" && "animate-pulse bg-rose-500",
-            paused && "bg-amber-400",
+            state === "recording" && "animate-pulse bg-[var(--lare-status-stop)]",
+            paused && "bg-[var(--lare-status-pause)]",
             (state === "starting" || state === "stopping") && "animate-pulse bg-zinc-400",
           )}
           aria-hidden
         />
         <div data-tauri-drag-region className="min-w-0 flex-1 leading-tight">
-          <div className="font-mono text-sm tabular-nums">{fmt(elapsed)}</div>
+          <div className="font-mono text-sm tabular-nums">{formatDuration(elapsed)}</div>
           <div className="truncate text-[10px] uppercase tracking-wider text-zinc-400">
             {error
               ? error

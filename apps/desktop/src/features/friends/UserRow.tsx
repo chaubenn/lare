@@ -1,3 +1,4 @@
+import { cn } from "@lare/ui";
 import { Lock } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -19,18 +20,21 @@ export function UserRow({
   state,
   meta,
   action,
+  flush,
 }: {
   person: PersonSummary;
   /** Omit to render no follow button. */
   state?: FollowState;
   meta?: ReactNode;
   action?: ReactNode;
+  /** Drop the row's own padding when a parent (StackedListItem) already pads. */
+  flush?: boolean;
 }) {
   const name = personName(person);
   const showRequestHint = person.is_private && state !== undefined && state !== "accepted";
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5">
+    <div className={cn("flex items-center gap-3", !flush && "px-3 py-2.5")}>
       <ProfileLink handle={person.handle}>
         <Avatar url={person.avatar_url} name={name} size={36} />
       </ProfileLink>

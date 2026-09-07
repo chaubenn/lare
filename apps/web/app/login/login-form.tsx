@@ -1,9 +1,9 @@
 "use client";
 
-import { LoaderCircle, Mail } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { Button, FieldError, Input, Label, useToast } from "@lare/ui/primitives";
+import { Mail } from "lucide-react";
+import { type FormEvent, useEffect, useState } from "react";
 import { GitHubIcon, GoogleIcon } from "@/components/brand-icons";
-import { buttonPrimary, buttonSecondary, inputClass, labelClass } from "@/lib/styles";
 import { createClient } from "@/lib/supabase/client";
 
 type Provider = "github" | "google";
@@ -17,6 +17,7 @@ export function LoginForm({
   siteUrl: string;
   initialError: string | null;
 }) {
+  const { error: toastError } = useToast();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
@@ -24,6 +25,10 @@ export function LoginForm({
   const [error, setError] = useState<string | null>(initialError);
 
   const callbackUrl = `${siteUrl}/auth/callback?next=${encodeURIComponent(next)}`;
+
+  useEffect(() => {
+    if (error) toastError(error);
+  }, [error, toastError]);
 
   async function signInWith(provider: Provider) {
     setBusy(provider);
@@ -78,47 +83,40 @@ export function LoginForm({
   return (
     <div className="mt-8 space-y-6">
       <div className="grid gap-3">
-        <button
+        <Button
           type="button"
+          variant="primary"
           onClick={() => signInWith("github")}
           disabled={busy !== null}
-          className={buttonPrimary}
+          loading={busy === "github"}
+          icon={busy === "github" ? undefined : <GitHubIcon className="size-4" />}
+          className="w-full"
         >
-          {busy === "github" ? (
-            <LoaderCircle className="size-4 animate-spin" />
-          ) : (
-            <GitHubIcon className="size-4" />
-          )}
           Continue with GitHub
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={() => signInWith("google")}
           disabled={busy !== null}
-          className={buttonSecondary}
+          loading={busy === "google"}
+          icon={busy === "google" ? undefined : <GoogleIcon className="size-4" />}
+          className="w-full"
         >
-          {busy === "google" ? (
-            <LoaderCircle className="size-4 animate-spin" />
-          ) : (
-            <GoogleIcon className="size-4" />
-          )}
           Continue with Google
-        </button>
+        </Button>
       </div>
 
-      <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-zinc-600">
-        <span className="h-px flex-1 bg-zinc-800" />
+      <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-[var(--text-tertiary)]">
+        <span className="h-px flex-1 bg-[var(--border)]" />
         or email
-        <span className="h-px flex-1 bg-zinc-800" />
+        <span className="h-px flex-1 bg-[var(--border)]" />
       </div>
 
       {step === "email" ? (
         <form onSubmit={sendCode} className="space-y-3">
           <div className="space-y-1.5">
-            <label htmlFor="email" className={labelClass}>
-              Email
-            </label>
-            <input
+            <Label htmlFor="email">Email</Label>
+            <Input
               id="email"
               name="email"
               type="email"
@@ -127,32 +125,26 @@ export function LoginForm({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className={inputClass}
             />
           </div>
-          <button
+          <Button
             type="submit"
             disabled={busy !== null || email.trim().length === 0}
-            className={`${buttonSecondary} w-full`}
+            loading={busy === "otp"}
+            icon={busy === "otp" ? undefined : <Mail className="size-4" />}
+            className="w-full"
           >
-            {busy === "otp" ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <Mail className="size-4" />
-            )}
             Send me a code
-          </button>
+          </Button>
         </form>
       ) : (
         <form onSubmit={verifyCode} className="space-y-3">
-          <p className="text-sm text-zinc-400">
-            We sent a 6-digit code to <span className="text-zinc-200">{email}</span>.
+          <p className="text-sm text-[var(--text-secondary)]">
+            We sent a 6-digit code to <span className="text-[var(--text)]">{email}</span>.
           </p>
           <div className="space-y-1.5">
-            <label htmlFor="code" className={labelClass}>
-              Code
-            </label>
-            <input
+            <Label htmlFor="code">Code</Label>
+            <Input
               id="code"
               name="code"
               inputMode="numeric"
@@ -163,39 +155,34 @@ export function LoginForm({
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               placeholder="123456"
-              className={`${inputClass} font-mono text-lg tracking-[0.4em]`}
+              className="font-mono text-lg tracking-[0.4em]"
             />
           </div>
-          <button
+          <Button
             type="submit"
+            variant="primary"
             disabled={busy !== null || code.length !== 6}
-            className={`${buttonPrimary} w-full`}
+            loading={busy === "verify"}
+            className="w-full"
           >
-            {busy === "verify" && <LoaderCircle className="size-4 animate-spin" />}
             Verify and sign in
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => {
               setStep("email");
               setCode("");
               setError(null);
             }}
-            className="w-full text-center text-xs text-zinc-500 hover:text-zinc-300"
+            className="w-full"
           >
             Use a different email
-          </button>
+          </Button>
         </form>
       )}
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300"
-        >
-          {error}
-        </p>
-      )}
+      <FieldError>{error}</FieldError>
     </div>
   );
 }

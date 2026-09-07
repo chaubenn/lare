@@ -1,3 +1,5 @@
+"use client";
+
 import {
   type ActivityDay,
   type ActivityWeek,
@@ -11,148 +13,12 @@ import {
   type SolvedActivity,
 } from "@lare/shared";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "./cn";
-
-const BAR_IDLE = "#3d3c39";
-const BAR_ACTIVE = "#f0ece4";
-const BAR_STUB = "#2a2a27";
-const TICK = "#8a8780";
-const PAPER = "#161615";
-const INK = "#f0ece4";
-const LINE = "#2a2a27";
+import { useDragToPage } from "./gesture";
+import { Button } from "./primitives/Button";
 
 type Mode = "day" | "week";
-
-function Bar3({
-  x,
-  y,
-  width,
-  height,
-  fill,
-  empty,
-}: {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  fill?: string;
-  empty: boolean;
-}) {
-  const px = x ?? 0;
-  const py = y ?? 0;
-  const w = width ?? 0;
-  const h = height ?? 0;
-  const barH = empty ? 3 : Math.max(h, 3);
-  const top = empty ? py + h - 3 : py;
-  return <rect x={px} y={top} width={Math.max(w, 2)} height={barH} rx={2} fill={fill} />;
-}
-
-function WeekBar(props: { payload?: ActivityWeek } & Record<string, unknown>) {
-  return <Bar3 {...props} empty={(props.payload?.count ?? 0) === 0} />;
-}
-
-function DayBar(props: { payload?: ActivityDay } & Record<string, unknown>) {
-  return <Bar3 {...props} empty={(props.payload?.count ?? 0) === 0} />;
-}
-
-function TooltipCard({ children, flip }: { children: React.ReactNode; flip: boolean }) {
-  return (
-    <div
-      className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 shadow-lg shadow-black/40"
-      style={{
-        background: PAPER,
-        borderColor: LINE,
-        color: INK,
-        // Recharts offsets its default tooltip from the cursor with no viewport-edge
-        // awareness, so it clips when the chart sits near the right edge of the page.
-        // Flip it to the left of the cursor instead of translating off-screen.
-        transform: flip ? "translateX(calc(-100% - 24px))" : undefined,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function WeekTooltip({
-  active,
-  payload,
-  coordinate,
-  chartWidth,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: ActivityWeek }>;
-  coordinate?: { x?: number };
-  chartWidth: number;
-}) {
-  if (!active || !payload?.[0]) return null;
-  const week = payload[0].payload;
-  const flip = (coordinate?.x ?? 0) > chartWidth * 0.6;
-  return (
-    <TooltipCard flip={flip}>
-      <p className="font-medium">{formatWeekRange(week.firstDay, week.lastDay)}</p>
-      <p className="mt-1 tabular-nums text-zinc-300">
-        {week.count === 0
-          ? "No problems solved"
-          : `${week.count} problem${week.count === 1 ? "" : "s"} solved`}
-      </p>
-    </TooltipCard>
-  );
-}
-
-function DayTooltip({
-  active,
-  payload,
-  coordinate,
-  chartWidth,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: ActivityDay }>;
-  coordinate?: { x?: number };
-  chartWidth: number;
-}) {
-  if (!active || !payload?.[0]) return null;
-  const day = payload[0].payload;
-  const flip = (coordinate?.x ?? 0) > chartWidth * 0.6;
-  return (
-    <TooltipCard flip={flip}>
-      <p className="font-medium">{describeActivityCell({ ...day, outside: false })}</p>
-    </TooltipCard>
-  );
-}
-
-/**
- * Arrows sit outside the chart frame so they never cover bars. Hidden on mobile, same
- * treatment as the post carousel's nav buttons, for a uniform swipe affordance app-wide.
- */
-function NavButton({
-  side,
-  disabled,
-  onClick,
-  label,
-}: {
-  side: "left" | "right";
-  disabled: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      className={cn(
-        "absolute top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-zinc-950/60 p-1.5 text-zinc-100 ring-1 ring-white/10 backdrop-blur transition-opacity hover:bg-zinc-950/80 disabled:pointer-events-none disabled:opacity-0 sm:block",
-        side === "left" ? "-left-3 sm:-left-4" : "-right-3 sm:-right-4",
-      )}
-    >
-      {side === "left" ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
-    </button>
-  );
-}
 
 function describeDayPage(bars: ActivityDay[]): string {
   const total = bars.reduce((n, d) => n + d.count, 0);
@@ -167,10 +33,37 @@ function describeWeekPage(bars: ActivityWeek[]): string {
   return `${total} problem${total === 1 ? "" : "s"} over the last ${bars.length} weeks`;
 }
 
+function NavButton({
+  side,
+  disabled,
+  onClick,
+  label,
+}: {
+  side: "left" | "right";
+  disabled: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className={cn(
+        "absolute top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-[color-mix(in_oklab,var(--surface)_60%,transparent)] text-[var(--text)] ring-1 ring-white/10 backdrop-blur hover:bg-[color-mix(in_oklab,var(--surface)_80%,transparent)] disabled:pointer-events-none disabled:opacity-0 sm:inline-flex",
+        side === "left" ? "-left-3 sm:-left-4" : "-right-3 sm:-right-4",
+      )}
+    >
+      {side === "left" ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+    </Button>
+  );
+}
+
 /**
- * Hevy-style solve chart. Toggle between a 7-day and a 7-week window; swipe (arrows,
- * touch-scroll via the surrounding page, or keyboard once focused) to page back through
- * history, forward again once you've gone back.
+ * Hevy-style solve chart. Toggle between a 7-day and a 7-week window; swipe
+ * (drag, arrows, or keyboard) to page back through history.
  */
 export function ActivityChart({
   activity,
@@ -182,7 +75,9 @@ export function ActivityChart({
   const [mode, setMode] = useState<Mode>("week");
   const [page, setPage] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
-  const [chartWidth, setChartWidth] = useState(0);
+  const [width, setWidth] = useState(0);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<HTMLDivElement>(null);
 
   const days = useMemo(() => buildActivityDays(activity), [activity]);
   const weeks = useMemo(() => buildActivityWeekBars(activity), [activity]);
@@ -191,6 +86,27 @@ export function ActivityChart({
   const weekBars = useMemo(() => pageWindow(weeks, 7, page), [weeks, page]);
   const lastPage = maxPage(mode === "day" ? days.length : weeks.length, 7);
   const clampedPage = Math.min(page, lastPage);
+
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect.width ?? 0;
+      setWidth(next);
+    });
+    ro.observe(el);
+    setWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  useDragToPage(dragRef, {
+    page: clampedPage,
+    pageCount: lastPage + 1,
+    onPageChange: (next) => {
+      setPage(next);
+      setHover(null);
+    },
+  });
 
   function setModeAndReset(next: Mode) {
     setMode(next);
@@ -203,38 +119,54 @@ export function ActivityChart({
     setHover(null);
   }
 
-  const activeDay = mode === "day" && hover !== null ? dayBars[hover] : null;
-  const activeWeek = mode === "week" && hover !== null ? weekBars[hover] : null;
   const bars = mode === "day" ? dayBars : weekBars;
   const max = Math.max(1, ...bars.map((b) => b.count));
+  const activeDay = mode === "day" && hover !== null ? dayBars[hover] : null;
+  const activeWeek = mode === "week" && hover !== null ? weekBars[hover] : null;
+
+  const height = 144;
+  const pad = { top: 8, right: 0, bottom: 22, left: 0 };
+  const innerH = height - pad.top - pad.bottom;
+  const gap = 10;
+  const count = Math.max(bars.length, 1);
+  const barW = width > 0 ? Math.max(8, (width - gap * (count - 1)) / count) : 24;
 
   return (
     <section
       aria-labelledby="activity-heading"
-      className={cn("relative rounded-xl border border-zinc-800 bg-zinc-900/40 p-4", className)}
+      className={cn(
+        "relative rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)] p-4",
+        className,
+      )}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft") goToPage(clampedPage + 1);
+        if (e.key === "ArrowRight") goToPage(clampedPage - 1);
+      }}
     >
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
         <div className="min-w-0">
-          <h2 id="activity-heading" className="text-sm font-semibold text-zinc-100">
+          <h2 id="activity-heading" className="text-sm font-semibold text-[var(--text)]">
             Problems solved
           </h2>
-          <p className="mt-0.5 text-xs text-zinc-500" aria-live="polite">
+          <p className="mt-0.5 text-xs text-[var(--text-tertiary)]" aria-live="polite">
             {activeDay ? (
-              <span className="text-zinc-300">
+              <span className="text-[var(--text-secondary)]">
                 {describeActivityCell({ ...activeDay, outside: false })}
               </span>
             ) : activeWeek ? (
-              <span className="text-zinc-300">{describeActivityWeek(activeWeek)}</span>
+              <span className="text-[var(--text-secondary)]">
+                {describeActivityWeek(activeWeek)}
+              </span>
             ) : (
-              <span className="text-zinc-300">
+              <span className="text-[var(--text-secondary)]">
                 {mode === "day" ? describeDayPage(dayBars) : describeWeekPage(weekBars)}
               </span>
             )}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <p className="text-[11px] tabular-nums text-zinc-600">Peak {max}</p>
-          <div className="flex rounded-lg border border-zinc-800 bg-zinc-950/60 p-0.5 text-[11px]">
+          <p className="lare-micro tabular-nums text-[var(--text-tertiary)]">Peak {max}</p>
+          <div className="flex rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface)_60%,transparent)] p-0.5 text-[11px]">
             {(["day", "week"] as const).map((m) => (
               <button
                 key={m}
@@ -242,8 +174,10 @@ export function ActivityChart({
                 onClick={() => setModeAndReset(m)}
                 aria-pressed={mode === m}
                 className={cn(
-                  "rounded-md px-2 py-1 capitalize transition-colors",
-                  mode === m ? "bg-zinc-100 text-zinc-900" : "text-zinc-400 hover:text-zinc-200",
+                  "lare-press rounded-md px-2 py-1 capitalize transition-colors",
+                  mode === m
+                    ? "bg-[var(--accent)] text-[var(--accent-fg)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text)]",
                 )}
               >
                 {m}
@@ -253,97 +187,69 @@ export function ActivityChart({
         </div>
       </div>
 
-      <div className="mt-3 h-36 min-w-0" ref={(el) => setChartWidth(el?.clientWidth ?? 0)}>
-        <ResponsiveContainer width="100%" height="100%">
-          {mode === "day" ? (
-            <BarChart
-              data={dayBars}
-              margin={{ top: 8, right: 0, bottom: 0, left: 0 }}
-              barCategoryGap="18%"
-            >
-              <XAxis
-                dataKey="iso"
-                tickLine={false}
-                axisLine={false}
-                interval={0}
-                tick={{ fontSize: 10, fill: TICK }}
-                tickFormatter={(iso: string) =>
-                  new Date(iso).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short" })
-                }
-                height={18}
-              />
-              <Tooltip
-                cursor={false}
-                content={<DayTooltip chartWidth={chartWidth} />}
-                allowEscapeViewBox={{ x: true, y: true }}
-              />
-              <Bar
-                dataKey="count"
-                radius={[2, 2, 0, 0]}
-                isAnimationActive={false}
-                shape={<DayBar />}
-                onMouseEnter={(_data, i) => setHover(i)}
-                onMouseLeave={() => setHover(null)}
-              >
-                {dayBars.map((day, i) => (
-                  <Cell
-                    key={day.iso}
-                    fill={
-                      hover === i ||
-                      (hover === null && i === dayBars.length - 1 && clampedPage === 0)
-                        ? BAR_ACTIVE
-                        : day.count === 0
-                          ? BAR_STUB
-                          : BAR_IDLE
-                    }
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          ) : (
-            <BarChart
-              data={weekBars}
-              margin={{ top: 8, right: 0, bottom: 0, left: 0 }}
-              barCategoryGap="18%"
-            >
-              <XAxis
-                dataKey="start"
-                tickLine={false}
-                axisLine={false}
-                interval={0}
-                tick={{ fontSize: 10, fill: TICK }}
-                tickFormatter={(_v: string, i: number) => weekBars[i]?.monthLabel ?? ""}
-                height={18}
-              />
-              <Tooltip
-                cursor={false}
-                content={<WeekTooltip chartWidth={chartWidth} />}
-                allowEscapeViewBox={{ x: true, y: true }}
-              />
-              <Bar
-                dataKey="count"
-                radius={[2, 2, 0, 0]}
-                isAnimationActive={false}
-                shape={<WeekBar />}
-                onMouseEnter={(_data, i) => setHover(i)}
-                onMouseLeave={() => setHover(null)}
-              >
-                {weekBars.map((week, i) => (
-                  <Cell
-                    key={week.start}
-                    fill={
-                      hover === i || (hover === null && week.current)
-                        ? BAR_ACTIVE
-                        : week.count === 0
-                          ? BAR_STUB
-                          : BAR_IDLE
-                    }
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          )}
-        </ResponsiveContainer>
+      <div ref={frameRef} className="relative mt-3 min-w-0">
+        <div ref={dragRef} className="touch-pan-y">
+          <svg
+            width="100%"
+            height={height}
+            role="img"
+            aria-label="Problems solved"
+            onMouseMove={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              const x = event.clientX - rect.left;
+              const i = Math.floor(x / (barW + gap));
+              setHover(i >= 0 && i < bars.length ? i : null);
+            }}
+            onMouseLeave={() => setHover(null)}
+          >
+            {bars.map((bar, i) => {
+              const countVal = bar.count;
+              const empty = countVal === 0;
+              const h = empty ? 3 : Math.max(3, (countVal / max) * innerH);
+              const x = i * (barW + gap);
+              const y = pad.top + innerH - h;
+              const current =
+                mode === "week"
+                  ? "current" in bar && bar.current
+                  : i === bars.length - 1 && clampedPage === 0;
+              const fill =
+                hover === i || (hover === null && current)
+                  ? "var(--accent)"
+                  : empty
+                    ? "var(--border)"
+                    : "var(--border-strong)";
+              const label =
+                mode === "day"
+                  ? new Date((bar as ActivityDay).iso).toLocaleDateString("en-US", {
+                      timeZone: "UTC",
+                      weekday: "short",
+                    })
+                  : ((bar as ActivityWeek).monthLabel ?? "");
+              return (
+                <g key={mode === "day" ? (bar as ActivityDay).iso : (bar as ActivityWeek).start}>
+                  <rect x={x} y={y} width={barW} height={h} rx={2} fill={fill} />
+                  <text
+                    x={x + barW / 2}
+                    y={height - 6}
+                    textAnchor="middle"
+                    fill="var(--text-tertiary)"
+                    fontSize={10}
+                  >
+                    {label}
+                  </text>
+                  <title>
+                    {mode === "day"
+                      ? describeActivityCell({ ...(bar as ActivityDay), outside: false })
+                      : formatWeekRange(
+                          (bar as ActivityWeek).firstDay,
+                          (bar as ActivityWeek).lastDay,
+                        )}
+                  </title>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
       </div>
 
       <NavButton

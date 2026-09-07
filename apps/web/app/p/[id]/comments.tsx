@@ -1,14 +1,15 @@
 "use client";
 
-import { LoaderCircle, Pencil, Trash2 } from "lucide-react";
+import { Button, FieldError, Textarea } from "@lare/ui/primitives";
+import { Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { addComment, deleteComment, updateComment } from "@/app/social-actions";
 import { Avatar } from "@/components/avatar";
+import { FormToast } from "@/components/form-toast";
 import { TimeAgo } from "@/components/time-ago";
 import type { PostCommentRow } from "@/lib/posts";
-import { buttonPrimary, buttonSecondary, inputClass } from "@/lib/styles";
 
 /**
  * Comment thread. Authors can edit or delete their own comment; the post's owner can remove
@@ -59,31 +60,28 @@ export function Comments({
           }}
           className="space-y-2"
         >
-          <textarea
+          <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             maxLength={2000}
             rows={3}
             placeholder="Add a comment"
-            className={`${inputClass} min-h-20 resize-y`}
             aria-label="Add a comment"
           />
           <div className="flex items-center gap-3">
-            <button
+            <Button
               type="submit"
+              variant="primary"
+              size="sm"
               disabled={pending || draft.trim().length === 0}
-              className={`${buttonPrimary} px-4 py-1.5 text-xs`}
+              loading={pending}
             >
-              {pending && <LoaderCircle className="size-3.5 animate-spin" />}
               Comment
-            </button>
-            <span className="text-xs text-zinc-600">{draft.length}/2000</span>
+            </Button>
+            <span className="text-xs text-[var(--text-tertiary)]">{draft.length}/2000</span>
           </div>
-          {error && (
-            <p role="alert" className="text-xs text-rose-300">
-              {error}
-            </p>
-          )}
+          <FormToast error={error} />
+          <FieldError>{error}</FieldError>
         </form>
       ) : (
         <p className="text-sm text-zinc-500">
@@ -172,40 +170,40 @@ function CommentRow({
 
         {editing ? (
           <div className="mt-1.5 space-y-2">
-            <textarea
+            <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               maxLength={2000}
               rows={3}
-              className={`${inputClass} min-h-16 resize-y`}
               aria-label="Edit comment"
             />
             <div className="flex gap-2">
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="sm"
                 disabled={pending || draft.trim().length === 0}
+                loading={pending}
                 onClick={() =>
                   run(
                     () => updateComment(comment.id, postId, draft),
                     () => setEditing(false),
                   )
                 }
-                className={`${buttonPrimary} px-3 py-1 text-xs`}
               >
-                {pending && <LoaderCircle className="size-3.5 animate-spin" />}
                 Save
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="sm"
                 disabled={pending}
                 onClick={() => {
                   setDraft(comment.body);
                   setEditing(false);
                 }}
-                className={`${buttonSecondary} px-3 py-1 text-xs`}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -244,11 +242,8 @@ function CommentRow({
           </div>
         )}
 
-        {error && (
-          <p role="alert" className="mt-1 text-xs text-rose-300">
-            {error}
-          </p>
-        )}
+        <FormToast error={error} />
+        <FieldError>{error}</FieldError>
       </div>
     </li>
   );

@@ -1,5 +1,5 @@
+import { cn } from "@lare/ui/cn";
 import Image from "next/image";
-import { cn } from "@/lib/cn";
 
 const SIZES = {
   sm: { px: 28, className: "size-7 text-[11px]" },
@@ -29,7 +29,6 @@ export function Avatar({
         alt={label}
         width={px}
         height={px}
-        unoptimized
         referrerPolicy="no-referrer"
         className={cn("shrink-0 rounded-full bg-zinc-800 object-cover", sizeClass, className)}
       />

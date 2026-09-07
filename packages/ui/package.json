@@ -9,15 +9,29 @@
     ".": "./src/index.ts",
     "./brand": "./src/brand/Logo.tsx",
     "./tokens.css": "./src/tokens.css",
-    "./motion.css": "./src/motion.css"
+    "./tokens": "./src/tokens.ts",
+    "./motion.css": "./src/motion.css",
+    "./type.css": "./src/type.css",
+    "./prose.css": "./src/prose.css",
+    "./tailwind-bridge.css": "./src/tailwind-bridge.css",
+    "./motion": "./src/motion.ts",
+    "./gesture": "./src/gesture.ts",
+    "./primitives": "./src/primitives/index.ts",
+    "./cn": "./src/cn.ts",
+    "./ActivityChart": "./src/ActivityChart.tsx",
+    "./RuntimeChart": "./src/RuntimeChart.tsx",
+    "./CodeBlock": "./src/CodeBlock.tsx",
+    "./DifficultyBadge": "./src/DifficultyBadge.tsx",
+    "./SubmissionStats": "./src/SubmissionStats.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@lare/shared": "workspace:*",
+    "@shikijs/langs": "^4.4.3",
     "lucide-react": "^1.40.0",
-    "recharts": "^3.10.1",
+    "motion": "^12.23.12",
     "shiki": "^4.4.3"
   },
   "peerDependencies": {

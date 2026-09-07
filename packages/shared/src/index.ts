@@ -4,6 +4,7 @@ export * from "./avatar";
 export * from "./constants";
 export * from "./edits";
 export * from "./format";
+export * from "./handle";
 export * from "./leetcode";
 export * from "./media";
 export * from "./overview";

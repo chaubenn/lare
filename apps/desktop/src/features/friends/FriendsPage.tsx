@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router";
 import { useToast } from "@/components/toast/ToastProvider";
 import { CountBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { PageHeader } from "@/components/ui/Card";
+import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, ListSkeleton, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
@@ -75,10 +75,8 @@ export function FriendsPage() {
   );
 }
 
-function List({ children }: { children: React.ReactNode }) {
-  return (
-    <ul className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800">{children}</ul>
-  );
+function PeopleList({ children }: { children: React.ReactNode }) {
+  return <StackedList tracks="grid-cols-1">{children}</StackedList>;
 }
 
 function FollowingTab() {
@@ -100,17 +98,18 @@ function FollowingTab() {
           description="Use Find people to search by @handle or name."
         />
       ) : (
-        <List>
+        <PeopleList>
           {accepted.map((row) => (
-            <li key={row.profiles.id}>
+            <StackedListItem key={row.profiles.id}>
               <UserRow
+                flush
                 person={row.profiles}
                 state="accepted"
                 meta={`following since ${formatLocalTimestamp(row.created_at)}`}
               />
-            </li>
+            </StackedListItem>
           ))}
-        </List>
+        </PeopleList>
       )}
 
       {sent.length > 0 ? (
@@ -118,17 +117,18 @@ function FollowingTab() {
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
             Requests you sent
           </h2>
-          <List>
+          <PeopleList>
             {sent.map((row) => (
-              <li key={row.profiles.id}>
+              <StackedListItem key={row.profiles.id}>
                 <UserRow
+                  flush
                   person={row.profiles}
                   state="pending"
                   meta={`requested ${formatLocalTimestamp(row.created_at)}`}
                 />
-              </li>
+              </StackedListItem>
             ))}
-          </List>
+          </PeopleList>
         </section>
       ) : null}
     </div>
@@ -155,17 +155,18 @@ function FollowersTab() {
   }
 
   return (
-    <List>
+    <PeopleList>
       {followers.data.map((row) => (
-        <li key={row.profiles.id}>
+        <StackedListItem key={row.profiles.id}>
           <UserRow
+            flush
             person={row.profiles}
             state={states.data?.[row.profiles.id] ?? "none"}
             meta={`followed you ${formatLocalTimestamp(row.created_at)}`}
           />
-        </li>
+        </StackedListItem>
       ))}
-    </List>
+    </PeopleList>
   );
 }
 
@@ -185,13 +186,13 @@ function RequestsTab() {
     );
   }
   return (
-    <List>
+    <PeopleList>
       {requests.data.map((request) => (
-        <li key={request.follower_id}>
+        <StackedListItem key={request.follower_id}>
           <RequestRow request={request} />
-        </li>
+        </StackedListItem>
       ))}
-    </List>
+    </PeopleList>
   );
 }
 
@@ -218,6 +219,7 @@ function RequestRow({ request }: { request: FollowRequest }) {
 
   return (
     <UserRow
+      flush
       person={person}
       meta={`requested ${formatLocalTimestamp(request.created_at)}`}
       action={
@@ -286,16 +288,17 @@ function FindTab() {
           description="Handles are 3–20 lowercase letters, numbers or underscores."
         />
       ) : (
-        <List>
+        <PeopleList>
           {people.map((person) => (
-            <li key={person.id}>
+            <StackedListItem key={person.id}>
               <UserRow
+                flush
                 person={person}
                 state={states.data?.[person.id] ?? ("none" as FollowState)}
               />
-            </li>
+            </StackedListItem>
           ))}
-        </List>
+        </PeopleList>
       )}
     </div>
   );

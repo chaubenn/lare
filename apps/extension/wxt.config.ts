@@ -41,7 +41,7 @@ export default defineConfig({
     },
     web_accessible_resources: [
       {
-        resources: ["emblem.png"],
+        resources: ["emblem.png", "fonts/*.woff2", "assets/*", "*.woff2"],
         matches: [
           "https://leetcode.com/*",
           ...(mode === "production" ? [] : ["http://localhost/*"]),

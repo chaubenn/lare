@@ -28,6 +28,7 @@ import {
   type RuntimeSnapshot,
   type StateBroadcast,
   sendRuntime,
+  toSnapshot,
 } from "./messages";
 
 export interface Toast {
@@ -147,14 +148,9 @@ export class PageController {
   // ---- runtime -------------------------------------------------------------
   async refresh(): Promise<void> {
     const res = await sendRuntime({ type: "GET_STATE" });
-    if (res.ok && res.state) {
-      this.set({
-        snapshot: {
-          state: res.state,
-          auth: res.auth ?? null,
-          appConnected: res.appConnected ?? false,
-        },
-      });
+    if (res.ok) {
+      const snapshot = toSnapshot(res);
+      if (snapshot) this.set({ snapshot });
       return;
     }
     if (
@@ -169,14 +165,9 @@ export class PageController {
 
   async probeApp(): Promise<boolean> {
     const res = await sendRuntime({ type: "PROBE_APP" });
-    if (res.ok && res.state) {
-      this.set({
-        snapshot: {
-          state: res.state,
-          auth: res.auth ?? null,
-          appConnected: res.appConnected ?? false,
-        },
-      });
+    if (res.ok) {
+      const snapshot = toSnapshot(res);
+      if (snapshot) this.set({ snapshot });
     }
     return res.ok ? (res.appConnected ?? false) : false;
   }
@@ -184,13 +175,8 @@ export class PageController {
   private onRuntimeMessage = (raw: unknown) => {
     const msg = raw as Partial<StateBroadcast>;
     if (msg?.type !== "STATE_CHANGED" || !msg.state) return;
-    this.set({
-      snapshot: {
-        state: msg.state,
-        auth: msg.auth ?? null,
-        appConnected: msg.appConnected ?? false,
-      },
-    });
+    const snapshot = toSnapshot(msg);
+    if (snapshot) this.set({ snapshot });
     if (msg.toast) this.toast(msg.toast.kind, msg.toast.text);
   };
 
@@ -199,14 +185,9 @@ export class PageController {
     try {
       const res = await fn();
       if (!res.ok) this.toast("error", res.error);
-      else if (res.state) {
-        this.set({
-          snapshot: {
-            state: res.state,
-            auth: res.auth ?? null,
-            appConnected: res.appConnected ?? false,
-          },
-        });
+      else {
+        const snapshot = toSnapshot(res);
+        if (snapshot) this.set({ snapshot });
       }
       return res;
     } finally {
@@ -223,6 +204,7 @@ export class PageController {
   pause = () => this.run(() => sendRuntime({ type: "PAUSE_SESSION" }));
   resume = () => this.run(() => sendRuntime({ type: "RESUME_SESSION" }));
   end = () => this.run(() => sendRuntime({ type: "END_SESSION" }));
+  cancelStart = () => sendRuntime({ type: "CANCEL_START" });
   signIn = (provider: "github" | "google") =>
     this.run(() => sendRuntime({ type: "SIGN_IN", provider }));
   openApp = () => sendRuntime({ type: "OPEN_APP" });

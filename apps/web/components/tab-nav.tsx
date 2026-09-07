@@ -1,8 +1,8 @@
 "use client";
 
+import { cn } from "@lare/ui/cn";
 import Link from "next/link";
 import { useLayoutEffect, useRef } from "react";
-import { cn } from "@/lib/cn";
 
 export interface TabItem {
   key: string;

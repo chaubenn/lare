@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Outfit } from "next/font/google";
 import type { ReactNode } from "react";
+import { Suspense } from "react";
+import { Providers } from "@/components/providers";
+import { SiteHeaderFallback } from "@/components/site-chrome";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { env } from "@/lib/env";
@@ -35,9 +38,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`dark ${outfit.variable} ${ibmPlexMono.variable}`}>
       <body className="flex min-h-screen flex-col font-sans">
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-5">{children}</main>
-        <SiteFooter />
+        <Providers>
+          <Suspense fallback={<SiteHeaderFallback />}>
+            <SiteHeader />
+          </Suspense>
+          <main className="flex-1 py-5 pb-24 md:pb-5">{children}</main>
+          <SiteFooter />
+        </Providers>
       </body>
     </html>
   );

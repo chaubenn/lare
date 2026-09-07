@@ -13,6 +13,10 @@ import { useEffect, useRef, useState } from "react";
 import { recorder } from "@/lib/recorder";
 import { useTauriEvent } from "@/lib/tauri";
 
+/**
+ * Window position uses `data-tauri-drag-region` (native Tauri drag). `useDraggable` would
+ * fight that and risk breaking the facecam preview, so snap/rubber-band stay with the OS drag.
+ */
 export function CameraWindow() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);

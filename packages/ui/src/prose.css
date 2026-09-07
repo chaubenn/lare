@@ -1,0 +1,107 @@
+/* Sanitised LeetCode HTML. Presentational only — allowlists stay in the sanitizer. */
+
+.lare-prose,
+.leetcode-html {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.lare-prose p,
+.leetcode-html p {
+  margin: 0.5em 0;
+}
+
+.lare-prose pre,
+.leetcode-html pre {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  border-radius: var(--lare-r-2);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  padding: 0.75rem;
+  font-family: inherit;
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+.lare-prose code,
+.leetcode-html code {
+  border-radius: var(--lare-r-1);
+  background: color-mix(in oklab, var(--surface-sunken) 80%, transparent);
+  padding: 0.1em 0.3em;
+  font-size: 0.85em;
+  color: var(--text);
+}
+
+.lare-prose pre code,
+.leetcode-html pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.lare-prose ul,
+.leetcode-html ul {
+  margin: 0.5em 0;
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+.lare-prose ol,
+.leetcode-html ol {
+  margin: 0.5em 0;
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+
+.lare-prose li,
+.leetcode-html li {
+  margin: 0.25em 0;
+}
+
+.lare-prose strong,
+.leetcode-html strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.lare-prose em,
+.leetcode-html em {
+  font-style: italic;
+}
+
+.lare-prose img,
+.leetcode-html img {
+  margin: 0.5em 0;
+  max-width: 100%;
+  border-radius: var(--lare-r-2);
+}
+
+.lare-prose a,
+.leetcode-html a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.lare-prose sup,
+.leetcode-html sup {
+  font-size: 0.7em;
+}
+
+.lare-prose table,
+.leetcode-html table {
+  margin: 0.75em 0;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.lare-prose th,
+.lare-prose td,
+.leetcode-html th,
+.leetcode-html td {
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}

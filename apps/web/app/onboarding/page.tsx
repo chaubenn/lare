@@ -1,3 +1,4 @@
+import { Container } from "@lare/ui/primitives";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getViewer, safeNextPath } from "@/lib/viewer";
@@ -17,9 +18,9 @@ export default async function OnboardingPage({
   if (viewer.profile?.handle) redirect(next);
 
   return (
-    <div className="mx-auto max-w-sm py-8">
-      <h1 className="text-2xl font-semibold text-zinc-50">Welcome to Lare</h1>
-      <p className="mt-1 text-sm text-zinc-400">
+    <Container width="prose" className="py-8">
+      <h1 className="lare-title text-[var(--text)]">Welcome to Lare</h1>
+      <p className="mt-1 text-sm text-[var(--text-secondary)]">
         Pick a handle so friends can find you. You can change it later in Settings.
       </p>
       <OnboardingForm
@@ -27,6 +28,6 @@ export default async function OnboardingPage({
         defaultDisplayName={viewer.profile?.display_name ?? ""}
         defaultPrivate={viewer.profile?.is_private ?? false}
       />
-    </div>
+    </Container>
   );
 }

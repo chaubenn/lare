@@ -1,5 +1,27 @@
-:host {
-  all: initial;
+@import "@lare/ui/tokens.css";
+@import "@lare/ui/motion.css";
+@import "@lare/ui/type.css";
+
+@font-face {
+  font-family: Outfit;
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/fonts/outfit-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
 }
 
 .lare-root {
@@ -11,18 +33,19 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  font-family: Outfit, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Outfit, "Outfit Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
-  color: #f0ece4;
+  color: var(--text);
   pointer-events: none;
+}
+.lare-root[data-placed="1"] {
+  right: auto;
+  bottom: auto;
 }
 .lare-root * {
   box-sizing: border-box;
 }
-.lare-root button,
-.lare-root .lare-pill,
-.lare-root .lare-menu,
-.lare-root .lare-toast {
+.lare-root > * {
   pointer-events: auto;
 }
 
@@ -31,23 +54,54 @@
   align-items: center;
   gap: 8px;
   padding: 8px 14px 8px 8px;
-  border: 1px solid #2a2a27;
-  border-radius: 999px;
-  background: #161615;
-  color: #f0ece4;
+  border: 1px solid var(--border);
+  border-radius: var(--lare-r-5);
+  background: var(--surface-raised);
+  color: var(--text);
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: var(--lare-shadow-1);
+  transition:
+    transform var(--press-dur, 100ms) var(--ease-smooth-out),
+    box-shadow var(--duration-fast) var(--ease-smooth-out);
 }
 .lare-fab:hover {
   transform: translateY(-1px);
+}
+.lare-fab:active {
+  transform: scale(var(--press-scale, 0.97));
+}
+.lare-fab:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--lare-focus);
 }
 .lare-fab-logo {
   display: block;
   width: 22px;
   height: 22px;
-  object-fit: contain;
+  background-color: currentColor;
+  flex: 0 0 auto;
+}
+.lare-fab-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lare-grip {
+  width: 14px;
+  height: 28px;
+  border-radius: var(--lare-r-2);
+  cursor: grab;
+  background:
+    radial-gradient(circle, var(--lare-muted) 1.1px, transparent 1.2px) 3px 6px / 8px 8px,
+    radial-gradient(circle, var(--lare-muted) 1.1px, transparent 1.2px) 3px 14px / 8px 8px;
+  flex: 0 0 auto;
+}
+.lare-grip:active {
+  cursor: grabbing;
 }
 
 .lare-launcher {
@@ -60,12 +114,11 @@
 .lare-menu {
   width: 290px;
   padding: 10px;
-  border: 1px solid #2a2a27;
-  border-radius: 14px;
-  background: #161615;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--border);
+  border-radius: var(--lare-r-4);
+  background: var(--surface-raised);
+  box-shadow: var(--lare-shadow-2);
   transform-origin: bottom right;
-  animation: lare-dropdown-open 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -77,11 +130,19 @@
   gap: 8px;
   padding: 4px 6px 8px;
   font-weight: 600;
-  color: #f9fafb;
+  color: var(--text);
+  min-width: 0;
 }
-.lare-menu-hint {
+.lare-menu-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lare-menu-hint,
+.lare-disabled-reason {
   padding: 4px 6px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   font-size: 12px;
 }
 .lare-menu-item {
@@ -92,33 +153,43 @@
   width: 100%;
   padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 10px;
-  background: #1e1e1c;
-  color: #f0ece4;
+  border-radius: var(--lare-r-3);
+  background: var(--surface-sunken);
+  color: var(--text);
   text-align: left;
   cursor: pointer;
+  transition: transform var(--press-dur, 100ms) var(--ease-smooth-out);
 }
 .lare-menu-item span {
-  color: #9ca3af;
+  color: var(--text-tertiary);
   font-size: 12px;
 }
 .lare-menu-item:hover:not(:disabled) {
-  border-color: #3f3f46;
-  background: #26262c;
+  border-color: var(--border-strong);
+  background: color-mix(in oklab, var(--lare-ink-3) 70%, var(--lare-line));
 }
 .lare-menu-item:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.lare-menu-item:active:not(:disabled) {
+  transform: scale(var(--press-scale, 0.97));
+}
+.lare-menu-item:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--lare-focus);
+}
 .lare-menu-item--interview strong {
-  color: #fca5a5;
+  color: var(--lare-danger);
 }
 .lare-check {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 4px 8px;
-  color: #d1d5db;
+  color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
 }
@@ -127,106 +198,232 @@
   padding: 2px 8px;
   border: 0;
   background: none;
-  color: #f0ece4;
+  color: var(--text);
   font-size: 12px;
   cursor: pointer;
 }
+.lare-link:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--lare-focus);
+}
+
+.lare-armed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+.lare-armed-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--lare-r-5);
+  background: var(--lare-muted);
+}
+.lare-armed.is-ready {
+  color: var(--lare-status-run);
+}
+.lare-armed.is-ready .lare-armed-dot {
+  background: var(--lare-status-run);
+}
 
 .lare-diff {
+  flex: 0 0 auto;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--lare-r-5);
   font-size: 11px;
   font-weight: 600;
 }
 .lare-diff--easy {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  background: color-mix(in oklab, var(--lare-diff-easy) 18%, transparent);
+  color: var(--lare-diff-easy);
 }
 .lare-diff--medium {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
+  background: color-mix(in oklab, var(--lare-diff-medium) 18%, transparent);
+  color: var(--lare-diff-medium);
 }
 .lare-diff--hard {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  background: color-mix(in oklab, var(--lare-diff-hard) 18%, transparent);
+  color: var(--lare-diff-hard);
 }
 
 .lare-pill {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
   padding: 8px 10px 8px 14px;
-  border: 1px solid #2a2a27;
-  border-radius: 999px;
-  background: #161615;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: var(--lare-r-5);
+  background: var(--surface-raised);
+  box-shadow: var(--lare-shadow-1);
 }
 .lare-pill.is-paused {
-  border-color: #a16207;
+  border-color: var(--lare-status-pause);
 }
 .lare-dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
-  background: #22c55e;
+  border-radius: var(--lare-r-5);
+  background: var(--lare-status-run);
+  flex: 0 0 auto;
 }
 .lare-dot--rec {
-  background: #ef4444;
-  animation: lare-blink 1.2s infinite;
+  background: var(--lare-status-stop);
+  animation: lare-rec-pulse 1.2s var(--ease-in-out, ease-in-out) infinite;
 }
 .is-paused .lare-dot {
-  background: #f59e0b;
+  background: var(--lare-status-pause);
   animation: none;
 }
-@keyframes lare-blink {
+@keyframes lare-rec-pulse {
   50% {
-    opacity: 0.3;
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lare-dot--rec {
+    animation: lare-rec-pulse 2s linear infinite;
   }
 }
 .lare-kind {
-  color: #9ca3af;
+  color: var(--text-tertiary);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 11px;
 }
 .lare-time {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
   font-weight: 700;
   font-size: 15px;
-  color: #f9fafb;
-  min-width: 44px;
+  color: var(--text);
+  min-width: 8ch;
+  width: 8ch;
+  text-align: right;
 }
 .lare-meta {
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 11px;
 }
 
 .lare-btn {
   padding: 5px 10px;
-  border: 1px solid #3f3f46;
-  border-radius: 999px;
-  background: #1f1f24;
-  color: #e5e7eb;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--lare-r-5);
+  background: var(--surface-sunken);
+  color: var(--text);
   font-weight: 600;
   cursor: pointer;
+  transition: transform var(--press-dur, 100ms) var(--ease-smooth-out);
 }
 .lare-btn:hover:not(:disabled) {
-  background: #26262c;
+  background: color-mix(in oklab, var(--lare-ink-3) 70%, var(--lare-line));
 }
 .lare-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.lare-btn:active:not(:disabled) {
+  transform: scale(var(--press-scale, 0.97));
+}
+.lare-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--lare-focus);
+}
 .lare-btn--primary {
-  border-color: #f0ece4;
-  background: #f0ece4;
-  color: #0c0c0b;
+  border-color: var(--lare-bone);
+  background: var(--lare-bone);
+  color: var(--lare-ink);
 }
 .lare-btn--danger {
-  border-color: #ef4444;
-  background: #7f1d1d;
-  color: #fee2e2;
+  border-color: var(--lare-danger);
+  background: color-mix(in oklab, var(--lare-danger) 28%, var(--lare-ink));
+  color: var(--lare-paper);
+}
+
+.lare-end-wrap {
+  position: relative;
+}
+.lare-confirm-sheet {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--lare-r-3);
+  background: var(--surface-raised);
+  box-shadow: var(--lare-shadow-2);
+  z-index: 2;
+}
+.lare-confirm-sheet p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.lare-stage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--lare-r-4);
+  background: var(--surface-raised);
+  box-shadow: var(--lare-shadow-1);
+}
+.lare-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lare-stage-copy strong {
+  font-size: 13px;
+}
+.lare-stage-copy span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.lare-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--lare-bone);
+  border-radius: var(--lare-r-5);
+  animation: lare-spin 0.7s linear infinite;
+  flex: 0 0 auto;
+}
+@keyframes lare-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lare-spinner {
+    animation: none;
+    opacity: 0.7;
+  }
+  .lare-fab:hover,
+  .lare-btn:active:not(:disabled),
+  .lare-fab:active,
+  .lare-menu-item:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 .lare-toasts {
@@ -238,44 +435,21 @@
 .lare-toast {
   max-width: 320px;
   padding: 8px 12px;
-  border-radius: 10px;
-  background: #1f1f24;
-  border: 1px solid #2a2a2e;
-  color: #e5e7eb;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  animation: lare-toast-in 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  border-radius: var(--lare-r-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  color: var(--text);
+  box-shadow: var(--lare-shadow-1);
+  animation: lare-toast-in var(--toast-open) var(--toast-ease) both;
 }
 .lare-toast--success {
-  border-color: #16a34a;
+  border-color: var(--lare-status-run);
 }
 .lare-toast--error {
-  border-color: #dc2626;
+  border-color: var(--lare-danger);
 }
-@keyframes lare-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
-@keyframes lare-dropdown-open {
-  from {
-    opacity: 0;
-    transform: scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes lare-toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px) scale(0.97);
-    filter: blur(2px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    filter: none;
+@media (prefers-reduced-motion: reduce) {
+  .lare-toast {
+    animation-name: lare-fade;
   }
 }

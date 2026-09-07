@@ -1,22 +1,10 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap");
+@import "@lare/ui/tokens.css";
+@import "@lare/ui/motion.css";
+@import "@lare/ui/type.css";
 
 :root {
   color-scheme: dark;
-  --lare-ink: #0c0c0b;
-  --lare-ink-2: #161615;
-  --lare-line: #2a2a27;
-  --lare-muted: #8a8780;
-  --lare-soft: #a8a49c;
-  --lare-bone: #f0ece4;
-  --duration-fast: 250ms;
-  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --dropdown-open-dur: 250ms;
-  --toast-open: 350ms;
-  --toast-distance: 16px;
-  --toast-blur: 2px;
-  --toast-scale: 0.97;
-  --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  font-family: Outfit, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Outfit, "Outfit Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
   color: var(--lare-bone);
   background: var(--lare-ink);
@@ -27,12 +15,16 @@
 body {
   margin: 0;
   width: 320px;
+  max-height: 600px;
+  overflow: hidden;
 }
 .popup {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px;
+  max-height: 600px;
+  overflow: hidden;
 }
 .header {
   display: flex;
@@ -43,7 +35,9 @@ body {
   display: block;
   width: 28px;
   height: 28px;
-  object-fit: contain;
+  background-color: currentColor;
+  color: var(--lare-bone);
+  flex: 0 0 auto;
 }
 .title {
   font-weight: 600;
@@ -59,12 +53,12 @@ body {
   margin-left: auto;
   width: 10px;
   height: 10px;
-  border-radius: 999px;
+  border-radius: var(--lare-r-5);
   background: var(--lare-line);
 }
 .app-dot.on {
-  background: #6f8f6a;
-  box-shadow: 0 0 0 3px rgba(111, 143, 106, 0.2);
+  background: var(--lare-status-run);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--lare-status-run) 20%, transparent);
 }
 .card {
   display: flex;
@@ -88,7 +82,7 @@ body {
 .avatar {
   width: 32px;
   height: 32px;
-  border-radius: 999px;
+  border-radius: var(--lare-r-5);
   background: var(--lare-line);
 }
 .grow {
@@ -109,19 +103,19 @@ body {
 }
 .badge {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--lare-r-5);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   background: var(--lare-line);
 }
 .badge.running {
-  background: rgba(111, 143, 106, 0.15);
-  color: #9cba96;
+  background: color-mix(in oklab, var(--lare-status-run) 15%, transparent);
+  color: var(--lare-status-run);
 }
 .badge.paused {
-  background: rgba(196, 161, 90, 0.15);
-  color: #d4b56e;
+  background: color-mix(in oklab, var(--lare-status-pause) 15%, transparent);
+  color: var(--lare-status-pause);
 }
 .problems {
   margin: 0;
@@ -130,6 +124,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
 }
 .problems li {
   display: flex;
@@ -143,26 +139,39 @@ body {
 .row input {
   flex: 1;
   padding: 8px 10px;
-  border: 1px solid var(--lare-line-strong, #3d3c39);
-  border-radius: 8px;
+  border: 1px solid var(--lare-line-strong);
+  border-radius: var(--lare-r-2);
   background: var(--lare-ink);
   color: var(--lare-bone);
   font-family: inherit;
+}
+.row input:focus-visible,
+.btn:focus-visible,
+.link:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--lare-focus);
 }
 .btn {
   flex: 1;
   padding: 8px 10px;
   border: 1px solid var(--lare-line);
-  border-radius: 8px;
-  background: #1e1e1c;
+  border-radius: var(--lare-r-2);
+  background: var(--lare-ink-3);
   color: var(--lare-bone);
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-smooth-out);
+  transition:
+    background-color var(--duration-fast) var(--ease-smooth-out),
+    transform var(--press-dur, 100ms) var(--ease-smooth-out);
 }
 .btn:hover:not(:disabled) {
-  background: #262624;
+  background: color-mix(in oklab, var(--lare-ink-3) 70%, var(--lare-line));
+}
+.btn:active:not(:disabled) {
+  transform: scale(var(--press-scale, 0.97));
 }
 .btn:disabled {
   opacity: 0.5;
@@ -177,7 +186,26 @@ body {
   color: var(--lare-ink);
 }
 .btn-primary:hover:not(:disabled) {
-  background: #f7f4ee;
+  background: var(--lare-paper);
+}
+.btn-danger {
+  border-color: var(--lare-danger);
+  background: color-mix(in oklab, var(--lare-danger) 28%, var(--lare-ink));
+  color: var(--lare-paper);
+}
+.confirm-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--lare-line);
+  border-radius: var(--lare-r-3);
+  background: var(--lare-ink);
+}
+.confirm-sheet p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--lare-soft);
 }
 .divider {
   text-align: center;
@@ -204,8 +232,18 @@ body {
 }
 .error {
   padding: 8px 10px;
-  border: 1px solid #7f1d1d;
-  border-radius: 8px;
-  background: rgba(127, 29, 29, 0.25);
-  color: #fecaca;
+  border: 1px solid var(--lare-danger);
+  border-radius: var(--lare-r-2);
+  background: color-mix(in oklab, var(--lare-danger) 18%, var(--lare-ink));
+  color: var(--lare-paper);
+}
+.retry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
 }

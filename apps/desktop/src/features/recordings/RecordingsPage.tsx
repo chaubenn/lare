@@ -4,6 +4,7 @@
  */
 
 import { formatDurationHuman } from "@lare/shared";
+import { Progress } from "@lare/ui/primitives";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -374,14 +375,7 @@ function JobProgress({ job }: { job: Job }) {
           <span className="ml-auto shrink-0 tabular-nums text-zinc-400">{percent}%</span>
         ) : null}
       </div>
-      {percent !== null ? (
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
-          <div
-            className="h-full rounded-full bg-sky-500 transition-[width]"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      ) : null}
+      {percent !== null ? <Progress value={percent} label={job.label} className="mt-2" /> : null}
     </div>
   );
 }

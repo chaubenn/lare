@@ -7,6 +7,7 @@ import {
   EditEventSchema,
   type ExtensionStateSchema,
   ProblemInfoSchema,
+  type RecordingState,
   SubmissionInfoSchema,
 } from "@lare/shared";
 import { z } from "zod";
@@ -73,13 +74,31 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("SIGN_OUT") }),
   z.object({ type: z.literal("PROBE_APP") }),
   z.object({ type: z.literal("OPEN_APP"), path: z.string().optional() }),
+  z.object({ type: z.literal("CANCEL_START") }),
+  z.object({ type: z.literal("RETRY_SYNC") }),
 ]);
 export type RuntimeRequest = z.infer<typeof RuntimeRequestSchema>;
+
+export interface RecordingInfo {
+  state: RecordingState;
+  message?: string | null;
+}
 
 export interface RuntimeSnapshot {
   state: z.infer<typeof ExtensionStateSchema>;
   auth: AuthInfo;
   appConnected: boolean;
+  recording: RecordingInfo | null;
+}
+
+export function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | null {
+  if (!res.state) return null;
+  return {
+    state: res.state,
+    auth: res.auth ?? null,
+    appConnected: res.appConnected ?? false,
+    recording: res.recording ?? null,
+  };
 }
 
 export type RuntimeResponse =

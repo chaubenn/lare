@@ -1,15 +1,14 @@
 import { formatLocalTimestamp } from "@lare/shared";
+import { Tooltip } from "@lare/ui/primitives";
 
 /** Absolute time in the viewer's timezone. Hydration is suppressed because SSR is UTC. */
 export function TimeAgo({ iso, className }: { iso: string; className?: string }) {
+  const label = formatLocalTimestamp(iso);
   return (
-    <time
-      dateTime={iso}
-      title={formatLocalTimestamp(iso)}
-      className={className}
-      suppressHydrationWarning
-    >
-      {formatLocalTimestamp(iso)}
-    </time>
+    <Tooltip label={label}>
+      <time dateTime={iso} className={className} suppressHydrationWarning>
+        {label}
+      </time>
+    </Tooltip>
   );
 }

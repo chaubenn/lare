@@ -1,4 +1,5 @@
 import { buildSessionOverview, excerptFromHtml, formatDurationHuman } from "@lare/shared";
+import { Container, Tooltip } from "@lare/ui/primitives";
 import { Clock, ListChecks, Lock } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -55,10 +56,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function PostPage({ params }: Params) {
   const { id } = await params;
-  const post = await getPostDetail(id);
+  const [post, viewer] = await Promise.all([getPostDetail(id), getViewer()]);
   if (!post) notFound();
 
-  const viewer = await getViewer();
   const isOwner = viewer?.id === post.user_id;
   // Posts published before the pre-generated session card existed get one after this response.
   await ensureOgSnapshot(post);
@@ -75,148 +75,155 @@ export default async function PostPage({ params }: Params) {
   const title = post.title?.trim() || "Untitled session";
 
   return (
-    <article className="space-y-6">
-      {isOwner && viewer && (
-        <OwnerControls
-          postId={post.id}
-          userId={viewer.id}
-          status={post.status}
-          visibility={post.visibility}
-          title={post.title ?? ""}
-          body={post.body ?? ""}
-          showVideo={post.show_video}
-          showDemoVideo={post.show_demo_video}
-          includeAiInsights={post.include_ai_insights}
-          includeOgCard={post.include_og_card}
-          ogShowAiScores={post.og_show_ai_scores}
-          hasVideo={Boolean(post.videos) && post.video_kind !== "none"}
-          hasDemoVideo={Boolean(post.demo_videos)}
-          isInterview={session?.kind === "interview"}
-          coverMediaId={post.cover_media_id}
-          images={post.images}
-        />
-      )}
-
-      <header>
-        <div className="flex items-center gap-3">
-          {author.handle ? (
-            <Link href={`/u/${author.handle}`}>
-              <Avatar src={author.avatar_url} name={authorName} />
-            </Link>
-          ) : (
-            <Avatar src={author.avatar_url} name={authorName} />
-          )}
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-baseline gap-x-2">
-              {author.handle ? (
-                <Link
-                  href={`/u/${author.handle}`}
-                  className="font-semibold text-zinc-100 hover:underline"
-                >
-                  {authorName}
-                </Link>
-              ) : (
-                <span className="font-semibold text-zinc-100">{authorName}</span>
-              )}
-              {author.handle && <span className="text-sm text-zinc-500">@{author.handle}</span>}
-              {author.is_private && (
-                <span title="Private account" className="inline-flex">
-                  <Lock className="size-3 text-zinc-600" aria-label="Private account" />
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-zinc-500">
-              {post.published_at ? (
-                <>
-                  Published <TimeAgo iso={post.published_at} />
-                </>
-              ) : (
-                "Draft"
-              )}
-            </p>
-          </div>
-          <div className="ml-auto">
-            <CopyLinkButton path={`/p/${post.id}`} />
-          </div>
-        </div>
-      </header>
-
-      <PostSlides post={post} title={title} />
-
-      <PostActions
-        postId={post.id}
-        likeCount={post.like_count}
-        commentCount={post.comment_count}
-        liked={post.viewer_liked}
-        canInteract={Boolean(viewer)}
-        commentHref="#comments"
-      />
-
-      <div>
-        <h1 className="text-2xl font-bold leading-tight text-zinc-50 sm:text-3xl">{title}</h1>
-        {post.body?.trim() && (
-          <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-300">
-            {post.body}
-          </p>
+    <Container width="page">
+      <article className="space-y-6">
+        {isOwner && viewer && (
+          <OwnerControls
+            postId={post.id}
+            userId={viewer.id}
+            status={post.status}
+            visibility={post.visibility}
+            title={post.title ?? ""}
+            body={post.body ?? ""}
+            showVideo={post.show_video}
+            showDemoVideo={post.show_demo_video}
+            includeAiInsights={post.include_ai_insights}
+            includeOgCard={post.include_og_card}
+            ogShowAiScores={post.og_show_ai_scores}
+            hasVideo={Boolean(post.videos) && post.video_kind !== "none"}
+            hasDemoVideo={Boolean(post.demo_videos)}
+            isInterview={session?.kind === "interview"}
+            coverMediaId={post.cover_media_id}
+            images={post.images}
+          />
         )}
 
-        <dl className="mt-4 flex flex-wrap gap-2 text-xs">
-          <SummaryChip label={sessionKindLabel(session?.kind)} />
-          {session && (
-            <SummaryChip
-              icon={<Clock className="size-3.5" />}
-              label={formatDurationHuman(session.active_ms)}
-              title="Active time"
-            />
-          )}
-          <SummaryChip
-            icon={<ListChecks className="size-3.5" />}
-            label={`${overview.solved}/${overview.total} solved`}
-          />
-          {post.visibility === "private" && (
-            <SummaryChip icon={<Lock className="size-3.5" />} label="Only me" />
-          )}
-        </dl>
-      </div>
+        <header>
+          <div className="flex items-center gap-3">
+            {author.handle ? (
+              <Link href={`/u/${author.handle}`}>
+                <Avatar src={author.avatar_url} name={authorName} />
+              </Link>
+            ) : (
+              <Avatar src={author.avatar_url} name={authorName} />
+            )}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                {author.handle ? (
+                  <Link
+                    href={`/u/${author.handle}`}
+                    className="font-semibold text-zinc-100 hover:underline"
+                  >
+                    {authorName}
+                  </Link>
+                ) : (
+                  <span className="font-semibold text-zinc-100">{authorName}</span>
+                )}
+                {author.handle && <span className="text-sm text-zinc-500">@{author.handle}</span>}
+                {author.is_private && (
+                  <Tooltip label="Private account">
+                    <span className="inline-flex">
+                      <Lock
+                        className="size-3 text-[var(--text-tertiary)]"
+                        aria-label="Private account"
+                      />
+                    </span>
+                  </Tooltip>
+                )}
+              </div>
+              <p className="text-xs text-zinc-500">
+                {post.published_at ? (
+                  <>
+                    Published <TimeAgo iso={post.published_at} />
+                  </>
+                ) : (
+                  "Draft"
+                )}
+              </p>
+            </div>
+            <div className="ml-auto">
+              <CopyLinkButton path={`/p/${post.id}`} />
+            </div>
+          </div>
+        </header>
 
-      {problems.length > 0 ? (
-        <div className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Problems</h2>
-          {problems.map((problem, i) => (
-            <ProblemSection key={problem.id} problem={problem} index={i} />
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-zinc-500">No problems were recorded in this session.</p>
-      )}
+        <PostSlides post={post} title={title} />
 
-      {session && (
-        <Suspense fallback={<Skeleton className="h-24 w-full" />}>
-          <SessionInsights sessionId={session.id} />
-        </Suspense>
-      )}
-
-      <Suspense fallback={<Skeleton className="h-24 w-full" />}>
-        <CommentSection
+        <PostActions
           postId={post.id}
-          viewerId={viewer?.id ?? null}
-          isPostOwner={Boolean(isOwner)}
+          likeCount={post.like_count}
+          commentCount={post.comment_count}
+          liked={post.viewer_liked}
+          canInteract={Boolean(viewer)}
+          commentHref="#comments"
         />
-      </Suspense>
-    </article>
+
+        <div>
+          <h1 className="text-2xl font-bold leading-tight text-zinc-50 sm:text-3xl">{title}</h1>
+          {post.body?.trim() && (
+            <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-300">
+              {post.body}
+            </p>
+          )}
+
+          <dl className="mt-4 flex flex-wrap gap-2 text-xs">
+            <SummaryChip label={sessionKindLabel(session?.kind)} />
+            {session && (
+              <SummaryChip
+                icon={<Clock className="size-3.5" />}
+                label={formatDurationHuman(session.active_ms)}
+                title="Active time"
+              />
+            )}
+            <SummaryChip
+              icon={<ListChecks className="size-3.5" />}
+              label={`${overview.solved}/${overview.total} solved`}
+            />
+            {post.visibility === "private" && (
+              <SummaryChip icon={<Lock className="size-3.5" />} label="Only me" />
+            )}
+          </dl>
+        </div>
+
+        {problems.length > 0 ? (
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+              Problems
+            </h2>
+            {problems.map((problem, i) => (
+              <ProblemSection key={problem.id} problem={problem} index={i} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-500">No problems were recorded in this session.</p>
+        )}
+
+        {session && (
+          <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+            <SessionInsights sessionId={session.id} />
+          </Suspense>
+        )}
+
+        <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+          <CommentSection
+            postId={post.id}
+            viewerId={viewer?.id ?? null}
+            isPostOwner={Boolean(isOwner)}
+          />
+        </Suspense>
+      </article>
+    </Container>
   );
 }
 
 function SummaryChip({ icon, label, title }: { icon?: ReactNode; label: string; title?: string }) {
-  return (
-    <div
-      title={title}
-      className="inline-flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-zinc-300"
-    >
+  const chip = (
+    <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-raised)] px-2.5 py-1 text-[var(--text-secondary)]">
       {icon}
       <dd>{label}</dd>
     </div>
   );
+  return title ? <Tooltip label={title}>{chip}</Tooltip> : chip;
 }
 
 async function CommentSection({

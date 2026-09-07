@@ -1,6 +1,7 @@
 import { activeMs, formatDuration, timerStatus } from "@lare/shared";
+import { Emblem } from "@lare/ui/brand";
 import { useCallback, useEffect, useState } from "react";
-import { type RuntimeSnapshot, type StateBroadcast, sendRuntime } from "@/src/messages";
+import { type RuntimeSnapshot, type StateBroadcast, sendRuntime, toSnapshot } from "@/src/messages";
 
 const SITE_URL: string = import.meta.env.WXT_SITE_URL ?? "https://lare-one.vercel.app";
 
@@ -11,38 +12,30 @@ export function App() {
   const [email, setEmail] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
+  const [confirmEnd, setConfirmEnd] = useState(false);
   const [, setTick] = useState(0);
 
   const refresh = useCallback(async () => {
     const res = await sendRuntime({ type: "GET_STATE" });
-    if (res.ok && res.state) {
-      setSnap({
-        state: res.state,
-        auth: res.auth ?? null,
-        appConnected: res.appConnected ?? false,
-      });
+    if (res.ok) {
+      const next = toSnapshot(res);
+      if (next) setSnap(next);
     }
   }, []);
 
   useEffect(() => {
     void refresh();
     void sendRuntime({ type: "PROBE_APP" }).then((res) => {
-      if (res.ok && res.state) {
-        setSnap({
-          state: res.state,
-          auth: res.auth ?? null,
-          appConnected: res.appConnected ?? false,
-        });
+      if (res.ok) {
+        const next = toSnapshot(res);
+        if (next) setSnap(next);
       }
     });
     const listener = (raw: unknown) => {
       const msg = raw as Partial<StateBroadcast>;
-      if (msg?.type === "STATE_CHANGED" && msg.state) {
-        setSnap({
-          state: msg.state,
-          auth: msg.auth ?? null,
-          appConnected: msg.appConnected ?? false,
-        });
+      if (msg?.type === "STATE_CHANGED") {
+        const next = toSnapshot(msg);
+        if (next) setSnap(next);
       }
     };
     chrome.runtime.onMessage.addListener(listener);
@@ -59,12 +52,9 @@ export function App() {
     try {
       const res = await fn();
       if (!res.ok) setError(res.error);
-      else if (res.state) {
-        setSnap({
-          state: res.state,
-          auth: res.auth ?? null,
-          appConnected: res.appConnected ?? false,
-        });
+      else {
+        const next = toSnapshot(res);
+        if (next) setSnap(next);
       }
       return res;
     } finally {
@@ -75,18 +65,25 @@ export function App() {
   const session = snap?.state.session ?? null;
   const auth = snap?.auth ?? null;
   const status = session ? timerStatus(session.events) : "idle";
+  const sessionId = session?.sessionId ?? null;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is the trigger
+  useEffect(() => {
+    setConfirmEnd(false);
+  }, [sessionId]);
 
   return (
     <div className="popup">
       <header className="header">
-        <img className="logo" src={chrome.runtime.getURL("emblem.png")} alt="" />
+        <Emblem className="logo" />
         <div>
           <div className="title">Lare</div>
           <div className="subtitle">Hevy for LeetCode</div>
         </div>
         <span
           className={`app-dot ${snap?.appConnected ? "on" : ""}`}
-          title={snap?.appConnected ? "Desktop app connected" : "Desktop app not detected"}
+          role="img"
+          aria-label={snap?.appConnected ? "Desktop app connected" : "Desktop app not detected"}
         />
       </header>
 
@@ -193,7 +190,9 @@ export function App() {
                       : "Practice problem"}
                   <span className={`badge ${status}`}>{status}</span>
                 </div>
-                <div className="timer">{formatDuration(activeMs(session.events, Date.now()))}</div>
+                <div className="timer" role="timer">
+                  {formatDuration(activeMs(session.events, Date.now()))}
+                </div>
                 <ul className="problems">
                   {session.problems.map((p) => (
                     <li key={p.sessionProblemId}>
@@ -228,15 +227,38 @@ export function App() {
                       Resume
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={busy}
-                    onClick={() => void run(() => sendRuntime({ type: "END_SESSION" }))}
-                  >
-                    End &amp; save
-                  </button>
+                  {!confirmEnd ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={busy}
+                      onClick={() => setConfirmEnd(true)}
+                    >
+                      End &amp; save
+                    </button>
+                  ) : null}
                 </div>
+                {confirmEnd && (
+                  <div className="confirm-sheet" role="dialog" aria-label="End session">
+                    <p>End and save this session?</p>
+                    <div className="row">
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        disabled={busy}
+                        onClick={() => {
+                          setConfirmEnd(false);
+                          void run(() => sendRuntime({ type: "END_SESSION" }));
+                        }}
+                      >
+                        Confirm end
+                      </button>
+                      <button type="button" className="btn" onClick={() => setConfirmEnd(false)}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -248,6 +270,25 @@ export function App() {
               </>
             )}
           </section>
+
+          {!!snap.state.pendingSync.length && (
+            <section className="card retry">
+              <div className="card-title">Couldn’t save a session</div>
+              <p className="muted">
+                {snap.state.pendingSync.length === 1
+                  ? "The last session is still on this device. Retry the upload."
+                  : `${snap.state.pendingSync.length} sessions are waiting to sync.`}
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy}
+                onClick={() => void run(() => sendRuntime({ type: "RETRY_SYNC" }))}
+              >
+                Retry sync
+              </button>
+            </section>
+          )}
 
           <section className="links">
             <button

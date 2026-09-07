@@ -1,9 +1,11 @@
 /* Hallmark · pre-emit critique: P4 H4 E4 S4 R5 V4
  * genre: modern-minimal · theme: custom (ink / bone)
  * Locked brand tokens. Every colour and font in product UI references these names.
+ * The eleven --lare-* brand values stay byte-for-byte. Everything below is derived.
  */
 
-:root {
+:root,
+:host {
   --lare-ink: #0c0c0b;
   --lare-ink-2: #161615;
   --lare-ink-3: #1e1e1c;
@@ -18,16 +20,73 @@
   --lare-status-pause: #c4a15a;
   --lare-status-stop: #c45c5c;
 
-  /* Remap Tailwind zinc onto the brand neutrals so existing utilities restyle. */
-  --color-zinc-50: var(--lare-paper);
-  --color-zinc-100: var(--lare-bone);
-  --color-zinc-200: #e6e2da;
-  --color-zinc-300: #d4d0c8;
-  --color-zinc-400: var(--lare-soft);
-  --color-zinc-500: var(--lare-muted);
-  --color-zinc-600: #5c5a55;
-  --color-zinc-700: var(--lare-line-strong);
-  --color-zinc-800: var(--lare-line);
-  --color-zinc-900: var(--lare-ink-2);
-  --color-zinc-950: var(--lare-ink);
+  /* Semantic layer — the light-mode seam. Dark-only today; swap these later. */
+  --surface: var(--lare-ink);
+  --surface-raised: var(--lare-ink-2);
+  --surface-sunken: var(--lare-ink-3);
+  --border: var(--lare-line);
+  --border-strong: var(--lare-line-strong);
+  --text: var(--lare-bone);
+  --text-secondary: var(--lare-soft);
+  --text-tertiary: var(--lare-muted);
+  --accent: var(--lare-bone);
+  --accent-fg: var(--lare-ink);
+  --focus: var(--lare-focus);
+
+  /* Status / difficulty — replace ad-hoc Tailwind emerald/amber/rose/sky. */
+  --lare-diff-easy: var(--lare-status-run);
+  --lare-diff-medium: var(--lare-status-pause);
+  --lare-diff-hard: var(--lare-status-stop);
+  --lare-info: #7a9eb0;
+  --lare-danger: var(--lare-status-stop);
+
+  /* Radius 6 / 8 / 10 / 14 / 999 */
+  --lare-r-1: 6px;
+  --lare-r-2: 8px;
+  --lare-r-3: 10px;
+  --lare-r-4: 14px;
+  --lare-r-5: 999px;
+
+  --lare-shadow-1: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --lare-shadow-2: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --lare-shadow-3: 0 20px 48px rgba(0, 0, 0, 0.55);
+
+  --lare-blur-chrome: 20px;
+  --lare-blur-sheet: 30px;
+  --lare-material-thin: color-mix(in oklab, var(--lare-ink-2) 52%, transparent);
+  --lare-material-thin-blur: 12px;
+  --lare-material-regular: color-mix(in oklab, var(--lare-ink-2) 72%, transparent);
+  --lare-material-regular-blur: var(--lare-blur-chrome);
+  --lare-material-thick: color-mix(in oklab, var(--lare-ink) 84%, transparent);
+  --lare-material-thick-blur: 28px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root,
+  :host {
+    --lare-material-thin: var(--lare-ink-2);
+    --lare-material-thin-blur: 0px;
+    --lare-material-regular: var(--lare-ink-2);
+    --lare-material-regular-blur: 0px;
+    --lare-material-thick: var(--lare-ink);
+    --lare-material-thick-blur: 0px;
+    --lare-blur-chrome: 0px;
+    --lare-blur-sheet: 0px;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root,
+  :host {
+    --surface: #000000;
+    --surface-raised: var(--lare-ink-2);
+    --border: var(--lare-line-strong);
+    --border-strong: var(--lare-soft);
+    --lare-material-thin: var(--lare-ink);
+    --lare-material-regular: var(--lare-ink-2);
+    --lare-material-thick: var(--lare-ink);
+    --lare-material-thin-blur: 0px;
+    --lare-material-regular-blur: 0px;
+    --lare-material-thick-blur: 0px;
+  }
 }

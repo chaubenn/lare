@@ -1,3 +1,4 @@
+import { buttonClass, Card, Container, Input, PageHeader } from "@lare/ui/primitives";
 import { Check, Inbox, Search, UserRoundSearch, X } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -7,7 +8,6 @@ import { PendingButton } from "@/components/pending-button";
 import { TabNav } from "@/components/tab-nav";
 import { TimeAgo } from "@/components/time-ago";
 import { type PersonSummary, UserRow } from "@/components/user-row";
-import { buttonDanger, buttonPrimary, cardClass, inputClass } from "@/lib/styles";
 import { createClient } from "@/lib/supabase/server";
 import { getPendingRequestCount, requireViewer } from "@/lib/viewer";
 import { acceptFollowRequest, declineFollowRequest } from "./actions";
@@ -52,15 +52,15 @@ export default async function FriendsPage({ searchParams }: Params) {
       : `/friends?tab=${next}`;
 
   return (
-    <div>
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold text-zinc-50">Friends</h1>
-        <p className="mt-0.5 text-sm text-zinc-500">
-          {viewer.profile.is_private
+    <Container width="page">
+      <PageHeader
+        title="Friends"
+        subtitle={
+          viewer.profile.is_private
             ? "Your account is private, so people have to request to follow you before they can see your posts."
-            : "Your account is public, so new followers are accepted automatically."}
-        </p>
-      </div>
+            : "Your account is public, so new followers are accepted automatically."
+        }
+      />
 
       <div className="mb-4">
         <TabNav
@@ -79,7 +79,7 @@ export default async function FriendsPage({ searchParams }: Params) {
       {tab === "followers" && <FollowersTab viewerId={viewer.id} />}
       {tab === "requests" && <RequestsTab viewerId={viewer.id} />}
       {tab === "find" && <FindTab viewerId={viewer.id} query={query} />}
-    </div>
+    </Container>
   );
 }
 
@@ -106,10 +106,10 @@ async function outgoingFollowStates(
 
 function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className={`${cardClass} px-6 py-12 text-center`}>
-      <Inbox className="mx-auto size-8 text-zinc-600" />
-      <p className="mx-auto mt-3 max-w-sm text-sm text-zinc-400">{children}</p>
-    </div>
+    <Card className="px-6 py-12 text-center">
+      <Inbox className="mx-auto size-8 text-[var(--text-tertiary)]" />
+      <p className="mx-auto mt-3 max-w-sm text-sm text-[var(--text-secondary)]">{children}</p>
+    </Card>
   );
 }
 
@@ -141,7 +141,7 @@ async function FollowingTab({ viewerId }: { viewerId: string }) {
             to fill your feed.
           </EmptyState>
         ) : (
-          <ul className={`${cardClass} divide-y divide-zinc-800/80`}>
+          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]">
             {accepted.map((row) => (
               <UserRow
                 key={row.profiles.id}
@@ -162,7 +162,7 @@ async function FollowingTab({ viewerId }: { viewerId: string }) {
       {sent.length > 0 && (
         <section aria-label="Requests you sent">
           <h2 className="mb-2 text-sm font-semibold text-zinc-300">Requests you sent</h2>
-          <ul className={`${cardClass} divide-y divide-zinc-800/80`}>
+          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]">
             {sent.map((row) => (
               <UserRow
                 key={row.profiles.id}
@@ -202,7 +202,7 @@ async function FollowersTab({ viewerId }: { viewerId: string }) {
   );
 
   return (
-    <ul className={`${cardClass} divide-y divide-zinc-800/80`}>
+    <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]">
       {rows.map((row) => (
         <UserRow
           key={row.profiles.id}
@@ -236,7 +236,7 @@ async function RequestsTab({ viewerId }: { viewerId: string }) {
   }
 
   return (
-    <ul className={`${cardClass} divide-y divide-zinc-800/80`}>
+    <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]">
       {rows.map((row) => (
         <UserRow
           key={row.follower_id}
@@ -251,14 +251,14 @@ async function RequestsTab({ viewerId }: { viewerId: string }) {
             <div className="flex items-center gap-2">
               <form action={acceptFollowRequest}>
                 <input type="hidden" name="follower" value={row.follower_id} />
-                <PendingButton className={`${buttonPrimary} px-3 py-1.5 text-xs`}>
+                <PendingButton variant="primary" size="sm">
                   <Check className="size-3.5" />
                   Accept
                 </PendingButton>
               </form>
               <form action={declineFollowRequest}>
                 <input type="hidden" name="follower" value={row.follower_id} />
-                <PendingButton className={`${buttonDanger} px-3 py-1.5 text-xs`}>
+                <PendingButton variant="danger" size="sm">
                   <X className="size-3.5" />
                   Decline
                 </PendingButton>
@@ -301,34 +301,34 @@ async function FindTab({ viewerId, query }: { viewerId: string; query: string })
         </label>
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
-          <input
+          <Input
             id="friends-search"
             name="q"
             defaultValue={query}
             placeholder="Search by @handle or name"
             autoComplete="off"
-            className={`${inputClass} pl-9`}
+            className="pl-9"
           />
         </div>
-        <button type="submit" className={`${buttonPrimary} px-4 py-2 text-sm`}>
+        <button type="submit" className={buttonClass("primary")}>
           Search
         </button>
       </form>
 
       {query.length === 0 ? (
-        <div className={`${cardClass} px-6 py-12 text-center`}>
+        <Card className="px-6 py-12 text-center">
           <UserRoundSearch className="mx-auto size-8 text-zinc-600" />
-          <p className="mx-auto mt-3 max-w-sm text-sm text-zinc-400">
+          <p className="mx-auto mt-3 max-w-sm text-sm text-[var(--text-secondary)]">
             Search for someone by their @handle or display name to view their profile and follow
             them.
           </p>
-        </div>
+        </Card>
       ) : people.length === 0 ? (
         <EmptyState>
           No profiles match “{query}”. Handles are 3–20 lowercase letters, numbers or underscores.
         </EmptyState>
       ) : (
-        <ul className={`${cardClass} divide-y divide-zinc-800/80`}>
+        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]">
           {people.map((person) => (
             <UserRow
               key={person.id}

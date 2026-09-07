@@ -1,11 +1,17 @@
 "use client";
 
-import { Eye, EyeOff, Globe, LoaderCircle, Lock, Pencil, Trash2 } from "lucide-react";
+import { Button, Card } from "@lare/ui/primitives";
+import { Eye, EyeOff, Globe, Lock, Pencil, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
+import { FormToast } from "@/components/form-toast";
 import type { PostImage } from "@/lib/posts";
-import { buttonDanger, buttonSecondary } from "@/lib/styles";
 import { deletePost, setPostStatus, setPostVisibility } from "./actions";
-import { PostEditor } from "./post-editor";
+import type { PostEditorProps } from "./post-editor";
+
+const PostEditor = dynamic(() => import("./post-editor").then((mod) => mod.PostEditor), {
+  loading: () => <p className="mt-3 text-xs text-[var(--text-tertiary)]">Loading editor…</p>,
+});
 
 export interface OwnerControlsProps {
   postId: string;
@@ -40,105 +46,103 @@ export function OwnerControls(props: OwnerControlsProps) {
     });
   }
 
-  const small = `${buttonSecondary} px-3 py-1.5 text-xs`;
+  const editorProps: PostEditorProps = {
+    postId,
+    userId: props.userId,
+    title: props.title,
+    body: props.body,
+    visibility,
+    showVideo: props.showVideo,
+    showDemoVideo: props.showDemoVideo,
+    includeAiInsights: props.includeAiInsights,
+    includeOgCard: props.includeOgCard,
+    ogShowAiScores: props.ogShowAiScores,
+    hasVideo: props.hasVideo,
+    hasDemoVideo: props.hasDemoVideo,
+    isInterview: props.isInterview,
+    coverMediaId: props.coverMediaId,
+    images: props.images,
+    onDone: () => setEditing(false),
+  };
 
   return (
-    <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-3">
+    <Card className="p-3">
+      <FormToast error={error} />
       <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
-          Your post
-        </span>
-        <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300">
+        <span className="lare-label mr-1 text-[var(--text-tertiary)]">Your post</span>
+        <span className="rounded-full border border-[var(--border-strong)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
           {status === "published" ? "Published" : "Draft"} ·{" "}
           {visibility === "public" ? "Public" : "Only me"}
         </span>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <button
+          <Button
             type="button"
+            size="sm"
             disabled={pending}
             onClick={() => setEditing((v) => !v)}
             aria-expanded={editing}
-            className={small}
+            icon={<Pencil className="size-3.5" />}
           >
-            <Pencil className="size-3.5" />
             {editing ? "Close editor" : "Edit post"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            size="sm"
             disabled={pending}
+            loading={pending}
             onClick={() =>
               run(() => setPostStatus(postId, status === "published" ? "draft" : "published"))
             }
-            className={small}
+            icon={
+              status === "published" ? (
+                <EyeOff className="size-3.5" />
+              ) : (
+                <Eye className="size-3.5" />
+              )
+            }
           >
-            {status === "published" ? (
-              <EyeOff className="size-3.5" />
-            ) : (
-              <Eye className="size-3.5" />
-            )}
             {status === "published" ? "Unpublish" : "Publish"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            size="sm"
             disabled={pending}
             onClick={() =>
               run(() => setPostVisibility(postId, visibility === "public" ? "private" : "public"))
             }
-            className={small}
+            icon={
+              visibility === "public" ? (
+                <Lock className="size-3.5" />
+              ) : (
+                <Globe className="size-3.5" />
+              )
+            }
           >
-            {visibility === "public" ? (
-              <Lock className="size-3.5" />
-            ) : (
-              <Globe className="size-3.5" />
-            )}
             {visibility === "public" ? "Make private" : "Make public"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="danger"
+            size="sm"
             disabled={pending}
             onClick={() => {
               if (window.confirm("Delete this post? The session data stays in your account.")) {
                 run(() => deletePost(postId));
               }
             }}
-            className={`${buttonDanger} px-3 py-1.5 text-xs`}
+            icon={<Trash2 className="size-3.5" />}
           >
-            <Trash2 className="size-3.5" />
             Delete
-          </button>
-          {pending && <LoaderCircle className="size-4 animate-spin text-zinc-500" />}
+          </Button>
         </div>
       </div>
 
-      {editing && (
+      {editing ? (
         <div className="mt-3">
-          <PostEditor
-            postId={postId}
-            userId={props.userId}
-            title={props.title}
-            body={props.body}
-            visibility={visibility}
-            showVideo={props.showVideo}
-            showDemoVideo={props.showDemoVideo}
-            includeAiInsights={props.includeAiInsights}
-            includeOgCard={props.includeOgCard}
-            ogShowAiScores={props.ogShowAiScores}
-            hasVideo={props.hasVideo}
-            hasDemoVideo={props.hasDemoVideo}
-            isInterview={props.isInterview}
-            coverMediaId={props.coverMediaId}
-            images={props.images}
-            onDone={() => setEditing(false)}
-          />
+          <PostEditor {...editorProps} />
         </div>
-      )}
-
-      {error && (
-        <p role="alert" className="mt-2 text-xs text-rose-300">
-          {error}
-        </p>
-      )}
-    </div>
+      ) : null}
+    </Card>
   );
 }

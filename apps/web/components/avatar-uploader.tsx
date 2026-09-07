@@ -7,11 +7,11 @@ import {
   resizeAvatarImage,
   withCacheBust,
 } from "@lare/shared";
-import { LoaderCircle } from "lucide-react";
+import { Button, FieldError } from "@lare/ui/primitives";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Avatar } from "@/components/avatar";
-import { buttonSecondary } from "@/lib/styles";
+import { FormToast } from "@/components/form-toast";
 import { createClient } from "@/lib/supabase/client";
 
 export function AvatarUploader({
@@ -61,20 +61,19 @@ export function AvatarUploader({
 
   return (
     <div className="mb-5 flex items-center gap-3">
+      <FormToast error={error} />
       <Avatar src={avatarUrl} name={name} size="md" />
       <div className="text-sm">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => inputRef.current?.click()}
-          className={`${buttonSecondary} px-3 py-1.5 text-xs`}
-        >
-          {pending && <LoaderCircle className="size-3.5 animate-spin" />}
+        <Button type="button" size="sm" loading={pending} onClick={() => inputRef.current?.click()}>
           Change photo
-        </button>
-        <p className={`mt-1 text-xs ${error ? "text-rose-300" : "text-zinc-500"}`}>
-          {error ?? "JPEG, PNG, WebP or GIF, up to 20 MB."}
-        </p>
+        </Button>
+        {error ? (
+          <FieldError>{error}</FieldError>
+        ) : (
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+            JPEG, PNG, WebP or GIF, up to 20 MB.
+          </p>
+        )}
       </div>
       <input
         ref={inputRef}

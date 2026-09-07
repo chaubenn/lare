@@ -1,4 +1,6 @@
 import { formatDuration } from "@lare/shared";
+import { cn } from "@lare/ui/cn";
+import { Card } from "@lare/ui/primitives";
 import {
   Bot,
   ChevronDown,
@@ -9,9 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { cn } from "@/lib/cn";
 import type { ReviewView } from "@/lib/parse";
-import { cardClass } from "@/lib/styles";
 
 function scoreTone(score: number): string {
   if (score >= 80) return "text-zinc-100";
@@ -55,7 +55,7 @@ export function InterviewReview({ review }: { review: ReviewView }) {
   const hasDetails = detailBits.length > 0;
 
   return (
-    <section className={`${cardClass} p-4 sm:p-5`} aria-labelledby="ai-review-heading">
+    <Card className="p-4 sm:p-5" aria-labelledby="ai-review-heading">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2
@@ -203,7 +203,7 @@ export function InterviewReview({ review }: { review: ReviewView }) {
           </div>
         </details>
       ) : null}
-    </section>
+    </Card>
   );
 }
 

@@ -1,23 +1,14 @@
-import { formatDurationHuman } from "@lare/shared";
-import { ExternalLink, Lock, Rss } from "lucide-react";
-import { useState } from "react";
+import { ExternalLink, Rss } from "lucide-react";
 import { useParams } from "react-router";
-import { ActivityGrid } from "@/components/ActivityGrid";
-import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { PageHeader } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
-import { PostCard } from "@/features/feed/PostCard";
 import { FollowButton } from "@/features/friends/FollowButton";
 import { useViewerLikes } from "@/features/posts/social";
 import { profileWebUrl } from "@/lib/env";
 import { openExternal } from "@/lib/open";
-import { FollowListModal } from "./FollowListModal";
-import { StatStrip } from "./ProfilePage";
+import { ProfileView } from "./ProfileView";
 import {
-  type FollowListKind,
   useFollowState,
   useProfileStats,
   usePublicProfile,
@@ -43,7 +34,6 @@ export function UserProfilePage() {
     userId,
   );
   const likedIds = likes.data ?? new Set<string>();
-  const [followList, setFollowList] = useState<FollowListKind | null>(null);
 
   if (profileQuery.isPending) return <PageSpinner />;
   if (profileQuery.isError) {
@@ -63,122 +53,53 @@ export function UserProfilePage() {
   const visible = stats.data?.visible ?? isSelf;
 
   return (
-    <>
-      <PageHeader
-        title={name}
-        subtitle={`@${profile.handle}`}
-        actions={
-          <>
-            <Button
-              size="sm"
-              icon={<ExternalLink className="size-3.5" aria-hidden />}
-              onClick={() => void openExternal(profileWebUrl(profile.handle ?? ""))}
-            >
-              Open on web
-            </Button>
-            {isSelf ? null : (
-              <FollowButton
-                targetId={profile.id}
-                handle={profile.handle}
-                state={followState.data ?? "none"}
-                isPrivate={profile.is_private}
-              />
-            )}
-          </>
-        }
-      />
-
-      <section className="flex items-start gap-4">
-        <Avatar url={profile.avatar_url} name={name} size={56} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold text-zinc-50">{name}</h2>
-            {profile.is_private ? (
-              <Badge>
-                <Lock className="size-3" aria-hidden />
-                Private
-              </Badge>
-            ) : null}
-          </div>
-          {profile.bio ? (
-            <p className="mt-1 select-text whitespace-pre-wrap text-sm text-zinc-300">
-              {profile.bio}
-            </p>
-          ) : null}
-        </div>
-      </section>
-
-      {stats.data ? (
-        <div className="mt-4">
-          <StatStrip
-            items={[
-              {
-                label: "Followers",
-                value: stats.data.followers,
-                onClick: () => setFollowList("followers"),
-              },
-              {
-                label: "Following",
-                value: stats.data.following,
-                onClick: () => setFollowList("following"),
-              },
-              ...(visible
-                ? [
-                    { label: "Posts", value: stats.data.posts ?? 0 },
-                    { label: "Solved", value: stats.data.problems_solved ?? 0 },
-                    {
-                      label: "Time",
-                      value: formatDurationHuman(stats.data.total_active_ms ?? 0),
-                    },
-                  ]
-                : []),
-            ]}
-          />
-        </div>
-      ) : null}
-
-      {!visible ? (
-        <div className="mt-4">
-          <EmptyState
-            icon={<Lock className="size-8" aria-hidden />}
-            title="This account is private"
-            description={
-              followState.data === "pending"
-                ? "Your follow request is waiting for approval."
-                : "Request to follow, and their sessions and solved-problem activity appear here once they accept."
-            }
-          />
-        </div>
-      ) : (
-        <div className="mt-4 space-y-4">
-          {activity.data?.visible ? <ActivityGrid activity={activity.data} /> : null}
-
-          {posts.isPending ? (
-            <PageSpinner />
-          ) : posts.isError ? (
-            <ErrorState error={posts.error} onRetry={() => void posts.refetch()} />
-          ) : postList.length === 0 ? (
-            <EmptyState
-              icon={<Rss className="size-8" aria-hidden />}
-              title="No published sessions yet"
+    <ProfileView
+      title={name}
+      subtitle={`@${profile.handle}`}
+      name={name}
+      handle={profile.handle}
+      avatarUrl={profile.avatar_url}
+      bio={profile.bio}
+      isPrivate={profile.is_private}
+      actions={
+        <>
+          <Button
+            size="sm"
+            icon={<ExternalLink className="size-3.5" aria-hidden />}
+            onClick={() => void openExternal(profileWebUrl(profile.handle ?? ""))}
+          >
+            Open on web
+          </Button>
+          {isSelf ? null : (
+            <FollowButton
+              targetId={profile.id}
+              handle={profile.handle}
+              state={followState.data ?? "none"}
+              isPrivate={profile.is_private}
             />
-          ) : (
-            <div className="space-y-4">
-              {postList.map((post) => (
-                <PostCard key={post.id} post={post} liked={likedIds.has(post.id)} />
-              ))}
-            </div>
           )}
-        </div>
-      )}
-
-      <FollowListModal
-        handle={profile.handle}
-        name={name}
-        kind={followList}
-        onKindChange={setFollowList}
-        onClose={() => setFollowList(null)}
-      />
-    </>
+        </>
+      }
+      stats={stats.data}
+      showExtendedStats={visible}
+      activity={activity.data}
+      posts={postList}
+      postsPending={posts.isPending}
+      postsError={posts.isError ? posts.error : undefined}
+      onRetryPosts={() => void posts.refetch()}
+      likedIds={likedIds}
+      postsEmpty={
+        <EmptyState
+          icon={<Rss className="size-8" aria-hidden />}
+          title="No published sessions yet"
+        />
+      }
+      locked={!visible}
+      lockedDescription={
+        followState.data === "pending"
+          ? "Your follow request is waiting for approval."
+          : "Request to follow, and their sessions and solved-problem activity appear here once they accept."
+      }
+    />
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Container } from "@lare/ui/primitives";
 import { useEffect } from "react";
 
 export default function ErrorPage({
@@ -14,19 +15,15 @@ export default function ErrorPage({
   }, [error]);
 
   return (
-    <div className="mx-auto max-w-md py-16 text-center">
-      <p className="font-mono text-xs uppercase tracking-widest text-zinc-500">Error</p>
-      <h1 className="mt-2 text-2xl font-semibold text-zinc-50">Something went wrong</h1>
-      <p className="mt-2 text-sm text-zinc-400">
+    <Container width="prose" className="py-16 text-center">
+      <p className="lare-label text-[var(--text-tertiary)]">Error</p>
+      <h1 className="lare-title mt-2 text-[var(--text)]">Something went wrong</h1>
+      <p className="mt-2 text-sm text-[var(--text-secondary)]">
         {error.digest ? `Reference: ${error.digest}` : "Please try again in a moment."}
       </p>
-      <button
-        type="button"
-        onClick={reset}
-        className="mt-6 inline-flex rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-white"
-      >
+      <Button type="button" variant="primary" onClick={reset} className="mt-6">
         Try again
-      </button>
-    </div>
+      </Button>
+    </Container>
   );
 }
