@@ -1,5 +1,6 @@
 import { formatDurationHuman } from "@lare/shared";
 import { ExternalLink, Lock, Rss } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
 import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
@@ -12,7 +13,8 @@ import { PostCard } from "@/features/feed/PostCard";
 import { useViewerLikes } from "@/features/posts/social";
 import { profileWebUrl } from "@/lib/env";
 import { openExternal } from "@/lib/open";
-import { useProfileStats, useSolvedActivity, useUserPosts } from "./queries";
+import { FollowListModal } from "./FollowListModal";
+import { type FollowListKind, useProfileStats, useSolvedActivity, useUserPosts } from "./queries";
 
 export function ProfilePage() {
   const { profile, session, userId } = useUser();
@@ -25,6 +27,7 @@ export function ProfilePage() {
     userId,
   );
   const likedIds = likes.data ?? new Set<string>();
+  const [followList, setFollowList] = useState<FollowListKind | null>(null);
   const name = profile?.display_name ?? profile?.handle ?? session.user.email ?? "You";
 
   return (
@@ -86,8 +89,16 @@ export function ProfilePage() {
         ) : stats.data ? (
           <StatStrip
             items={[
-              { label: "Followers", value: stats.data.followers },
-              { label: "Following", value: stats.data.following },
+              {
+                label: "Followers",
+                value: stats.data.followers,
+                onClick: () => setFollowList("followers"),
+              },
+              {
+                label: "Following",
+                value: stats.data.following,
+                onClick: () => setFollowList("following"),
+              },
               { label: "Posts", value: stats.data.posts ?? 0 },
               { label: "Solved", value: stats.data.problems_solved ?? 0 },
               { label: "Time", value: formatDurationHuman(stats.data.total_active_ms ?? 0) },
@@ -126,19 +137,44 @@ export function ProfilePage() {
           </div>
         )}
       </div>
+
+      <FollowListModal
+        handle={profile?.handle}
+        name={name}
+        kind={followList}
+        onKindChange={setFollowList}
+        onClose={() => setFollowList(null)}
+      />
     </>
   );
 }
 
-export function StatStrip({ items }: { items: Array<{ label: string; value: number | string }> }) {
+export interface StatItem {
+  label: string;
+  value: number | string;
+  /** Makes the whole cell a button (the follower / following lists open a modal). */
+  onClick?: () => void;
+}
+
+export function StatStrip({ items }: { items: StatItem[] }) {
   return (
     <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800 sm:grid-cols-5">
       {items.map((item) => (
-        <div key={item.label} className="bg-zinc-950 px-3 py-2.5">
+        <div key={item.label} className="relative bg-zinc-950 px-3 py-2.5">
           <dt className="text-[10px] uppercase tracking-wider text-zinc-500">{item.label}</dt>
           <dd className="mt-0.5 text-base font-semibold tabular-nums text-zinc-100">
             {item.value}
           </dd>
+          {/* Stretched over the cell rather than wrapping it: a `dl` may only contain `dt`,
+              `dd` and grouping `div`s, so the button cannot be an ancestor of them. */}
+          {item.onClick ? (
+            <button
+              type="button"
+              onClick={item.onClick}
+              aria-label={`${item.label}: ${item.value}`}
+              className="absolute inset-0 rounded-none transition-colors hover:bg-zinc-100/5 focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-zinc-500"
+            />
+          ) : null}
         </div>
       ))}
     </dl>

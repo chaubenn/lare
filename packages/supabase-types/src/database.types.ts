@@ -748,6 +748,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      follow_list: {
+        Args: { target_handle: string; list_kind: string; max_rows?: number }
+        Returns: Json
+      }
       profile_stats: { Args: { target_handle: string }; Returns: Json }
       solved_activity: { Args: { target_handle: string; days?: number }; Returns: Json }
       request_follow: {

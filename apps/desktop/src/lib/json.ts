@@ -32,6 +32,29 @@ export function parseProfileStats(value: Json | null | undefined): ProfileStats 
   return r.success ? r.data : null;
 }
 
+/** `follow_list` RPC: the people behind a profile's follower / following count. */
+export const FollowListSchema = z.object({
+  /** False for a private account the viewer does not follow — the count is public, the names are not. */
+  visible: z.boolean().default(false),
+  people: z
+    .array(
+      z.object({
+        id: z.string(),
+        handle: z.string().nullable().default(null),
+        display_name: z.string().nullable().default(null),
+        avatar_url: z.string().nullable().default(null),
+        is_private: z.boolean().default(false),
+      }),
+    )
+    .default([]),
+});
+export type FollowList = z.infer<typeof FollowListSchema>;
+
+export function parseFollowList(value: Json | null | undefined): FollowList {
+  const r = FollowListSchema.safeParse(value);
+  return r.success ? r.data : { visible: false, people: [] };
+}
+
 /** interview_reviews row -> AiReview (columns are jsonb; the schema validates the shape). */
 export function parseAiReview(row: {
   overall: number | null;

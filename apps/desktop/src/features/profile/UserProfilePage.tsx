@@ -1,5 +1,6 @@
 import { formatDurationHuman } from "@lare/shared";
 import { ExternalLink, Lock, Rss } from "lucide-react";
+import { useState } from "react";
 import { useParams } from "react-router";
 import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
@@ -13,8 +14,10 @@ import { FollowButton } from "@/features/friends/FollowButton";
 import { useViewerLikes } from "@/features/posts/social";
 import { profileWebUrl } from "@/lib/env";
 import { openExternal } from "@/lib/open";
+import { FollowListModal } from "./FollowListModal";
 import { StatStrip } from "./ProfilePage";
 import {
+  type FollowListKind,
   useFollowState,
   useProfileStats,
   usePublicProfile,
@@ -40,6 +43,7 @@ export function UserProfilePage() {
     userId,
   );
   const likedIds = likes.data ?? new Set<string>();
+  const [followList, setFollowList] = useState<FollowListKind | null>(null);
 
   if (profileQuery.isPending) return <PageSpinner />;
   if (profileQuery.isError) {
@@ -108,8 +112,16 @@ export function UserProfilePage() {
         <div className="mt-4">
           <StatStrip
             items={[
-              { label: "Followers", value: stats.data.followers },
-              { label: "Following", value: stats.data.following },
+              {
+                label: "Followers",
+                value: stats.data.followers,
+                onClick: () => setFollowList("followers"),
+              },
+              {
+                label: "Following",
+                value: stats.data.following,
+                onClick: () => setFollowList("following"),
+              },
               ...(visible
                 ? [
                     { label: "Posts", value: stats.data.posts ?? 0 },
@@ -159,6 +171,14 @@ export function UserProfilePage() {
           )}
         </div>
       )}
+
+      <FollowListModal
+        handle={profile.handle}
+        name={name}
+        kind={followList}
+        onKindChange={setFollowList}
+        onClose={() => setFollowList(null)}
+      />
     </>
   );
 }

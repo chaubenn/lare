@@ -6,7 +6,7 @@ import { useUser } from "@/features/auth/AuthProvider";
 import type { FollowState } from "@/features/friends/queries";
 import { decoratePosts, type PostDecoration } from "@/features/posts/media";
 import { fetchTopComments, type PostComment } from "@/features/posts/social";
-import { parseProfileStats } from "@/lib/json";
+import { parseFollowList, parseProfileStats } from "@/lib/json";
 import { supabase } from "@/lib/supabase";
 
 export function useProfileStats(handle: string | null | undefined) {
@@ -36,6 +36,35 @@ export function useSolvedActivity(handle: string | null | undefined) {
       });
       if (error) throw error;
       return parseSolvedActivity(data);
+    },
+  });
+}
+
+export type FollowListKind = "followers" | "following";
+
+/**
+ * The people behind a profile's follower / following count, for the list modal.
+ *
+ * Goes through the `follow_list` RPC rather than the table: `follows` RLS only exposes edges the
+ * viewer is one of the two parties to, so a direct query returns nothing for anyone else's
+ * profile. The RPC applies the same visibility rule as the stats — a private account the viewer
+ * does not follow answers `visible: false` with no names.
+ */
+export function useFollowList(
+  handle: string | null | undefined,
+  kind: FollowListKind,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["follow-list", handle, kind],
+    enabled: !!handle && enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("follow_list", {
+        target_handle: handle ?? "",
+        list_kind: kind,
+      });
+      if (error) throw error;
+      return parseFollowList(data);
     },
   });
 }
