@@ -1,6 +1,6 @@
 [package]
 name = "lare-desktop"
-version = "0.3.2"
+version = "0.3.3"
 description = "Lare desktop app: review drafts, publish posts, and (later) record demo videos and mock interviews."
 edition.workspace = true
 license.workspace = true
