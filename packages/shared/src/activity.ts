@@ -176,6 +176,42 @@ export function formatWeekRange(startIso: string, endIso: string): string {
   return `${a} – ${b}`;
 }
 
+export interface ActivityDay {
+  iso: string;
+  date: Date;
+  count: number;
+}
+
+/** Every real day in the window, in chronological order -- no week-boundary padding. */
+export function buildActivityDays(activity: SolvedActivity): ActivityDay[] {
+  const counts = new Map(activity.days.map((d) => [d.day, d.count]));
+  const start = utcDate(activity.start);
+  const end = utcDate(activity.end);
+  const out: ActivityDay[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    const iso = cursor.toISOString().slice(0, 10);
+    out.push({ iso, date: new Date(cursor), count: counts.get(iso) ?? 0 });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
+}
+
+/**
+ * A page of `pageSize` items, most-recent-first: page 0 is the last `pageSize` items, page 1
+ * the `pageSize` before that, and so on. The oldest page is clamped to whatever remains.
+ */
+export function pageWindow<T>(items: T[], pageSize: number, page: number): T[] {
+  const end = Math.max(0, items.length - page * pageSize);
+  const start = Math.max(0, end - pageSize);
+  return items.slice(start, end);
+}
+
+/** The last page index that still contains at least one item (0 when `items` is empty). */
+export function maxPage(itemCount: number, pageSize: number): number {
+  return Math.max(0, Math.ceil(itemCount / pageSize) - 1);
+}
+
 export function describeActivityWeek(week: ActivityWeek): string {
   const range = formatWeekRange(week.firstDay, week.lastDay);
   if (week.count === 0) return `No problems solved ${range}`;
