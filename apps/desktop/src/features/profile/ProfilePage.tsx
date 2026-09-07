@@ -1,21 +1,30 @@
 import { formatDurationHuman } from "@lare/shared";
-import { ExternalLink, Lock } from "lucide-react";
+import { ExternalLink, Lock, Rss } from "lucide-react";
 import { Link } from "react-router";
 import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/Card";
-import { ErrorState, Spinner } from "@/components/ui/States";
+import { EmptyState, ErrorState, PageSpinner, Spinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
+import { PostCard } from "@/features/feed/PostCard";
+import { useViewerLikes } from "@/features/posts/social";
 import { profileWebUrl } from "@/lib/env";
 import { openExternal } from "@/lib/open";
-import { useProfileStats, useSolvedActivity } from "./queries";
+import { useProfileStats, useSolvedActivity, useUserPosts } from "./queries";
 
 export function ProfilePage() {
-  const { profile, session } = useUser();
+  const { profile, session, userId } = useUser();
   const stats = useProfileStats(profile?.handle);
   const activity = useSolvedActivity(profile?.handle);
+  const posts = useUserPosts(userId);
+  const postList = posts.data ?? [];
+  const likes = useViewerLikes(
+    postList.map((post) => post.id),
+    userId,
+  );
+  const likedIds = likes.data ?? new Set<string>();
   const name = profile?.display_name ?? profile?.handle ?? session.user.email ?? "You";
 
   return (
@@ -87,11 +96,36 @@ export function ProfilePage() {
         ) : null}
       </div>
 
-      {activity.data?.visible ? (
-        <div className="mt-4">
-          <ActivityGrid activity={activity.data} />
-        </div>
-      ) : null}
+      {/* Solved activity, then your published sessions — the same order, and the same cards,
+          as your own profile on the web (app/u/[handle]/page.tsx). */}
+      <div className="mt-4 space-y-4">
+        {activity.data?.visible ? <ActivityGrid activity={activity.data} /> : null}
+
+        {posts.isPending ? (
+          <PageSpinner />
+        ) : posts.isError ? (
+          <ErrorState error={posts.error} onRetry={() => void posts.refetch()} />
+        ) : postList.length === 0 ? (
+          <EmptyState
+            icon={<Rss className="size-8" aria-hidden />}
+            title="You haven't published a session yet"
+            description={
+              <>
+                Publish a draft and it shows up here and in the feed.{" "}
+                <Link to="/drafts" className="text-zinc-200 underline underline-offset-2">
+                  Go to drafts
+                </Link>
+              </>
+            }
+          />
+        ) : (
+          <div className="space-y-4">
+            {postList.map((post) => (
+              <PostCard key={post.id} post={post} liked={likedIds.has(post.id)} />
+            ))}
+          </div>
+        )}
+      </div>
     </>
   );
 }
