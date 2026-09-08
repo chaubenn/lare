@@ -11,9 +11,16 @@ Lare records people's screens, voices and faces. These are the rules the product
 
 ## What is uploaded, and when
 
-- Nothing is uploaded until the user stops a recording that they started, or ends a mock interview
-  they started from the extension. The draft editor states which mode uploads immediately
-  ("Instant publishes as soon as you stop").
+- **Practice is captured automatically**, with no start button: while the extension is installed
+  and signed in, every LeetCode problem opened and every submission judged is saved (problem,
+  code, verdict, runtime and memory). It is private to the account — it stays in the user's
+  practice inbox and is visible to nobody until they explicitly publish a post from the desktop
+  app. The extension popup lists everything held, and removing the extension stops the capture.
+- **Nothing is recorded** — screen, camera or microphone — until the user stops a recording they
+  started, or ends a mock interview they started from the extension popup. The draft editor states
+  which mode uploads immediately ("Instant publishes as soon as you stop"). While an interview is
+  recording, a red dot sits on the LeetCode page for its whole duration: the extension shows no
+  other on-page UI, but it never records without one.
 - Videos go to Bunny Stream (EU company; library replicated to Sydney) under a per-video token:
   playback requires a signed embed URL minted by `bunny-playback-token` after the same visibility
   check as the post itself. Thumbnails are stored in Supabase Storage with the same rules.
