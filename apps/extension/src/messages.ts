@@ -40,10 +40,9 @@ export type AuthInfo = z.infer<typeof AuthInfoSchema>;
 
 export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("GET_STATE") }),
+  // Only interviews are started explicitly; practice is tracked passively.
   z.object({
-    type: z.literal("START_SESSION"),
-    kind: z.enum(["practice", "interview"]),
-    scope: z.enum(["session", "problem"]),
+    type: z.literal("START_INTERVIEW"),
     problem: ProblemInfoSchema.nullable(),
     question: QuestionDetailsSchema.nullable(),
     facecam: z.boolean().default(false),
@@ -52,6 +51,8 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("PAUSE_SESSION") }),
   z.object({ type: z.literal("RESUME_SESSION") }),
   z.object({ type: z.literal("END_SESSION") }),
+  /** Forget a passively-tracked problem without publishing it. */
+  z.object({ type: z.literal("DISCARD_TRACKED"), sessionProblemId: z.string() }),
   z.object({
     type: z.literal("PROBLEM_OPENED"),
     problem: ProblemInfoSchema,

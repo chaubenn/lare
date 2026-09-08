@@ -474,6 +474,7 @@ export type Database = {
           created_at: string
           ended_at: string | null
           id: string
+          is_practice_inbox: boolean
           kind: Database["public"]["Enums"]["session_kind"]
           recording_id: string | null
           recording_started_at: string | null
@@ -489,6 +490,7 @@ export type Database = {
           created_at?: string
           ended_at?: string | null
           id?: string
+          is_practice_inbox?: boolean
           kind?: Database["public"]["Enums"]["session_kind"]
           recording_id?: string | null
           recording_started_at?: string | null
@@ -504,6 +506,7 @@ export type Database = {
           created_at?: string
           ended_at?: string | null
           id?: string
+          is_practice_inbox?: boolean
           kind?: Database["public"]["Enums"]["session_kind"]
           recording_id?: string | null
           recording_started_at?: string | null
@@ -757,6 +760,11 @@ export type Database = {
       request_follow: {
         Args: { target_handle: string }
         Returns: Database["public"]["Enums"]["follow_status"]
+      }
+      practice_inbox: { Args: Record<PropertyKey, never>; Returns: string }
+      publish_practice_problems: {
+        Args: { problem_ids: string[]; post_title?: string | null }
+        Returns: string
       }
       toggle_post_like: { Args: { post: string }; Returns: Json }
     }

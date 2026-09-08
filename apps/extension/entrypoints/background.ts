@@ -3,6 +3,7 @@ import {
   type AppToExt,
   activeMs,
   type EditEvent,
+  type InboxProblem,
   type ProblemInfo,
   type RecordingState,
   type TrackedProblem,
@@ -25,16 +26,24 @@ import { loadState, withState } from "@/src/storage";
 import { currentUserId } from "@/src/supabase";
 import {
   finalizeSession,
+  resolveInboxSession,
   syncProblemClose,
   syncProblemOpen,
   syncSessionStart,
   syncSubmission,
   syncTimerEvent,
+  trackInboxProblem,
 } from "@/src/sync";
 import { DesktopClient } from "@/src/ws";
 
 const TICK_ALARM = "lare-tick";
 const desktop = new DesktopClient();
+/**
+ * In-flight `session_problems` upserts, keyed by slug. `submissions` has a
+ * foreign key onto that row, so a submission captured moments after the problem
+ * was first seen has to wait for the row to land.
+ */
+const pendingTrack = new Map<string, Promise<void>>();
 let recording: RecordingInfo | null = null;
 let startAbort: AbortController | null = null;
 
@@ -98,7 +107,7 @@ async function handle(req: RuntimeRequest): Promise<RuntimeResponse> {
 
     case "SIGN_OUT": {
       const state = await loadState();
-      if (state.session) throw new Error("End the active session before signing out");
+      if (state.interview) throw new Error("End the mock interview before signing out");
       await signOut();
       await broadcast();
       return { ok: true, ...(await snapshot()) };
@@ -123,8 +132,8 @@ async function handle(req: RuntimeRequest): Promise<RuntimeResponse> {
     case "RETRY_SYNC":
       return retrySync();
 
-    case "START_SESSION":
-      return startSession(req);
+    case "START_INTERVIEW":
+      return startInterview(req);
 
     case "PAUSE_SESSION":
     case "RESUME_SESSION":
@@ -141,19 +150,24 @@ async function handle(req: RuntimeRequest): Promise<RuntimeResponse> {
 
     case "SUBMISSION":
       return submission(req.slug, req.submission);
+
+    case "DISCARD_TRACKED":
+      return discardTracked(req.sessionProblemId);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Session lifecycle
+// Mock interview lifecycle
+//
+// Practice has no lifecycle any more: see `trackProblem` and `submission`.
 // ---------------------------------------------------------------------------
-async function startSession(
-  req: Extract<RuntimeRequest, { type: "START_SESSION" }>,
+async function startInterview(
+  req: Extract<RuntimeRequest, { type: "START_INTERVIEW" }>,
 ): Promise<RuntimeResponse> {
   const userId = await currentUserId();
   if (!userId) throw new Error("Sign in to Lare first (click the extension icon)");
   const existing = await loadState();
-  if (existing.session) throw new Error("A session is already active");
+  if (existing.interview) throw new Error("A mock interview is already running");
 
   const now = Date.now();
   const sessionId = crypto.randomUUID();
@@ -169,7 +183,7 @@ async function startSession(
       }
     : null;
 
-  if (req.kind === "interview") {
+  {
     if (!req.problem) throw new Error("Open a LeetCode problem to start a mock interview");
     startAbort = new AbortController();
     const signal = startAbort.signal;
@@ -190,7 +204,7 @@ async function startSession(
         type: "session.start",
         sessionId,
         kind: "interview",
-        scope: req.scope,
+        scope: "problem",
         startedAt: now,
         problem: req.problem,
         facecam: req.facecam,
@@ -229,8 +243,8 @@ async function startSession(
 
   const session: ActiveSession = {
     sessionId,
-    kind: req.kind,
-    scope: req.scope,
+    kind: "interview",
+    scope: "problem",
     startedAt: now,
     events: tp
       ? [
@@ -245,7 +259,7 @@ async function startSession(
     synced: false,
   };
 
-  await withState(async (s) => ({ state: { ...s, session }, result: undefined }));
+  await withState(async (s) => ({ state: { ...s, interview: session }, result: undefined }));
   await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 0.5 });
 
   // Best-effort remote sync; the session keeps running locally if this fails.
@@ -253,10 +267,11 @@ async function startSession(
     await syncSessionStart(session, userId);
     if (tp) await syncProblemOpen(sessionId, tp, req.question);
     await withState(async (s) => {
-      if (!s.session || s.session.sessionId !== sessionId) return { state: s, result: undefined };
-      const problems = s.session.problems.map((p) => ({ ...p, synced: true }));
+      if (!s.interview || s.interview.sessionId !== sessionId)
+        return { state: s, result: undefined };
+      const problems = s.interview.problems.map((p) => ({ ...p, synced: true }));
       return {
-        state: { ...s, session: { ...s.session, synced: true, problems } },
+        state: { ...s, interview: { ...s.interview, synced: true, problems } },
         result: undefined,
       };
     });
@@ -268,7 +283,7 @@ async function startSession(
   await refreshBadge();
   await broadcast({
     kind: "success",
-    text: req.kind === "interview" ? "Mock interview started. Recording." : "Session started",
+    text: "Mock interview started. Recording.",
   });
   return { ok: true, ...(await snapshot()) };
 }
@@ -276,13 +291,13 @@ async function startSession(
 async function pauseOrResume(type: "pause" | "resume"): Promise<RuntimeResponse> {
   const now = Date.now();
   const result = await withState(async (s) => {
-    if (!s.session) return { state: s, result: null };
-    const status = timerStatus(s.session.events);
+    if (!s.interview) return { state: s, result: null };
+    const status = timerStatus(s.interview.events);
     if ((type === "pause" && status !== "running") || (type === "resume" && status !== "paused")) {
       return { state: s, result: null };
     }
-    const events = [...s.session.events, { t: now, type }];
-    return { state: { ...s, session: { ...s.session, events } }, result: s.session };
+    const events = [...s.interview.events, { t: now, type }];
+    return { state: { ...s, interview: { ...s.interview, events } }, result: s.interview };
   });
   if (result) {
     if (result.kind === "interview") {
@@ -305,9 +320,12 @@ async function endSession(): Promise<RuntimeResponse> {
   const userId = await currentUserId();
   const now = Date.now();
   const session = await withState(async (s) => {
-    if (!s.session) return { state: s, result: null };
-    const events = [...s.session.events, { t: now, type: "end" as const }];
-    return { state: { ...s, session: { ...s.session, events } }, result: { ...s.session, events } };
+    if (!s.interview) return { state: s, result: null };
+    const events = [...s.interview.events, { t: now, type: "end" as const }];
+    return {
+      state: { ...s, interview: { ...s.interview, events } },
+      result: { ...s.interview, events },
+    };
   });
   if (!session) throw new Error("No active session");
 
@@ -326,7 +344,7 @@ async function endSession(): Promise<RuntimeResponse> {
     await withState(async (s) => ({
       state: {
         ...s,
-        session: null,
+        interview: null,
         pendingSync: s.pendingSync.filter((id) => id !== session.sessionId),
       },
       result: undefined,
@@ -352,13 +370,123 @@ async function endSession(): Promise<RuntimeResponse> {
   return { ok: true, postId, ...(await snapshot()) };
 }
 
+/**
+ * Passive capture: remember the problem against the inbox so a later submission
+ * has a row to attach to, and record that it was solved even if the user never
+ * publishes it. Runs on every problem page, signed in or not (a signed-out user
+ * is simply skipped — there is nowhere to write).
+ */
+async function trackProblem(problem: ProblemInfo, question: QuestionDetails | null): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+  const now = Date.now();
+
+  const target = await withState(async (s) => {
+    const existing = s.tracking.problems.find((p) => p.slug === problem.slug);
+    if (existing) {
+      const problems = s.tracking.problems.map((p) =>
+        p.slug === problem.slug ? { ...p, lastSeenAt: now, title: problem.title || p.title } : p,
+      );
+      return {
+        state: { ...s, tracking: { ...s.tracking, problems } },
+        result: { entry: existing, isNew: false },
+      };
+    }
+    const entry = {
+      sessionProblemId: crypto.randomUUID(),
+      slug: problem.slug,
+      title: problem.title,
+      firstSeenAt: now,
+      lastSeenAt: now,
+      submissionCount: 0,
+      acceptedCount: 0,
+      synced: false,
+    };
+    return {
+      state: { ...s, tracking: { ...s.tracking, problems: [...s.tracking.problems, entry] } },
+      result: { entry, isNew: true },
+    };
+  });
+
+  // Already on the server and nothing new to say.
+  if (!target.isNew && target.entry.synced) return;
+
+  const run = (async () => {
+    try {
+      const inboxSessionId = await ensureInbox();
+      await trackInboxProblem(
+        inboxSessionId,
+        target.entry.sessionProblemId,
+        problem,
+        question,
+        target.entry.firstSeenAt,
+      );
+      await withState(async (s) => ({
+        state: {
+          ...s,
+          tracking: {
+            ...s.tracking,
+            problems: s.tracking.problems.map((p) =>
+              p.sessionProblemId === target.entry.sessionProblemId ? { ...p, synced: true } : p,
+            ),
+          },
+        },
+        result: undefined,
+      }));
+      await refreshBadge();
+      await broadcast();
+    } catch (e) {
+      // Stays unsynced; the next visit or submission retries.
+      console.warn("[lare] track problem failed", e);
+    }
+  })();
+  pendingTrack.set(problem.slug, run);
+  try {
+    await run;
+  } finally {
+    if (pendingTrack.get(problem.slug) === run) pendingTrack.delete(problem.slug);
+  }
+}
+
+/** The inbox session id, resolved once per worker lifetime and cached in state. */
+async function ensureInbox(): Promise<string> {
+  const cached = (await loadState()).tracking.inboxSessionId;
+  if (cached) return cached;
+  const inboxSessionId = await resolveInboxSession();
+  await withState(async (s) => ({
+    state: { ...s, tracking: { ...s.tracking, inboxSessionId } },
+    result: undefined,
+  }));
+  return inboxSessionId;
+}
+
+/** Drop a tracked problem locally. The server row is left for the next publish to ignore. */
+async function discardTracked(sessionProblemId: string): Promise<RuntimeResponse> {
+  await withState(async (s) => ({
+    state: {
+      ...s,
+      tracking: {
+        ...s.tracking,
+        problems: s.tracking.problems.filter((p) => p.sessionProblemId !== sessionProblemId),
+      },
+    },
+    result: undefined,
+  }));
+  await refreshBadge();
+  await broadcast();
+  return { ok: true, ...(await snapshot()) };
+}
+
 async function problemOpened(
   problem: ProblemInfo,
   question: QuestionDetails | null,
 ): Promise<RuntimeResponse> {
+  // Passive tracking always runs; the interview bookkeeping below only applies
+  // while one is live.
+  await trackProblem(problem, question);
   const now = Date.now();
   const change = await withState(async (s) => {
-    const session = s.session;
+    const session = s.interview;
     if (!session) return { state: s, result: null };
     if (session.currentSlug === problem.slug) {
       // Same problem: refresh language if we learned it.
@@ -367,12 +495,12 @@ async function problemOpened(
           ? { ...p, problem: { ...p.problem, language: problem.language } }
           : p,
       );
-      return { state: { ...s, session: { ...session, problems } }, result: null };
+      return { state: { ...s, interview: { ...session, problems } }, result: null };
     }
     if (session.scope === "problem") {
       // Single-problem sessions ignore navigation to other problems.
       return {
-        state: { ...s, session: { ...session, currentSlug: session.currentSlug } },
+        state: { ...s, interview: { ...session, currentSlug: session.currentSlug } },
         result: null,
       };
     }
@@ -412,7 +540,7 @@ async function problemOpened(
     events.push({ t: now, type: "problem_open", slug: problem.slug });
     const next: ActiveSession = { ...session, events, problems, currentSlug: problem.slug };
     return {
-      state: { ...s, session: next },
+      state: { ...s, interview: next },
       result: { session: next, closed, opened, isNew: !existing },
     };
   });
@@ -440,11 +568,11 @@ async function problemOpened(
       if (isNew) {
         await syncProblemOpen(session.sessionId, opened, question);
         await withState(async (s) => {
-          if (!s.session) return { state: s, result: undefined };
-          const problems = s.session.problems.map((p) =>
+          if (!s.interview) return { state: s, result: undefined };
+          const problems = s.interview.problems.map((p) =>
             p.sessionProblemId === opened.sessionProblemId ? { ...p, synced: true } : p,
           );
-          return { state: { ...s, session: { ...s.session, problems } }, result: undefined };
+          return { state: { ...s, interview: { ...s.interview, problems } }, result: undefined };
         });
       } else {
         await syncTimerEvent(session.sessionId, {
@@ -466,7 +594,7 @@ async function edits(
 ): Promise<RuntimeResponse> {
   if (events.length === 0) return { ok: true };
   const target = await withState(async (s) => {
-    const session = s.session;
+    const session = s.interview;
     if (!session) return { state: s, result: null };
     const tp = session.problems.find((p) => p.problem.slug === slug);
     if (!tp) return { state: s, result: null };
@@ -479,7 +607,7 @@ async function edits(
           }
         : p,
     );
-    return { state: { ...s, session: { ...session, problems } }, result: { session, tp } };
+    return { state: { ...s, interview: { ...session, problems } }, result: { session, tp } };
   });
   if (!target) return { ok: true };
   await appendEvents(target.session.sessionId, target.tp.sessionProblemId, slug, language, events);
@@ -495,22 +623,59 @@ async function edits(
   return { ok: true };
 }
 
+/**
+ * Every submission is captured, interview or not. During an interview it also
+ * goes to the desktop app for the live review; otherwise it just lands on the
+ * inbox problem so it shows up in the picker.
+ */
 async function submission(slug: string, sub: CapturedSubmission): Promise<RuntimeResponse> {
-  const target = await withState(async (s) => {
-    const session = s.session;
-    if (!session) return { state: s, result: null };
-    const tp = session.problems.find((p) => p.problem.slug === slug);
-    if (!tp) return { state: s, result: null };
+  type Target = {
+    session: ActiveSession | null;
+    tp: TrackedProblem | null;
+    tracked: InboxProblem | null;
+  };
+  const target = await withState<Target>(async (s) => {
+    const session = s.interview;
+    const tp = session?.problems.find((p) => p.problem.slug === slug) ?? null;
     const { runtimeDistribution: _r, memoryDistribution: _m, ...lite } = sub;
-    const problems = session.problems.map((p) =>
+
+    // Keep the local tally on the tracked problem so the popup and the desktop
+    // picker can show "2 submissions, 1 accepted" without a round trip.
+    const tracked = s.tracking.problems.find((p) => p.slug === slug) ?? null;
+    const problems = s.tracking.problems.map((p) =>
+      p.slug === slug
+        ? {
+            ...p,
+            submissionCount: p.submissionCount + 1,
+            acceptedCount: p.acceptedCount + (sub.accepted ? 1 : 0),
+            lastSeenAt: Date.now(),
+          }
+        : p,
+    );
+    const nextTracking = { ...s.tracking, problems };
+
+    if (!session || !tp) {
+      return {
+        state: { ...s, tracking: nextTracking },
+        result: { session: null, tp: null, tracked },
+      };
+    }
+    const interviewProblems = session.problems.map((p) =>
       p.sessionProblemId === tp.sessionProblemId
         ? { ...p, submissions: [...p.submissions.slice(-19), lite] }
         : p,
     );
-    return { state: { ...s, session: { ...session, problems } }, result: { session, tp } };
+    return {
+      state: {
+        ...s,
+        tracking: nextTracking,
+        interview: { ...session, problems: interviewProblems },
+      },
+      result: { session, tp, tracked },
+    };
   });
-  if (!target) return { ok: true };
-  if (target.session.kind === "interview") {
+
+  if (target.session && target.tp) {
     const {
       runtimeDistribution: _r,
       memoryDistribution: _m,
@@ -525,8 +690,31 @@ async function submission(slug: string, sub: CapturedSubmission): Promise<Runtim
       sessionProblemId: target.tp.sessionProblemId,
       submission: info,
     });
+    syncSubmission(target.tp.sessionProblemId, sub).catch((e) =>
+      console.warn("[lare] submission sync failed", e),
+    );
+  } else {
+    // Practice: attach to the inbox row, creating it first if this is the very
+    // first thing we have seen for the problem.
+    void (async () => {
+      try {
+        // The problem row is the submission's foreign key, so let any in-flight
+        // upsert finish before inserting against it.
+        await pendingTrack.get(slug)?.catch(() => undefined);
+        const state = await loadState();
+        const entry = state.tracking.problems.find((p) => p.slug === slug) ?? null;
+        if (!entry?.synced) {
+          console.warn("[lare] no tracked problem row for", slug, "- submission not stored");
+          return;
+        }
+        await syncSubmission(entry.sessionProblemId, sub);
+      } catch (e) {
+        console.warn("[lare] submission sync failed", e);
+      }
+    })();
   }
-  syncSubmission(target.tp, sub).catch((e) => console.warn("[lare] submission sync failed", e));
+
+  await refreshBadge();
   await broadcast({
     kind: sub.accepted ? "success" : "info",
     text: sub.accepted
@@ -575,7 +763,7 @@ async function retrySync(): Promise<RuntimeResponse> {
   const userId = await currentUserId();
   if (!userId) throw new Error("Sign in to Lare first");
   const state = await loadState();
-  const session = state.session;
+  const session = state.interview;
   if (!session || !state.pendingSync.includes(session.sessionId)) {
     throw new Error("Nothing to retry");
   }
@@ -591,7 +779,7 @@ async function retrySync(): Promise<RuntimeResponse> {
   await withState(async (s) => ({
     state: {
       ...s,
-      session: null,
+      interview: null,
       pendingSync: s.pendingSync.filter((id) => id !== session.sessionId),
     },
     result: undefined,
@@ -604,7 +792,7 @@ async function retrySync(): Promise<RuntimeResponse> {
 
 async function resumeAfterRestart(): Promise<void> {
   const state = await loadState();
-  if (state.session) {
+  if (state.interview) {
     await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 0.5 });
   }
   const userId = await currentUserId();
@@ -638,20 +826,26 @@ async function broadcast(toast?: StateBroadcast["toast"]): Promise<void> {
 
 async function refreshBadge(): Promise<void> {
   const state = await loadState();
-  const session = state.session;
-  if (!session) {
+  const interview = state.interview;
+
+  // A live interview owns the badge: red, counting up.
+  if (interview) {
+    const status = timerStatus(interview.events);
+    const minutes = Math.floor(activeMs(interview.events, Date.now()) / 60_000);
+    await chrome.action.setBadgeBackgroundColor({
+      color: status === "paused" ? brand.statusPause : brand.statusStop,
+    });
+    await chrome.action.setBadgeText({ text: status === "paused" ? "II" : `${minutes}m` });
+    return;
+  }
+
+  // Otherwise the badge is the tracked-problem count — the "it is watching"
+  // signal, and a nudge that there is something to post.
+  const count = state.tracking.problems.length;
+  if (count === 0) {
     await chrome.action.setBadgeText({ text: "" });
     return;
   }
-  const status = timerStatus(session.events);
-  const minutes = Math.floor(activeMs(session.events, Date.now()) / 60_000);
-  await chrome.action.setBadgeBackgroundColor({
-    color:
-      status === "paused"
-        ? brand.statusPause
-        : session.kind === "interview"
-          ? brand.statusStop
-          : brand.statusRun,
-  });
-  await chrome.action.setBadgeText({ text: status === "paused" ? "II" : `${minutes}m` });
+  await chrome.action.setBadgeBackgroundColor({ color: brand.statusRun });
+  await chrome.action.setBadgeText({ text: String(count) });
 }

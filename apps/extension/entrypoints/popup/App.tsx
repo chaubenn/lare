@@ -2,6 +2,7 @@ import { activeMs, formatDuration, timerStatus } from "@lare/shared";
 import { Emblem } from "@lare/ui/brand";
 import { useCallback, useEffect, useState } from "react";
 import { type RuntimeSnapshot, type StateBroadcast, sendRuntime, toSnapshot } from "@/src/messages";
+import { PAGE_PROBLEM_REQUEST, type PageProblemReply } from "@/src/pageController";
 
 const SITE_URL: string = import.meta.env.WXT_SITE_URL ?? "https://lare-one.vercel.app";
 
@@ -62,10 +63,47 @@ export function App() {
     }
   };
 
-  const session = snap?.state.session ?? null;
+  /**
+   * Interviews are the one thing still started by hand, and the popup cannot see
+   * the page, so ask the active tab which problem is open first.
+   */
+  const startInterview = async () => {
+    setError(null);
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      setError("Open a LeetCode problem tab first.");
+      return;
+    }
+    let reply: PageProblemReply | undefined;
+    try {
+      reply = (await chrome.tabs.sendMessage(tab.id, { type: PAGE_PROBLEM_REQUEST })) as
+        | PageProblemReply
+        | undefined;
+    } catch {
+      setError("Open a LeetCode problem tab first.");
+      return;
+    }
+    if (!reply?.problem) {
+      setError("Open a LeetCode problem tab first.");
+      return;
+    }
+    await run(() =>
+      sendRuntime({
+        type: "START_INTERVIEW",
+        problem: reply.problem,
+        question: reply.question,
+        facecam: false,
+        tabId: tab.id ?? null,
+      }),
+    );
+  };
+
+  const interview = snap?.state.interview ?? null;
   const auth = snap?.auth ?? null;
-  const status = session ? timerStatus(session.events) : "idle";
-  const sessionId = session?.sessionId ?? null;
+  const status = interview ? timerStatus(interview.events) : "idle";
+  const sessionId = interview?.sessionId ?? null;
+  const tracked = snap?.state.tracking.problems ?? [];
+  const recording = snap?.recording ?? null;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is the trigger
   useEffect(() => {
@@ -172,7 +210,7 @@ export function App() {
             <button
               type="button"
               className="link"
-              disabled={busy || !!session}
+              disabled={busy || !!interview}
               onClick={() => void run(() => sendRuntime({ type: "SIGN_OUT" }))}
             >
               Sign out
@@ -180,32 +218,63 @@ export function App() {
           </section>
 
           <section className="card">
-            {session ? (
+            <div className="card-title">
+              Tracking submissions
+              <span className="badge running">on</span>
+            </div>
+            <p className="muted">
+              Every problem you open and every submission you make is saved automatically. Pick
+              which ones to post from the desktop app.
+            </p>
+            <ul className="problems">
+              {tracked.map((p) => (
+                <li key={p.sessionProblemId}>
+                  <span>{p.title || p.slug}</span>
+                  <span className="muted">
+                    {p.submissionCount === 0
+                      ? "opened"
+                      : `${p.acceptedCount}/${p.submissionCount} accepted`}
+                  </span>
+                </li>
+              ))}
+              {tracked.length === 0 && (
+                <li className="muted">Nothing tracked yet — open a LeetCode problem.</li>
+              )}
+            </ul>
+            {tracked.length > 0 && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void sendRuntime({ type: "OPEN_APP", path: "drafts" })}
+              >
+                Review {tracked.length === 1 ? "1 problem" : `${tracked.length} problems`} in Lare
+              </button>
+            )}
+          </section>
+
+          <section className="card">
+            {interview ? (
               <>
                 <div className="card-title">
-                  {session.kind === "interview"
-                    ? "Mock interview"
-                    : session.scope === "session"
-                      ? "Practice session"
-                      : "Practice problem"}
+                  Mock interview
                   <span className={`badge ${status}`}>{status}</span>
                 </div>
                 <div className="timer" role="timer">
-                  {formatDuration(activeMs(session.events, Date.now()))}
+                  {formatDuration(activeMs(interview.events, Date.now()))}
                 </div>
+                {recording?.state === "recording" && (
+                  <p className="muted">Recording. A red dot shows on the problem page.</p>
+                )}
                 <ul className="problems">
-                  {session.problems.map((p) => (
+                  {interview.problems.map((p) => (
                     <li key={p.sessionProblemId}>
                       <span>{p.problem.title}</span>
                       <span className="muted">
-                        {p.submissions.filter((s) => s.accepted).length}/{p.submissions.length}{" "}
+                        {p.submissions.filter((sub) => sub.accepted).length}/{p.submissions.length}{" "}
                         accepted
                       </span>
                     </li>
                   ))}
-                  {session.problems.length === 0 && (
-                    <li className="muted">Open a problem to start tracking</li>
-                  )}
                 </ul>
                 <div className="row">
                   {status === "running" ? (
@@ -239,8 +308,8 @@ export function App() {
                   ) : null}
                 </div>
                 {confirmEnd && (
-                  <div className="confirm-sheet" role="dialog" aria-label="End session">
-                    <p>End and save this session?</p>
+                  <div className="confirm-sheet" role="dialog" aria-label="End mock interview">
+                    <p>End and save this mock interview?</p>
                     <div className="row">
                       <button
                         type="button"
@@ -262,22 +331,31 @@ export function App() {
               </>
             ) : (
               <>
-                <div className="card-title">No active session</div>
+                <div className="card-title">Mock interview</div>
                 <p className="muted">
-                  Open a LeetCode problem and use the Lare button in the bottom-right corner to
-                  start.
+                  {snap.appConnected
+                    ? "Records your screen and mic on the problem you have open, then grades it."
+                    : "Open the Lare desktop app to record a mock interview."}
                 </p>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy || !snap.appConnected}
+                  onClick={() => void startInterview()}
+                >
+                  Start mock interview
+                </button>
               </>
             )}
           </section>
 
           {!!snap.state.pendingSync.length && (
             <section className="card retry">
-              <div className="card-title">Couldn’t save a session</div>
+              <div className="card-title">Couldn’t save a mock interview</div>
               <p className="muted">
                 {snap.state.pendingSync.length === 1
-                  ? "The last session is still on this device. Retry the upload."
-                  : `${snap.state.pendingSync.length} sessions are waiting to sync.`}
+                  ? "The last mock interview is still on this device. Retry the upload."
+                  : `${snap.state.pendingSync.length} mock interviews are waiting to sync.`}
               </p>
               <button
                 type="button"

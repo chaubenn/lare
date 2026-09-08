@@ -362,7 +362,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
                 overview.solved === overview.total && overview.total > 0 ? semantic.diffEasy : BONE
               }
             />
-            <Stat label="Active" value={formatDurationHuman(overview.activeMs)} />
+            {overview.activeMs > 0 ? (
+              <Stat label="Active" value={formatDurationHuman(overview.activeMs)} />
+            ) : null}
             <Stat label="Best runtime" value={beats ? `beats ${beats}` : "—"} />
             <Stat label="Submissions" value={String(overview.attempts)} />
           </div>

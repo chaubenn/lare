@@ -248,6 +248,15 @@ const server = createServer(async (req, res) => {
     if (sub.startsWith("/rest/v1/profiles")) {
       return json(res, 200, [{ handle: "tester", display_name: "Test User", avatar_url: null }]);
     }
+    // RPCs return a scalar, so they must be handled before the generic table
+    // branch below (which would otherwise treat "rpc" as a table name).
+    if (sub.startsWith("/rest/v1/rpc/")) {
+      const fn = sub.slice("/rest/v1/rpc/".length).split("?")[0];
+      if (fn === "practice_inbox") return json(res, 200, INBOX_SESSION_ID);
+      if (fn === "publish_practice_problems") return json(res, 200, crypto.randomUUID());
+      return json(res, 404, { message: `unmocked rpc ${fn}` });
+    }
+
     const table = /^\/rest\/v1\/([a-z_]+)/.exec(sub)?.[1];
     if (table) {
       const wantsRepresentation = String(req.headers.prefer ?? "").includes(
@@ -275,6 +284,9 @@ const server = createServer(async (req, res) => {
   res.writeHead(404);
   res.end("not found");
 });
+
+/** The single practice-inbox session id the mock `practice_inbox` RPC hands out. */
+export const INBOX_SESSION_ID = "00000000-0000-4000-8000-0000000000b0";
 
 export function fakeSession() {
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");

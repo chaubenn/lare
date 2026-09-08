@@ -1,12 +1,16 @@
 /**
- * Supabase writes for sessions. All functions are idempotent where possible
- * (upserts keyed by client-generated uuids) so retries after a service-worker
- * restart never duplicate rows.
+ * Supabase writes. All functions are idempotent where possible (upserts keyed by
+ * client-generated uuids) so retries after a service-worker restart never
+ * duplicate rows.
+ *
+ * Two groups: passive practice tracking (the inbox) and mock interviews, which
+ * are still explicit timed sessions.
  */
 import {
   type ActiveSession,
   activeMs,
   type EditLog,
+  type ProblemInfo,
   problemActiveMs,
   type TimerEvent,
   type TrackedProblem,
@@ -16,6 +20,78 @@ import type { CapturedSubmission, QuestionDetails } from "./messages";
 import { getSupabase } from "./supabase";
 
 const iso = (ms: number) => new Date(ms).toISOString();
+
+// ---------------------------------------------------------------------------
+// Passive practice tracking
+// ---------------------------------------------------------------------------
+
+/**
+ * The caller's inbox session id, created server-side on first use.
+ *
+ * Must be its own round trip — the id cannot be inlined into the
+ * `session_problems` insert below, because the `owns_session` RLS check is
+ * STABLE and would not see an inbox created within that same statement.
+ */
+export async function resolveInboxSession(): Promise<string> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc("practice_inbox");
+  if (error) throw new Error(`practice_inbox: ${error.message}`);
+  if (!data) throw new Error("practice_inbox returned no id");
+  return data;
+}
+
+/**
+ * Record a problem against the inbox. Keyed by the client-generated id, so
+ * re-opening the same problem updates one row instead of adding another.
+ *
+ * `active_ms` stays 0: passive tracking has no timer, so there is no honest
+ * duration to report and the renderers hide a zero.
+ */
+export async function trackInboxProblem(
+  inboxSessionId: string,
+  sessionProblemId: string,
+  problem: ProblemInfo,
+  question: QuestionDetails | null,
+  seenAt: number,
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.from("session_problems").upsert(
+    {
+      id: sessionProblemId,
+      session_id: inboxSessionId,
+      slug: problem.slug,
+      frontend_id: problem.frontendId,
+      title: problem.title,
+      difficulty: problem.difficulty,
+      url: problem.url,
+      description_html: question?.descriptionHtml ?? null,
+      topic_tags: question?.topicTags ?? [],
+      opened_at: iso(seenAt),
+      active_ms: 0,
+    },
+    { onConflict: "id" },
+  );
+  if (error) throw new Error(`session_problems upsert: ${error.message}`);
+}
+
+/** Publish a chosen set of tracked problems as one draft post. Returns the post id. */
+export async function publishInboxProblems(
+  sessionProblemIds: string[],
+  title: string | null,
+): Promise<string> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc("publish_practice_problems", {
+    problem_ids: sessionProblemIds,
+    post_title: title,
+  });
+  if (error) throw new Error(`publish_practice_problems: ${error.message}`);
+  if (!data) throw new Error("publish_practice_problems returned no post id");
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Mock interviews
+// ---------------------------------------------------------------------------
 
 export async function syncSessionStart(session: ActiveSession, userId: string): Promise<void> {
   const supabase = getSupabase();
@@ -91,11 +167,14 @@ export async function syncProblemClose(
   if (error) throw new Error(`session_problems close: ${error.message}`);
 }
 
-export async function syncSubmission(tp: TrackedProblem, s: CapturedSubmission): Promise<void> {
+export async function syncSubmission(
+  sessionProblemId: string,
+  s: CapturedSubmission,
+): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.from("submissions").upsert(
     {
-      session_problem_id: tp.sessionProblemId,
+      session_problem_id: sessionProblemId,
       leetcode_submission_id: s.leetcodeSubmissionId,
       submitted_at: iso(s.submittedAt),
       lang: s.lang,

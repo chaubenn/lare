@@ -6,6 +6,7 @@ import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { formatListWhen, plural } from "@/lib/format";
 import { type Draft, useDrafts } from "./queries";
+import { TrackedProblems } from "./TrackedProblems";
 
 export function DraftsPage() {
   const drafts = useDrafts();
@@ -13,9 +14,11 @@ export function DraftsPage() {
     <>
       <PageHeader
         title="Drafts"
-        subtitle="Sessions that landed from the extension. Review, write a note, publish."
+        subtitle="Problems the extension tracked, and the posts you have started."
         count={drafts.data ? plural(drafts.data.length, "draft") : undefined}
       />
+
+      <TrackedProblems />
       {drafts.isPending ? (
         <ListSkeleton />
       ) : drafts.isError ? (
@@ -27,9 +30,9 @@ export function DraftsPage() {
           description={
             <ol className="mt-2 list-decimal space-y-1 pl-5 text-left">
               <li>Install the Lare Chrome extension and sign in with the same account.</li>
-              <li>Open a problem on LeetCode and start a session from the Lare overlay.</li>
-              <li>Solve, submit, then end the session.</li>
-              <li>Come back here: the draft appears within a few seconds.</li>
+              <li>Solve problems on LeetCode as usual — there is nothing to start.</li>
+              <li>Come back here: tracked problems appear above within a few seconds.</li>
+              <li>Tick the ones that belong together and create a post.</li>
             </ol>
           }
         />
@@ -67,7 +70,7 @@ function DraftRow({ draft }: { draft: Draft }) {
           {session ? (session.kind === "interview" ? "Interview" : "Practice") : "Draft"}
           <span aria-hidden> · </span>
           {when.label}
-          {session ? (
+          {session && session.active_ms > 0 ? (
             <>
               <span aria-hidden> · </span>
               {formatDurationHuman(session.active_ms)}
@@ -89,7 +92,7 @@ function DraftRow({ draft }: { draft: Draft }) {
         {when.label}
       </p>
       <p className="hidden tabular-nums text-xs text-zinc-400 sm:block">
-        {session ? formatDurationHuman(session.active_ms) : "—"}
+        {session && session.active_ms > 0 ? formatDurationHuman(session.active_ms) : "—"}
       </p>
       <p className="hidden text-xs text-zinc-400 sm:block">{plural(problems.length, "problem")}</p>
       <Link

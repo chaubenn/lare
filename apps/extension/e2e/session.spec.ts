@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { gunzipSync } from "node:zlib";
 import {
   type BrowserContext,
   chromium,
@@ -13,7 +12,6 @@ import {
 
 const EXT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../.output/chrome-mv3-e2e");
 const BASE = "http://localhost:4173";
-const USER_ID = "00000000-0000-4000-8000-000000000001";
 
 interface RecordedRequest {
   method: string;
@@ -24,6 +22,7 @@ interface RecordedRequest {
 
 let context: BrowserContext;
 let sw: Worker;
+let extensionId: string;
 
 test.beforeAll(async () => {
   if (!existsSync(EXT_PATH)) {
@@ -35,6 +34,9 @@ test.beforeAll(async () => {
     args: [`--disable-extensions-except=${EXT_PATH}`, `--load-extension=${EXT_PATH}`],
   });
   sw = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+  // chrome-extension://<id>/popup.html — needed to drive the popup, which is now
+  // the only UI the extension has.
+  extensionId = new URL(sw.url()).host;
   // Seed a Supabase session so the extension believes the user is signed in.
   const res = await fetch(`${BASE}/__reset`);
   expect(res.ok).toBe(true);
@@ -64,28 +66,33 @@ async function openProblem(): Promise<Page> {
   return page;
 }
 
-test("practice problem: start, edit, submit, pause, end -> synced draft", async () => {
+const INBOX_SESSION_ID = "00000000-0000-4000-8000-0000000000b0";
+
+test("passive tracking: opening a problem and submitting is captured with no session", async () => {
   await fetch(`${BASE}/__reset`);
   const page = await openProblem();
+
+  // Nothing is injected into the page beyond the (hidden) recording dot: no
+  // launcher, no menu, no pill.
   const overlay = page.locator("lare-overlay");
+  await expect(overlay.getByRole("button", { name: "Lare" })).toHaveCount(0);
+  await expect(overlay.getByTestId("lare-pill")).toHaveCount(0);
+  await expect(overlay.locator(".lare-rec")).toHaveCount(0);
 
-  // Idle launcher visible; menu shows the problem title fetched via GraphQL.
-  await overlay.getByRole("button", { name: "Lare" }).click();
-  await expect(overlay.getByText("Two Sum")).toBeVisible();
-  await expect(overlay.getByText("Easy")).toBeVisible();
-  await overlay.getByRole("button", { name: /Start problem/ }).click();
+  // Opening the problem is enough to register it against the inbox.
+  await expect
+    .poll(
+      async () =>
+        (await recorded()).filter((r) => r.path.startsWith("/supabase/rest/v1/session_problems"))
+          .length,
+    )
+    .toBeGreaterThan(0);
 
-  // Active pill with a running timer.
-  const pill = overlay.getByTestId("lare-pill");
-  await expect(pill).toBeVisible();
-  await expect(pill.getByTestId("lare-time")).toHaveText(/^0:0[0-9]$/);
-  await expect(pill.getByTestId("lare-kind")).toHaveText("Problem");
-
-  // Type into the code editor (not the plaintext testcase editor).
+  // Solve it.
   await focusEditorEnd(page, "editor");
   await page.keyboard.type("        return [0, 1]\n");
 
-  // Edits from the plaintext testcase editor must be ignored.
+  // Edits from the plaintext testcase editor must still be ignored.
   await focusEditorEnd(page, "tc");
   await page.keyboard.type("\n[3,2,4]\n6");
 
@@ -94,24 +101,15 @@ test("practice problem: start, edit, submit, pause, end -> synced draft", async 
   await expect(page.getByTestId("result")).toHaveText("run:Accepted");
   await page.getByRole("button", { name: "Submit" }).click();
   await expect(page.getByTestId("result")).toHaveText("submit:Accepted");
-  await expect(overlay.getByText(/Accepted · 1219 ms · beats 17\.99% · captured/)).toBeVisible();
-  await expect(pill.getByText("1 problem · 1 submission")).toBeVisible();
 
-  // Pause freezes the timer; resume continues.
-  await pill.getByRole("button", { name: "Pause" }).click();
-  await expect(pill.getByRole("button", { name: "Resume" })).toBeVisible();
-  const frozen = await pill.getByTestId("lare-time").textContent();
-  await page.waitForTimeout(2200);
-  expect(await pill.getByTestId("lare-time").textContent()).toBe(frozen);
-  await pill.getByRole("button", { name: "Resume" }).click();
-  await expect(pill.getByRole("button", { name: "Pause" })).toBeVisible();
-
-  // End with confirmation.
-  await pill.getByRole("button", { name: "End" }).click();
-  await pill.getByRole("button", { name: "Confirm end" }).click();
-  await expect(overlay.getByText(/Session saved/)).toBeVisible();
-  await expect(overlay.getByTestId("lare-fab")).toBeVisible();
-  await expect(overlay.getByTestId("lare-menu")).toHaveCount(0);
+  // Scoped to the Supabase table: LeetCode's own judge endpoint is
+  // /submissions/detail/<id>/check/, which a looser filter would also match.
+  await expect
+    .poll(
+      async () =>
+        (await recorded()).filter((r) => r.path.startsWith("/supabase/rest/v1/submissions")).length,
+    )
+    .toBe(1);
 
   // ---- assert what the service worker wrote to (mock) Supabase ----------------
   const reqs = await recorded();
@@ -119,29 +117,31 @@ test("practice problem: start, edit, submit, pause, end -> synced draft", async 
   const table = (name: string, method: string) =>
     sb.filter((r) => r.method === method && r.path.startsWith(`/supabase/rest/v1/${name}`));
 
-  const sessions = table("sessions", "POST");
-  expect(sessions).toHaveLength(1);
-  const sessionRow = sessions[0]?.body as Record<string, unknown>;
-  expect(sessionRow.user_id).toBe(USER_ID);
-  expect(sessionRow.kind).toBe("practice");
-  expect(sessionRow.scope).toBe("problem");
-  expect(sessions[0]?.headers.authorization).toMatch(/^Bearer /);
+  // The inbox is resolved through the RPC, once.
+  const inboxCalls = sb.filter((r) => r.path.includes("/rpc/practice_inbox"));
+  expect(inboxCalls.length).toBeGreaterThan(0);
 
-  const events = table("session_events", "POST").map((r) => (r.body as { type: string }).type);
-  expect(events).toEqual(["start", "problem_open", "pause", "resume"]);
+  // No session is opened and no timer is recorded: that is the whole point.
+  expect(table("sessions", "POST")).toHaveLength(0);
+  expect(table("session_events", "POST")).toHaveLength(0);
 
+  // The problem is attached to the inbox with no duration.
   const problems = table("session_problems", "POST");
   expect(problems).toHaveLength(1);
   const problemRow = problems[0]?.body as Record<string, unknown>;
+  expect(problemRow.session_id).toBe(INBOX_SESSION_ID);
   expect(problemRow.slug).toBe("two-sum");
   expect(problemRow.title).toBe("Two Sum");
   expect(problemRow.difficulty).toBe("Easy");
+  expect(problemRow.active_ms).toBe(0);
   expect(problemRow.topic_tags).toEqual([
     { name: "Array", slug: "array" },
     { name: "Hash Table", slug: "hash-table" },
   ]);
   expect(String(problemRow.description_html)).toContain("Given an array of integers");
+  expect(problems[0]?.headers.authorization).toMatch(/^Bearer /);
 
+  // The submission is captured in full, against that problem row.
   const submissions = table("submissions", "POST");
   expect(submissions).toHaveLength(1);
   const submissionRow = submissions[0]?.body as Record<string, unknown>;
@@ -158,66 +158,29 @@ test("practice problem: start, edit, submit, pause, end -> synced draft", async 
   expect(dist.lang).toBe("python3");
   expect(dist.bins.map((b) => b.value)).toEqual([140, 386, 633, 879, 1126, 1219]);
 
-  // Session ended + timer persisted.
-  const sessionPatches = table("sessions", "PATCH").map((r) => r.body as Record<string, unknown>);
-  const ended = sessionPatches.find((b) => b.status === "ended");
-  expect(ended).toBeTruthy();
-  expect(typeof ended?.active_ms).toBe("number");
-  expect(ended?.active_ms as number).toBeGreaterThan(1000);
-
-  // Edit log uploaded as gzip JSON and replays to the final code.
-  const upload = sb.find((r) => r.path.startsWith("/supabase/storage/v1/object/session-data/"));
-  expect(upload).toBeTruthy();
-  expect(upload?.path).toMatch(
-    new RegExp(`/session-data/${USER_ID}/[0-9a-f-]{36}/[0-9a-f-]{36}\\.json\\.gz`),
-  );
-  const raw = upload?.body as { base64: string } | undefined;
-  expect(raw?.base64).toBeTruthy();
-  const buf = Buffer.from(raw?.base64 ?? "", "base64");
-  const log = JSON.parse(
-    gunzipSync(extractGzipPayload(buf, upload?.headers["content-type"] ?? "")).toString("utf8"),
-  ) as {
-    version: number;
-    slug: string;
-    language?: string;
-    events: { t: number; v: number; c: [number, number, string][]; full?: string }[];
-  };
-  expect(log.version).toBe(1);
-  expect(log.slug).toBe("two-sum");
-  expect(log.language).toBe("python");
-  expect(log.events.length).toBeGreaterThan(10);
-  expect(log.events[0]?.full).toContain("class Solution");
-  // Replay and compare with the code that was submitted.
-  const finalText = replay(log.events);
-  expect(finalText).toContain("return [0, 1]");
-  expect(finalText).not.toContain("[3,2,4]");
-
-  // Draft post created.
-  const posts = table("posts", "POST");
-  expect(posts).toHaveLength(1);
-  const postRow = posts[0]?.body as Record<string, unknown>;
-  expect(postRow.status).toBe("draft");
-  expect(postRow.title).toBe("Two Sum");
-
-  // Nothing captured after the session ended.
-  await focusEditorEnd(page, "editor");
-  await page.keyboard.type("x");
-  await page.waitForTimeout(2500);
-  const after = await recorded();
-  expect(after.filter((r) => r.path.startsWith("/supabase/storage/")).length).toBe(1);
+  // Practice does not upload an edit log (that is interview-only) and does not
+  // create a post — publishing is an explicit action in the desktop app.
+  expect(sb.filter((r) => r.path.startsWith("/supabase/storage/"))).toHaveLength(0);
+  expect(table("posts", "POST")).toHaveLength(0);
 
   await page.close();
 });
 
-test("mock interview is blocked when the desktop app is not running", async () => {
+test("mock interview cannot be started from the popup without the desktop app", async () => {
   await fetch(`${BASE}/__reset`);
-  const page = await openProblem();
-  const overlay = page.locator("lare-overlay");
-  await overlay.getByRole("button", { name: "Lare" }).click();
-  const interview = overlay.getByRole("button", { name: /Mock interview/ });
-  await expect(interview).toBeDisabled();
-  await expect(overlay.getByText("Lare desktop app not detected")).toBeVisible();
-  await page.close();
+  const problem = await openProblem();
+
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+
+  // The popup is the only control surface now.
+  await expect(popup.getByText("Tracking submissions")).toBeVisible();
+  const start = popup.getByRole("button", { name: /Start mock interview/ });
+  await expect(start).toBeDisabled();
+  await expect(popup.getByText(/Open the Lare desktop app/)).toBeVisible();
+
+  await popup.close();
+  await problem.close();
 });
 
 /** Focus a fixture Monaco instance and put the cursor at the very end of its model. */
@@ -235,36 +198,4 @@ async function focusEditorEnd(page: Page, which: "editor" | "tc"): Promise<void>
     const line = model.getLineCount();
     ed.setPosition({ lineNumber: line, column: model.getLineMaxColumn(line) });
   }, which);
-}
-
-/** supabase-js uploads with multipart/form-data in some versions; handle both raw and multipart bodies. */
-function extractGzipPayload(buf: Buffer, contentType: string): Buffer {
-  if (!contentType.startsWith("multipart/form-data")) return buf;
-  const boundary = /boundary=(.+)$/.exec(contentType)?.[1];
-  if (!boundary) return buf;
-  const marker = Buffer.from(`--${boundary}`);
-  let start = buf.indexOf(marker);
-  while (start !== -1) {
-    const headerEnd = buf.indexOf("\r\n\r\n", start);
-    if (headerEnd === -1) break;
-    const header = buf.subarray(start, headerEnd).toString("latin1");
-    const next = buf.indexOf(marker, headerEnd);
-    const partBody = buf.subarray(headerEnd + 4, next === -1 ? buf.length : next - 2);
-    if (/application\/gzip/.test(header) || /filename=/.test(header)) return partBody;
-    start = next;
-  }
-  return buf;
-}
-
-function replay(events: { c: [number, number, string][]; full?: string }[]): string {
-  let text = "";
-  for (const e of events) {
-    if (e.full !== undefined) {
-      text = e.full;
-      continue;
-    }
-    const changes = [...e.c].sort((a, b) => b[0] - a[0]);
-    for (const [o, l, x] of changes) text = text.slice(0, o) + x + text.slice(o + l);
-  }
-  return text;
 }

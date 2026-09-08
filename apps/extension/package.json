@@ -20,7 +20,6 @@
     "@lare/supabase-types": "workspace:*",
     "@lare/ui": "workspace:*",
     "@supabase/supabase-js": "^2.115.0",
-    "motion": "^12.23.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^4.5.4"
