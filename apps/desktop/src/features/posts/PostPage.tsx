@@ -69,7 +69,7 @@ function PostView({ post }: { post: PostDetail }) {
   const submissionCount = problems.reduce((n, p) => n + p.submissions.length, 0);
   const acceptedCount = problems.filter((p) => p.submissions.some((s) => s.accepted)).length;
   const name = author?.display_name ?? (author?.handle ? `@${author.handle}` : "Someone");
-  const webUrl = postWebUrl(post.id);
+  const webUrl = postWebUrl(post.slug);
   const isMine = post.user_id === userId;
 
   const copyLink = async () => {

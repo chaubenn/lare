@@ -3,7 +3,7 @@ import { Container, Tooltip } from "@lare/ui/primitives";
 import { Clock, ListChecks, Lock } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { type ReactNode, Suspense } from "react";
 import { Avatar } from "@/components/avatar";
 import { CopyLinkButton } from "@/components/copy-link-button";
@@ -58,6 +58,9 @@ export default async function PostPage({ params }: Params) {
   const { id } = await params;
   const [post, viewer] = await Promise.all([getPostDetail(id), getViewer()]);
   if (!post) notFound();
+  // Links shared before slugs existed carry the UUID. Send them to the canonical
+  // short URL so there is only ever one address for a post.
+  if (id !== post.slug) redirect(`/p/${post.slug}`);
 
   const isOwner = viewer?.id === post.user_id;
   // Posts published before the pre-generated session card existed get one after this response.
@@ -142,7 +145,7 @@ export default async function PostPage({ params }: Params) {
               </p>
             </div>
             <div className="ml-auto">
-              <CopyLinkButton path={`/p/${post.id}`} />
+              <CopyLinkButton path={`/p/${post.slug}`} />
             </div>
           </div>
         </header>
@@ -151,6 +154,7 @@ export default async function PostPage({ params }: Params) {
 
         <PostActions
           postId={post.id}
+          postSlug={post.slug}
           likeCount={post.like_count}
           commentCount={post.comment_count}
           liked={post.viewer_liked}
@@ -207,6 +211,7 @@ export default async function PostPage({ params }: Params) {
         <Suspense fallback={<Skeleton className="h-24 w-full" />}>
           <CommentSection
             postId={post.id}
+            postSlug={post.slug}
             viewerId={viewer?.id ?? null}
             isPostOwner={Boolean(isOwner)}
           />
@@ -228,17 +233,25 @@ function SummaryChip({ icon, label, title }: { icon?: ReactNode; label: string; 
 
 async function CommentSection({
   postId,
+  postSlug,
   viewerId,
   isPostOwner,
 }: {
   postId: string;
+  postSlug: string;
   viewerId: string | null;
   isPostOwner: boolean;
 }) {
   const supabase = await createClient();
   const comments = await fetchComments(supabase, postId);
   return (
-    <Comments postId={postId} comments={comments} viewerId={viewerId} isPostOwner={isPostOwner} />
+    <Comments
+      postId={postId}
+      postSlug={postSlug}
+      comments={comments}
+      viewerId={viewerId}
+      isPostOwner={isPostOwner}
+    />
   );
 }
 

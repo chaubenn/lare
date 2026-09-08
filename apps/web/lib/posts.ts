@@ -3,8 +3,9 @@ import "server-only";
 import type { Database } from "@lare/supabase-types";
 import type { QueryData, SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
-import { isUuid, sortSubmissions } from "@/lib/post-utils";
+import { isPostSlug, isUuid, sortSubmissions } from "@/lib/post-utils";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer } from "@/lib/viewer";
 
 type Client = SupabaseClient<Database>;
 
@@ -12,7 +13,7 @@ export const FEED_PAGE_SIZE = 10;
 
 /** Columns needed by `PostCard`. Keep it lean: no code, no distributions, no descriptions. */
 export const POST_CARD_SELECT = `
-  id, user_id, title, body, status, visibility, video_id, video_kind, include_ai_insights,
+  id, slug, user_id, title, body, status, visibility, video_id, video_kind, include_ai_insights,
   show_video, demo_video_id, show_demo_video, include_og_card, og_show_ai_scores,
   cover_media_id, like_count, comment_count,
   published_at, created_at, updated_at, session_id,
@@ -35,7 +36,7 @@ const SUBMISSION_LIST_SELECT = `
 
 /** Columns `/p/[id]` actually renders. Code + distribution blobs are hydrated only for the expanded submission. */
 export const POST_DETAIL_SELECT = `
-  id, user_id, title, body, status, visibility, video_id, video_kind, include_ai_insights,
+  id, slug, user_id, title, body, status, visibility, video_id, video_kind, include_ai_insights,
   show_video, demo_video_id, show_demo_video, include_og_card, og_show_ai_scores,
   cover_media_id, like_count, comment_count,
   published_at, created_at, updated_at, session_id,
@@ -190,8 +191,8 @@ export async function decoratePosts<T extends DecoratableRow>(
 /** Which of these posts the signed-in viewer has already liked (empty set when anonymous). */
 async function likedPostIds(supabase: Client, postIds: string[]): Promise<Set<string>> {
   if (postIds.length === 0) return new Set();
-  const { data: claims } = await supabase.auth.getClaims();
-  const userId = claims?.claims.sub;
+  // Reuse the request-cached viewer rather than verifying the JWT a second time.
+  const userId = (await getViewer())?.id;
   if (!userId) return new Set();
   const { data } = await supabase
     .from("post_likes")
@@ -256,11 +257,17 @@ async function decorateCardRows(supabase: Client, rows: PostCardRow[]): Promise<
   return decorated.map((row) => ({ ...row, top_comments: comments.get(row.id) ?? [] }));
 }
 
-/** Full post for `/p/[id]`, deduped between `generateMetadata` and the page. Null = not visible. */
-export const getPostDetail = cache(async (id: string): Promise<PostDetail | null> => {
-  if (!isUuid(id)) return null;
+/**
+ * Full post for `/p/[id]`, deduped between `generateMetadata` and the page. Null = not visible.
+ *
+ * `key` is either the 11-character slug (the canonical form) or the UUID primary key, which
+ * is what links shared before slugs existed still carry.
+ */
+export const getPostDetail = cache(async (key: string): Promise<PostDetail | null> => {
+  const column = isPostSlug(key) ? "slug" : isUuid(key) ? "id" : null;
+  if (!column) return null;
   const supabase = await createClient();
-  const { data, error } = await postDetailQuery(supabase).eq("id", id).maybeSingle();
+  const { data, error } = await postDetailQuery(supabase).eq(column, key).maybeSingle();
   if (error) throw new Error(`post failed: ${error.message}`);
   if (!data) return null;
   const [decorated] = await decoratePosts(supabase, [data]);

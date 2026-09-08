@@ -8,7 +8,7 @@ import { postWebUrl } from "@/lib/env";
  * Copies the post's public web URL. Mirrors the web feed's button (same label, same inline
  * "Copied" feedback) so both apps look identical.
  */
-export function PostLinkButton({ postId, className }: { postId: string; className?: string }) {
+export function PostLinkButton({ postSlug, className }: { postSlug: string; className?: string }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -18,7 +18,7 @@ export function PostLinkButton({ postId, className }: { postId: string; classNam
   }, [copied]);
 
   async function copy() {
-    const ok = await copyText(postWebUrl(postId));
+    const ok = await copyText(postWebUrl(postSlug));
     if (ok) setCopied(true);
   }
 

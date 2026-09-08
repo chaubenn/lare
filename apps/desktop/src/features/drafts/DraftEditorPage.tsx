@@ -130,11 +130,11 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const doPublish = async () => {
     if (busy) return;
     try {
-      const { id } = await publish.mutateAsync(edit);
-      const copied = await copyText(postWebUrl(id));
+      const { id, slug } = await publish.mutateAsync(edit);
+      const copied = await copyText(postWebUrl(slug));
       toast({
         title: copied ? "Published — link copied" : "Published",
-        description: copied ? postWebUrl(id) : undefined,
+        description: copied ? postWebUrl(slug) : undefined,
         variant: "success",
       });
       void navigate(`/posts/${id}`, { replace: true });

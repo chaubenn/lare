@@ -21,8 +21,10 @@ async function authedClient() {
   return userId ? { supabase, userId } : null;
 }
 
-function revalidatePost(postId: string) {
-  revalidatePath(`/p/${postId}`);
+function revalidatePost() {
+  // Route pattern, not a literal path: the public URL is the post's slug, so a
+  // `/p/<uuid>` string would no longer match the page anyone is actually viewing.
+  revalidatePath("/p/[id]", "page");
   revalidatePath("/");
 }
 
@@ -39,7 +41,7 @@ export async function togglePostLike(postId: string, current: boolean): Promise<
   if (error) return { liked: current, count: 0, error: error.message };
 
   const result = (data ?? {}) as { liked?: boolean; like_count?: number };
-  revalidatePost(postId);
+  revalidatePost();
   return {
     liked: result.liked ?? !current,
     count: result.like_count ?? 0,
@@ -60,15 +62,11 @@ export async function addComment(postId: string, body: string): Promise<ActionRe
     .from("post_comments")
     .insert({ post_id: postId, user_id: auth.userId, body: trimmed });
   if (error) return { error: error.message };
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }
 
-export async function updateComment(
-  commentId: string,
-  postId: string,
-  body: string,
-): Promise<ActionResult> {
+export async function updateComment(commentId: string, body: string): Promise<ActionResult> {
   if (!isUuid(commentId)) return { error: "Invalid comment id" };
   const trimmed = body.trim();
   if (trimmed.length === 0) return { error: "Write something first." };
@@ -82,18 +80,18 @@ export async function updateComment(
     .update({ body: trimmed, edited_at: new Date().toISOString() })
     .eq("id", commentId);
   if (error) return { error: error.message };
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }
 
 /** RLS lets the comment's author or the post's owner delete it. */
-export async function deleteComment(commentId: string, postId: string): Promise<ActionResult> {
+export async function deleteComment(commentId: string): Promise<ActionResult> {
   if (!isUuid(commentId)) return { error: "Invalid comment id" };
   const auth = await authedClient();
   if (!auth) return { error: "Sign in to delete your comment." };
 
   const { error } = await auth.supabase.from("post_comments").delete().eq("id", commentId);
   if (error) return { error: error.message };
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }

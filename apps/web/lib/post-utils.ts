@@ -9,6 +9,16 @@ export function isUuid(value: string): boolean {
   return UUID_RE.test(value);
 }
 
+/**
+ * An 11-character NanoID post slug — the canonical public id in `/p/<slug>`.
+ * Matches `posts_slug_format` in the database. UUIDs are 36 chars, so the two
+ * never overlap and a `/p/` segment can be classified by shape alone.
+ */
+const POST_SLUG_RE = /^[A-Za-z0-9_-]{11}$/;
+export function isPostSlug(value: string): boolean {
+  return POST_SLUG_RE.test(value);
+}
+
 /** Accepted first, then newest. */
 export function sortSubmissions<T extends { accepted: boolean; submitted_at: string }>(
   submissions: readonly T[],

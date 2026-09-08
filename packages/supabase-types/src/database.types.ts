@@ -251,6 +251,7 @@ export type Database = {
           show_demo_video: boolean
           show_video: boolean
           session_id: string | null
+          slug: string
           status: Database["public"]["Enums"]["post_status"]
           title: string | null
           updated_at: string
@@ -274,6 +275,7 @@ export type Database = {
           show_demo_video?: boolean
           show_video?: boolean
           session_id?: string | null
+          slug?: string
           status?: Database["public"]["Enums"]["post_status"]
           title?: string | null
           updated_at?: string
@@ -297,6 +299,7 @@ export type Database = {
           show_demo_video?: boolean
           show_video?: boolean
           session_id?: string | null
+          slug?: string
           status?: Database["public"]["Enums"]["post_status"]
           title?: string | null
           updated_at?: string
