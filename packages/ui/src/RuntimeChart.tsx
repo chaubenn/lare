@@ -1,7 +1,7 @@
 "use client";
 
 import { type Distribution, userBinIndex } from "@lare/shared";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { cn } from "./cn";
 
 export interface RuntimeChartProps {
@@ -13,9 +13,17 @@ export interface RuntimeChartProps {
   className?: string;
 }
 
+const PAD = { top: 8, right: 8, bottom: 22, left: 40 };
+const GAP = 1;
+/** Widest tick label we allow, so labels thin out instead of colliding. */
+const TICK_LABEL_W = 44;
+
 /**
  * LeetCode-style runtime/memory distribution histogram: percentage of accepted
  * submissions per bin, with the user's bin highlighted.
+ *
+ * Drawn in pixel space off a measured width (like ActivityChart) rather than a
+ * stretched viewBox — a non-uniform scale would smear the axis labels.
  */
 export function RuntimeChart({
   distribution,
@@ -29,96 +37,110 @@ export function RuntimeChart({
   const data = distribution.bins;
   const maxPct = Math.max(1, ...data.map((b) => b.pct));
   const [hover, setHover] = useState<number | null>(null);
+  const [width, setWidth] = useState(0);
+  const frameRef = useRef<HTMLDivElement>(null);
   const gid = useId();
 
-  const ticks = useMemo(() => {
-    const every = Math.max(1, Math.floor(data.length / 8));
-    return data.flatMap((b, i) => (i % every === 0 ? [{ i, value: b.value }] : []));
-  }, [data]);
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      setWidth(entries[0]?.contentRect.width ?? 0);
+    });
+    ro.observe(el);
+    setWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
 
-  const pad = { top: 8, right: 8, bottom: 22, left: 36 };
-  const innerW = 100;
-  const innerH = 100;
-  const gap = 0.6;
-  const barW = data.length > 0 ? (innerW - gap * (data.length - 1)) / data.length : innerW;
+  const innerW = Math.max(0, width - PAD.left - PAD.right);
+  const innerH = Math.max(0, height - PAD.top - PAD.bottom);
+  const step = data.length > 0 ? innerW / data.length : 0;
+  const barW = Math.max(1, step - GAP);
+
+  // Label every nth bin, where n keeps neighbouring labels from overlapping.
+  const ticks = useMemo(() => {
+    if (data.length === 0 || step <= 0) return [];
+    const every = Math.max(1, Math.ceil(TICK_LABEL_W / step));
+    return data.flatMap((b, i) => (i % every === 0 ? [{ i, value: b.value }] : []));
+  }, [data, step]);
+
   const active = hover ?? (highlight >= 0 ? highlight : null);
   const tip = active !== null ? data[active] : null;
 
   return (
-    <div className={cn("relative w-full", className)} style={{ height }}>
-      <svg
-        viewBox={`0 0 ${innerW + pad.left + pad.right} ${innerH + pad.top + pad.bottom}`}
-        preserveAspectRatio="none"
-        className="h-full w-full"
-        role="img"
-        aria-label={`${unit} distribution`}
-        onMouseMove={(event) => {
-          const svg = event.currentTarget;
-          const rect = svg.getBoundingClientRect();
-          const x = ((event.clientX - rect.left) / rect.width) * (innerW + pad.left + pad.right);
-          const i = Math.floor((x - pad.left) / (barW + gap));
-          setHover(i >= 0 && i < data.length ? i : null);
-        }}
-        onMouseLeave={() => setHover(null)}
-      >
-        <g transform={`translate(${pad.left},${pad.top})`}>
-          {[0, 0.5, 1].map((t) => {
-            const y = innerH - t * innerH;
-            return (
-              <g key={t}>
-                <line
-                  x1={0}
-                  x2={innerW}
-                  y1={y}
-                  y2={y}
-                  stroke="var(--border)"
-                  strokeWidth={0.2}
-                  vectorEffect="non-scaling-stroke"
+    <div ref={frameRef} className={cn("relative w-full", className)} style={{ height }}>
+      {width > 0 && (
+        <svg
+          width={width}
+          height={height}
+          viewBox={`0 0 ${width} ${height}`}
+          className="block"
+          role="img"
+          aria-label={`${unit} distribution`}
+          onMouseMove={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            const i = Math.floor((event.clientX - rect.left - PAD.left) / (step || 1));
+            setHover(i >= 0 && i < data.length ? i : null);
+          }}
+          onMouseLeave={() => setHover(null)}
+        >
+          <g transform={`translate(${PAD.left},${PAD.top})`}>
+            {[0, 0.5, 1].map((t) => {
+              const y = innerH - t * innerH;
+              return (
+                <g key={t}>
+                  <line
+                    x1={0}
+                    x2={innerW}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                    strokeWidth={1}
+                    shapeRendering="crispEdges"
+                  />
+                  <text
+                    x={-8}
+                    y={y}
+                    textAnchor="end"
+                    dominantBaseline="middle"
+                    fill="var(--text-tertiary)"
+                    fontSize={11}
+                  >
+                    {`${Math.round(maxPct * t)}%`}
+                  </text>
+                </g>
+              );
+            })}
+            {data.map((b, i) => {
+              const h = (b.pct / maxPct) * innerH;
+              const on = i === highlight || i === hover;
+              return (
+                <rect
+                  key={`${b.value}-${b.pct}`}
+                  x={i * step}
+                  y={innerH - h}
+                  width={barW}
+                  height={Math.max(h, 1)}
+                  rx={1}
+                  fill={on ? "var(--accent)" : "var(--border-strong)"}
                 />
-                <text
-                  x={-2}
-                  y={y}
-                  textAnchor="end"
-                  dominantBaseline="middle"
-                  fill="var(--text-tertiary)"
-                  fontSize={3.2}
-                >
-                  {`${Math.round(maxPct * t)}%`}
-                </text>
-              </g>
-            );
-          })}
-          {data.map((b, i) => {
-            const h = (b.pct / maxPct) * innerH;
-            const x = i * (barW + gap);
-            const y = innerH - h;
-            const on = i === highlight || i === hover;
-            return (
-              <rect
-                key={`${b.value}-${b.pct}`}
-                x={x}
-                y={y}
-                width={barW}
-                height={Math.max(h, 0.6)}
-                rx={0.4}
-                fill={on ? "var(--accent)" : "var(--border-strong)"}
-              />
-            );
-          })}
-          {ticks.map((t) => (
-            <text
-              key={t.i}
-              x={t.i * (barW + gap) + barW / 2}
-              y={innerH + 6}
-              textAnchor="middle"
-              fill="var(--text-tertiary)"
-              fontSize={3}
-            >
-              {`${t.value}${unit}`}
-            </text>
-          ))}
-        </g>
-      </svg>
+              );
+            })}
+            {ticks.map((t) => (
+              <text
+                key={t.i}
+                x={t.i * step + barW / 2}
+                y={innerH + 14}
+                textAnchor="middle"
+                fill="var(--text-tertiary)"
+                fontSize={11}
+              >
+                {`${t.value}${unit}`}
+              </text>
+            ))}
+          </g>
+        </svg>
+      )}
       {tip ? (
         <div
           id={gid}
