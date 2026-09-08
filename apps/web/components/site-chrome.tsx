@@ -56,9 +56,12 @@ export function SiteChrome({ viewer, pending }: { viewer: SiteViewer | null; pen
             </Link>
           )}
         </Container>
+        {/* Fades the header material into the page. Must not also carry
+            `.lare-edge` — that masks bottom-up, and being the later rule it
+            would win and leave a hard-edged band under the header. */}
         <div
           aria-hidden
-          className="lare-edge pointer-events-none absolute inset-x-0 top-full h-5 bg-[var(--lare-material-regular)] [mask-image:linear-gradient(to_bottom,#000,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000,transparent)]"
+          className="pointer-events-none absolute inset-x-0 top-full h-5 bg-[var(--lare-material-regular)] [mask-image:linear-gradient(to_bottom,#000,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000,transparent)]"
         />
       </header>
 
