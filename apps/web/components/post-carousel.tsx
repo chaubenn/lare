@@ -212,21 +212,29 @@ function NavButton({
   onClick: () => void;
   label: string;
 }) {
+  // The positioning lives on this wrapper, not on the Button. A Button with a
+  // `tooltip` renders inside a `position: relative` span, so an `absolute` class
+  // on the Button itself would resolve against that span — which sits in normal
+  // flow below the deck — instead of against the carousel.
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      tooltip={label}
+    <div
       className={cn(
-        "absolute top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-[color-mix(in_oklab,var(--surface)_60%,transparent)] text-[var(--text)] ring-1 ring-white/10 backdrop-blur hover:bg-[color-mix(in_oklab,var(--surface)_80%,transparent)] disabled:pointer-events-none disabled:opacity-0 sm:inline-flex",
+        "absolute top-1/2 z-10 hidden -translate-y-1/2 sm:block",
         side === "left" ? "-left-3 sm:-left-4" : "-right-3 sm:-right-4",
       )}
     >
-      {side === "left" ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
-    </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        tooltip={label}
+        className="rounded-full bg-[color-mix(in_oklab,var(--surface)_60%,transparent)] text-[var(--text)] ring-1 ring-white/10 backdrop-blur hover:bg-[color-mix(in_oklab,var(--surface)_80%,transparent)] disabled:pointer-events-none disabled:opacity-0"
+      >
+        {side === "left" ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+      </Button>
+    </div>
   );
 }
