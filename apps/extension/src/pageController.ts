@@ -1,7 +1,11 @@
 /**
  * Isolated-world controller for a LeetCode problem page: detects the current
- * problem, relays Monaco edits and judge results from the MAIN-world script to
- * the service worker, and exposes state/actions to the overlay UI.
+ * problem and relays Monaco edits and judge results from the MAIN-world script
+ * to the service worker.
+ *
+ * Capture is unconditional. There is no session to start, so a problem opened is
+ * reported immediately and every submission is captured; the service worker
+ * decides whether that belongs to the practice inbox or a live interview.
  */
 import {
   CheckResponseSchema,
@@ -24,26 +28,25 @@ import { fetchQuestion, fetchSubmissionDetails, statusLabel } from "./leetcodeAp
 import {
   type CapturedSubmission,
   type QuestionDetails,
-  type RuntimeResponse,
   type RuntimeSnapshot,
   type StateBroadcast,
   sendRuntime,
   toSnapshot,
 } from "./messages";
 
-export interface Toast {
-  id: number;
-  kind: "info" | "success" | "error";
-  text: string;
-}
-
 export interface PageState {
   snapshot: RuntimeSnapshot | null;
   problem: ProblemInfo | null;
   question: QuestionDetails | null;
   monacoReady: boolean;
-  busy: boolean;
-  toasts: Toast[];
+}
+
+/** Popup -> content script: "what problem is this tab on?". */
+export const PAGE_PROBLEM_REQUEST = "LARE_PAGE_PROBLEM";
+
+export interface PageProblemReply {
+  problem: ProblemInfo | null;
+  question: QuestionDetails | null;
 }
 
 const IGNORED_LANGUAGES = new Set(["plaintext", "json", "markdown", "text"]);
@@ -57,11 +60,8 @@ export class PageController {
     problem: null,
     question: null,
     monacoReady: false,
-    busy: false,
-    toasts: [],
   };
   private listeners = new Set<Listener>();
-  private toastSeq = 0;
 
   // Monaco bookkeeping
   private primaryModelId: string | null = null;
@@ -79,8 +79,6 @@ export class PageController {
   private pendingSubmissionIds = new Set<number>();
   private handledSubmissionIds = new Set<number>();
   private lastSubmitId: number | null = null;
-  private warnedCapture = false;
-  private warnedReload = false;
 
   private currentUrl = "";
   private disposed = false;
@@ -116,7 +114,7 @@ export class PageController {
 
   private set(patch: Partial<PageState>) {
     this.state = { ...this.state, ...patch };
-    const sessionId = this.state.snapshot?.state.session?.sessionId ?? null;
+    const sessionId = this.state.snapshot?.state.interview?.sessionId ?? null;
     if (sessionId !== this.trackedSessionId) {
       this.trackedSessionId = sessionId;
       this.buffer = [];
@@ -139,27 +137,12 @@ export class PageController {
     );
   }
 
-  toast(kind: Toast["kind"], text: string) {
-    const id = ++this.toastSeq;
-    this.set({ toasts: [...this.state.toasts, { id, kind, text }].slice(-3) });
-    setTimeout(() => this.set({ toasts: this.state.toasts.filter((t) => t.id !== id) }), 5000);
-  }
-
   // ---- runtime -------------------------------------------------------------
   async refresh(): Promise<void> {
     const res = await sendRuntime({ type: "GET_STATE" });
     if (res.ok) {
       const snapshot = toSnapshot(res);
       if (snapshot) this.set({ snapshot });
-      return;
-    }
-    if (
-      !res.ok &&
-      !this.warnedReload &&
-      /Receiving end does not exist|Extension context invalidated/i.test(res.error)
-    ) {
-      this.warnedReload = true;
-      this.toast("error", "Reload this LeetCode tab — the Lare extension restarted");
     }
   }
 
@@ -172,42 +155,23 @@ export class PageController {
     return res.ok ? (res.appConnected ?? false) : false;
   }
 
-  private onRuntimeMessage = (raw: unknown) => {
-    const msg = raw as Partial<StateBroadcast>;
+  private onRuntimeMessage = (
+    raw: unknown,
+    _sender: chrome.runtime.MessageSender,
+    sendResponse: (res: unknown) => void,
+  ): boolean | undefined => {
+    const msg = raw as { type?: string } & Partial<Omit<StateBroadcast, "type">>;
+    // The popup has no view of the page, so it asks the tab which problem is
+    // open before starting an interview.
+    if (msg?.type === PAGE_PROBLEM_REQUEST) {
+      sendResponse({ problem: this.state.problem, question: this.state.question });
+      return true;
+    }
     if (msg?.type !== "STATE_CHANGED" || !msg.state) return;
     const snapshot = toSnapshot(msg);
     if (snapshot) this.set({ snapshot });
-    if (msg.toast) this.toast(msg.toast.kind, msg.toast.text);
+    return undefined;
   };
-
-  private async run(fn: () => Promise<RuntimeResponse>): Promise<RuntimeResponse> {
-    this.set({ busy: true });
-    try {
-      const res = await fn();
-      if (!res.ok) this.toast("error", res.error);
-      else {
-        const snapshot = toSnapshot(res);
-        if (snapshot) this.set({ snapshot });
-      }
-      return res;
-    } finally {
-      this.set({ busy: false });
-    }
-  }
-
-  start(kind: "practice" | "interview", scope: "session" | "problem", facecam = false) {
-    const { problem, question } = this.state;
-    return this.run(() =>
-      sendRuntime({ type: "START_SESSION", kind, scope, problem, question, facecam, tabId: null }),
-    );
-  }
-  pause = () => this.run(() => sendRuntime({ type: "PAUSE_SESSION" }));
-  resume = () => this.run(() => sendRuntime({ type: "RESUME_SESSION" }));
-  end = () => this.run(() => sendRuntime({ type: "END_SESSION" }));
-  cancelStart = () => sendRuntime({ type: "CANCEL_START" });
-  signIn = (provider: "github" | "google") =>
-    this.run(() => sendRuntime({ type: "SIGN_IN", provider }));
-  openApp = () => sendRuntime({ type: "OPEN_APP" });
 
   // ---- problem detection ---------------------------------------------------
   private async detectProblem(url: string): Promise<void> {
@@ -236,9 +200,7 @@ export class PageController {
       ? { descriptionHtml: question.content, topicTags: question.topicTags }
       : null;
     this.set({ problem, question: details });
-    if (this.state.snapshot?.state.session) {
-      await sendRuntime({ type: "PROBLEM_OPENED", problem, question: details });
-    }
+    await sendRuntime({ type: "PROBLEM_OPENED", problem, question: details });
   }
 
   private currentLanguage(): string | null {
@@ -285,7 +247,10 @@ export class PageController {
       this.requestSnapshot();
       return;
     }
-    if (!this.state.snapshot?.state.session) return;
+    // Edit logs exist for interview replay and the AI review, so they are only
+    // buffered while an interview runs. Practice records what you solved, not a
+    // keystroke-level replay of it.
+    if (!this.state.snapshot?.state.interview) return;
     let events = msg.events;
     if (this.needsSnapshot) {
       const idx = events.findIndex((e) => e.full !== undefined);
@@ -324,9 +289,6 @@ export class PageController {
     if (!Number.isFinite(id)) return;
     this.lastSubmitId = id;
     this.pendingSubmissionIds.add(id);
-    if (this.state.snapshot?.state.session) {
-      this.toast("info", "Submission sent — waiting for the judge");
-    }
   }
 
   private async onCheck(url: string, body: unknown) {
@@ -358,21 +320,10 @@ export class PageController {
     this.pendingSubmissionIds.delete(id);
     if (isJudgeFailure(check)) {
       // Judge/server error: LeetCode shows no verdict, so there is nothing to capture.
-      if (this.state.snapshot?.state.session) {
-        this.toast("error", "LeetCode's judge failed — submission not captured");
-      }
       return;
     }
     const slug = this.state.problem?.slug ?? problemSlugFromUrl(window.location.href);
     if (!slug) return;
-    if (!this.state.snapshot?.state.session) {
-      if (!this.warnedCapture) {
-        this.warnedCapture = true;
-        this.toast("info", "Start a Lare session to capture submissions");
-      }
-      return;
-    }
-
     this.flush();
     const accepted = isAccepted(check);
     // Percentile histograms are computed asynchronously by LeetCode after the verdict;
@@ -412,7 +363,8 @@ export class PageController {
     };
     const res = await sendRuntime({ type: "SUBMISSION", slug, submission });
     if (!res.ok) {
-      this.toast("error", res.error ?? "Could not save submission");
+      // Nothing renders on the page any more; the popup surfaces sync failures.
+      console.warn("[lare] could not save submission:", res.error);
     }
   }
 }

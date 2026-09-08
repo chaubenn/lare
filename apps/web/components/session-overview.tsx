@@ -31,10 +31,12 @@ export function SessionOverviewSlide({
             <ListChecks className="size-3.5" />
             {overview.solved}/{overview.total} solved
           </span>
-          <span className="inline-flex items-center gap-1">
-            <Clock className="size-3.5" />
-            {formatDurationHuman(overview.activeMs)}
-          </span>
+          {overview.activeMs > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <Clock className="size-3.5" />
+              {formatDurationHuman(overview.activeMs)}
+            </span>
+          )}
         </div>
       </div>
 

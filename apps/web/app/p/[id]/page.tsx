@@ -32,7 +32,10 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
   const title = post.title?.trim() || "Untitled session";
   const problems = post.sessions?.session_problems.length ?? 0;
-  const duration = post.sessions ? formatDurationHuman(post.sessions.active_ms) : null;
+  const duration =
+    post.sessions && post.sessions.active_ms > 0
+      ? formatDurationHuman(post.sessions.active_ms)
+      : null;
   const byline = post.profiles.handle ? ` by @${post.profiles.handle}` : "";
   const fallback = `${problems} ${problems === 1 ? "problem" : "problems"}${
     duration ? ` in ${duration}` : ""
@@ -172,7 +175,8 @@ export default async function PostPage({ params }: Params) {
 
           <dl className="mt-4 flex flex-wrap gap-2 text-xs">
             <SummaryChip label={sessionKindLabel(session?.kind)} />
-            {session && (
+            {/* 0 = passively tracked practice, which has no timer. */}
+            {session && session.active_ms > 0 && (
               <SummaryChip
                 icon={<Clock className="size-3.5" />}
                 label={formatDurationHuman(session.active_ms)}

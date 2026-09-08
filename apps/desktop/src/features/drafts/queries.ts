@@ -27,6 +27,67 @@ export type DraftSession = NonNullable<Draft["sessions"]>;
 
 export const draftsKey = (userId: string) => ["drafts", userId] as const;
 export const draftKey = (id: string) => ["draft", id] as const;
+export const trackedKey = (userId: string) => ["tracked", userId] as const;
+
+/**
+ * Problems the extension has tracked passively and that have not been posted yet.
+ *
+ * They live on the user's single `is_practice_inbox` session; publishing moves
+ * them off it, which is exactly what makes them disappear from this list.
+ */
+function trackedQuery(userId: string) {
+  return supabase
+    .from("session_problems")
+    .select("*, submissions(*), sessions!inner(id, user_id, is_practice_inbox)")
+    .eq("sessions.user_id", userId)
+    .eq("sessions.is_practice_inbox", true)
+    .order("opened_at", { ascending: false });
+}
+
+export type TrackedProblemRow = QueryData<ReturnType<typeof trackedQuery>>[number];
+
+export function useTrackedProblems() {
+  const { userId } = useUser();
+  return useQuery({
+    queryKey: trackedKey(userId),
+    queryFn: async () => {
+      const { data, error } = await trackedQuery(userId);
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/**
+ * Turn a selection of tracked problems into one draft post. The RPC mints the
+ * session the post owns and moves the chosen problems onto it in a single
+ * transaction, so a half-published selection is not possible.
+ */
+export function usePublishTracked() {
+  const queryClient = useQueryClient();
+  const { userId } = useUser();
+  return useMutation({
+    mutationFn: async ({
+      sessionProblemIds,
+      title,
+    }: {
+      sessionProblemIds: string[];
+      title?: string | null;
+    }) => {
+      const { data, error } = await supabase.rpc("publish_practice_problems", {
+        problem_ids: sessionProblemIds,
+        post_title: title ?? null,
+      });
+      if (error) throw error;
+      if (!data) throw new Error("No post was created");
+      return data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: trackedKey(userId) });
+      void queryClient.invalidateQueries({ queryKey: draftsKey(userId) });
+    },
+  });
+}
 
 export function useDrafts() {
   const { userId } = useUser();
