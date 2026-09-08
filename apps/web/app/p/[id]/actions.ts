@@ -35,8 +35,10 @@ async function ownedPost(postId: string) {
   return supabase;
 }
 
-function revalidatePost(postId: string) {
-  revalidatePath(`/p/${postId}`);
+function revalidatePost() {
+  // Route pattern, not a literal path: the public URL is the post's slug, so a
+  // `/p/<uuid>` string would no longer match the page anyone is actually viewing.
+  revalidatePath("/p/[id]", "page");
   revalidatePath("/");
 }
 
@@ -50,7 +52,7 @@ export async function setPostStatus(
   const { error } = await supabase.from("posts").update(patch).eq("id", postId);
   if (error) return { error: error.message };
   if (status === "published") regenerateCard(supabase, postId, false);
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }
 
@@ -61,7 +63,7 @@ export async function setPostVisibility(
   const supabase = await ownedPost(postId);
   const { error } = await supabase.from("posts").update({ visibility }).eq("id", postId);
   if (error) return { error: error.message };
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }
 
@@ -109,7 +111,7 @@ export async function updatePost(postId: string, edit: PostEdit): Promise<Action
     .eq("id", postId);
   if (error) return { error: error.message };
   regenerateCard(supabase, postId, true);
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }
 
@@ -120,7 +122,7 @@ export async function setPostCover(postId: string, mediaId: string | null): Prom
     .update({ cover_media_id: mediaId })
     .eq("id", postId);
   if (error) return { error: error.message };
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }
 
@@ -139,7 +141,7 @@ export async function removePostImage(postId: string, mediaId: string): Promise<
   const { error } = await supabase.from("post_media").delete().eq("id", mediaId);
   if (error) return { error: error.message };
   await supabase.storage.from("post-media").remove([media.storage_path]);
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }
 
@@ -155,7 +157,7 @@ export async function reorderPostImages(postId: string, ids: string[]): Promise<
       .eq("post_id", postId);
     if (error) return { error: error.message };
   }
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }
 
@@ -174,7 +176,7 @@ export async function setImageCaption(
     .eq("id", mediaId)
     .eq("post_id", postId);
   if (error) return { error: error.message };
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }
 
@@ -210,6 +212,6 @@ export async function registerPostImage(
     position: (last?.position ?? -1) + 1,
   });
   if (error) return { error: error.message };
-  revalidatePost(postId);
+  revalidatePost();
   return { error: null };
 }

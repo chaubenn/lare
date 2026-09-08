@@ -17,11 +17,14 @@ import type { PostCommentRow } from "@/lib/posts";
  */
 export function Comments({
   postId,
+  postSlug,
   comments,
   viewerId,
   isPostOwner,
 }: {
   postId: string;
+  /** Public slug, for the login bounce. Mutations key off `postId`. */
+  postSlug: string;
   comments: PostCommentRow[];
   viewerId: string | null;
   isPostOwner: boolean;
@@ -86,7 +89,7 @@ export function Comments({
       ) : (
         <p className="text-sm text-zinc-500">
           <Link
-            href={`/login?next=${encodeURIComponent(`/p/${postId}`)}`}
+            href={`/login?next=${encodeURIComponent(`/p/${postSlug}`)}`}
             className="text-zinc-200 underline underline-offset-2"
           >
             Sign in
@@ -100,7 +103,6 @@ export function Comments({
           <CommentRow
             key={comment.id}
             comment={comment}
-            postId={postId}
             canEdit={comment.user_id === viewerId}
             canDelete={comment.user_id === viewerId || isPostOwner}
           />
@@ -112,12 +114,10 @@ export function Comments({
 
 function CommentRow({
   comment,
-  postId,
   canEdit,
   canDelete,
 }: {
   comment: PostCommentRow;
-  postId: string;
   canEdit: boolean;
   canDelete: boolean;
 }) {
@@ -186,7 +186,7 @@ function CommentRow({
                 loading={pending}
                 onClick={() =>
                   run(
-                    () => updateComment(comment.id, postId, draft),
+                    () => updateComment(comment.id, draft),
                     () => setEditing(false),
                   )
                 }
@@ -230,7 +230,7 @@ function CommentRow({
                 disabled={pending}
                 onClick={() => {
                   if (window.confirm("Delete this comment?")) {
-                    run(() => deleteComment(comment.id, postId));
+                    run(() => deleteComment(comment.id));
                   }
                 }}
                 className="inline-flex items-center gap-1 hover:text-rose-300"

@@ -146,7 +146,7 @@ export function usePublishDraft() {
           ...postPatch(edit),
         })
         .eq("id", edit.id)
-        .select("id")
+        .select("id, slug")
         .single();
       if (error) throw error;
       return data;

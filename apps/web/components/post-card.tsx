@@ -19,7 +19,7 @@ import { TimeAgo } from "./time-ago";
 export function PostCard({ post, viewerId }: { post: PostCardData; viewerId: string | null }) {
   const author = post.profiles;
   const session = post.sessions;
-  const href = `/p/${post.id}`;
+  const href = `/p/${post.slug}`;
   const authorName = author?.display_name || (author?.handle ? `@${author.handle}` : "Unknown");
   const excerpt = excerptFromHtml(post.body, 220);
   const when = post.published_at ?? post.created_at;
@@ -93,6 +93,7 @@ export function PostCard({ post, viewerId }: { post: PostCardData; viewerId: str
         <div className="p-4 pt-3 sm:px-5">
           <PostActions
             postId={post.id}
+            postSlug={post.slug}
             likeCount={post.like_count}
             commentCount={post.comment_count}
             liked={post.viewer_liked}
@@ -103,7 +104,7 @@ export function PostCard({ post, viewerId }: { post: PostCardData; viewerId: str
           />
 
           <PostCommentsPreview
-            postId={post.id}
+            postSlug={post.slug}
             comments={post.top_comments}
             totalCount={post.comment_count}
           />

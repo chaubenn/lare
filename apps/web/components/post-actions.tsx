@@ -15,6 +15,7 @@ import { togglePostLike } from "@/app/social-actions";
  */
 export function PostActions({
   postId,
+  postSlug,
   likeCount,
   commentCount,
   liked,
@@ -24,7 +25,10 @@ export function PostActions({
   showAiReview = false,
   className,
 }: {
+  /** UUID — what `togglePostLike` keys off. */
   postId: string;
+  /** Public slug — what the login bounce has to come back to. */
+  postSlug: string;
   likeCount: number;
   commentCount: number;
   liked: boolean;
@@ -49,7 +53,7 @@ export function PostActions({
 
   function onLike() {
     if (!canInteract) {
-      router.push(`/login?next=${encodeURIComponent(`/p/${postId}`)}`);
+      router.push(`/login?next=${encodeURIComponent(`/p/${postSlug}`)}`);
       return;
     }
     setError(null);

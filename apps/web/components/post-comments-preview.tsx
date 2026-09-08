@@ -7,11 +7,12 @@ import { Avatar } from "./avatar";
  * expand needed. When there are more, a "View all" link leads to the full thread.
  */
 export function PostCommentsPreview({
-  postId,
+  postSlug,
   comments,
   totalCount,
 }: {
-  postId: string;
+  /** Public slug, for the link. Mutations elsewhere still key off the UUID. */
+  postSlug: string;
   comments: PostCommentRow[];
   totalCount: number;
 }) {
@@ -21,7 +22,7 @@ export function PostCommentsPreview({
     <div className="mt-3 space-y-2.5 border-t border-zinc-800/60 pt-3">
       {totalCount > comments.length && (
         <Link
-          href={`/p/${postId}#comments`}
+          href={`/p/${postSlug}#comments`}
           className="block text-xs text-zinc-500 transition-colors hover:text-zinc-300"
         >
           View all {totalCount} comments

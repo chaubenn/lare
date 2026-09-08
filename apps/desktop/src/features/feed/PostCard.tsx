@@ -83,7 +83,7 @@ export function PostCard({
           </div>
         </div>
         <div className="shrink-0">
-          <PostLinkButton postId={post.id} />
+          <PostLinkButton postSlug={post.slug} />
         </div>
       </header>
 
