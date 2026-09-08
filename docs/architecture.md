@@ -8,9 +8,9 @@ videos, and run AI-graded mock interviews.
 
 | Part | Stack | Responsibility |
 | --- | --- | --- |
-| `apps/extension` | Chrome MV3, WXT, React | Session timer (pausable), problem capture, Monaco edit log, judge result capture, mock-interview trigger. Writes to Supabase directly; talks to the desktop over `ws://127.0.0.1:47831`. |
+| `apps/extension` | Chrome MV3, WXT, React | Passive practice capture (every problem opened, every submission judged — nothing to start or stop), Monaco edit log, mock-interview trigger. On-page UI is one recording dot, shown only while an interview records; the popup is the control surface. Writes to Supabase directly; talks to the desktop over `ws://127.0.0.1:47831`. |
 | `apps/desktop` | Tauri 2, React 19, Rust | Drafts and publishing, screen/camera/mic recording (recycled from Cap), whisper.cpp transcription, Bunny TUS uploads, studio editor, interview review. |
-| `apps/web` | Next.js 15, Vercel | Public post pages `/p/[id]`, profiles `/u/[handle]`, follower feed, follow requests. |
+| `apps/web` | Next.js 16, Vercel (`syd1`) | Public post pages `/p/[id]`, profiles `/u/[handle]`, follower feed, follow requests. |
 | `supabase/` | Postgres + RLS, Auth, Storage, Realtime, Edge Functions (Deno) | Source of truth for users, sessions, posts, videos; Bunny signing; OpenAI review. |
 | Bunny Stream | library `lare` (id 743884) | Video storage, encoding, delivery. Embed token authentication is on. |
 
@@ -18,8 +18,8 @@ videos, and run AI-graded mock interviews.
 flowchart LR
   subgraph chrome [Chrome on leetcode.com]
     MainCS["MAIN-world script: Monaco hook + fetch tap"]
-    IsoCS["Isolated script: overlay UI + same-origin GraphQL"]
-    SW["Service worker: session state, timer log, Supabase client"]
+    IsoCS["Isolated script: recording dot + same-origin GraphQL"]
+    SW["Service worker: practice inbox, interview state, Supabase client"]
   end
   subgraph desktop [Lare desktop]
     WS["axum WebSocket 127.0.0.1:47831 + OAuth loopback"]
@@ -37,7 +37,7 @@ flowchart LR
   end
   Web["Next.js web"]
   MainCS --> IsoCS --> SW
-  SW -->|"sessions, problems, submissions, edit logs, draft post"| SB
+  SW -->|"problems, submissions, edit logs, draft post"| SB
   SW -->|"session.start/pause/resume/end, edits.batch, submission"| WS
   WS --> Rec --> Exp --> Tus --> Bunny
   Exp --> Whisper --> SB
@@ -75,6 +75,21 @@ flowchart LR
 
 Edge Function configuration lives in Supabase Vault (`public.get_app_secrets`, service role only)
 with `Deno.env` taking precedence; see `supabase/functions/_shared/http.ts`.
+
+## Web deployment
+
+Vercel functions are pinned to **`syd1`** (`apps/web/vercel.json`), because the Supabase project
+lives in `ap-southeast-2`. On Vercel's default region (`iad1`) every Supabase call from a Server
+Component crossed the Pacific, and a signed-in page makes several in sequence — session, feed,
+then signing and likes and comments — so ~200 ms of latency was paid three times over before
+anything rendered. Colocating with the database is the right trade even for viewers far from
+Sydney: they pay one slow hop to the function instead of one per query.
+
+Every route reads cookies, so every route is dynamic and nothing is cached at the edge; what makes
+navigation feel instant instead is `loading.tsx` on the main routes plus
+`experimental.staleTimes` in `next.config.ts`, which lets the client router reuse a page it just
+rendered. `createClient` is memoised with React `cache`, so one request builds one Supabase client
+and verifies the JWT once.
 
 ## Time model
 

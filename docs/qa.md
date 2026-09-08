@@ -7,22 +7,26 @@ the CI workflow runs all of it on macOS and Windows. The items below are the man
 ## Chrome extension
 
 - Load `apps/extension/.output/chrome-mv3-dev` at `chrome://extensions` (Developer mode) and open
-  any LeetCode problem. The overlay pill appears bottom-right.
+  any LeetCode problem. Nothing should appear on the page — practice has no on-page UI.
 - Sign in from the popup (GitHub). The popup shows the handle; `chrome://extensions` -> Errors is
   empty.
-- **Start problem** -> timer runs -> type in the editor -> **Pause** -> **Resume** -> **Submit** a
-  solution -> the "Accepted / Wrong Answer" toast appears -> **End**. Expect in Supabase:
-  `sessions` (status ended, active_ms excludes the pause), `session_problems`, `submissions`
-  (runtime/memory percentiles and distribution present after the retry window), an edit log in
-  Storage, and a draft post.
-- **Start session** across two problems: navigating to a second problem creates a second
-  `session_problems` row; the draft lists both.
-- Content-script fragility: the pill re-attaches after LeetCode's SPA navigation and after a hard
-  reload mid-session (state restored from `chrome.storage.local`).
-- Service worker restart mid-session (click *Service worker* -> stop in `chrome://extensions`):
-  the timer continues from the event log; ending still uploads the edit log.
-- Desktop offline: **Mock interview** is disabled with an explanation; with the app open it enables
-  and the recorder pill appears within ~2 s of pressing start.
+- **Passive capture**: open a problem, type in the editor, **Submit** a solution. Without touching
+  the extension, expect in Supabase a `session_problems` row on the user's `is_practice_inbox`
+  session and a `submissions` row (runtime/memory percentiles and distribution present after the
+  retry window). The popup lists the problem as `n/m accepted`.
+- Open a second problem: a second `session_problems` row joins the same inbox session, and both
+  show up under **Tracked problems** in the desktop app's Drafts page.
+- **Publishing** a subset from Drafts calls `publish_practice_problems`: the chosen problems move
+  off the inbox onto the new post's session and disappear from the picker; the ones left behind
+  stay. `active_ms` is 0 for passively captured problems and no duration is rendered anywhere.
+- Content-script fragility: capture survives LeetCode's SPA navigation and a hard reload
+  (state restored from `chrome.storage.local`).
+- Service worker restart (click *Service worker* -> stop in `chrome://extensions`): the next
+  problem opened and the next submission are still captured.
+- Desktop offline: **Mock interview** is disabled with an explanation; with the app open it enables,
+  the recorder pill appears within ~2 s of pressing start, and the red recording dot — the
+  extension's only on-page element — shows on the problem page for as long as it records, then
+  goes when the interview ends.
 
 ## Desktop
 

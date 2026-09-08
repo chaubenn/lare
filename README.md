@@ -1,11 +1,11 @@
 # Lare
 
-Hevy for LeetCode. Log practice sessions with a pausable timer, capture your submissions
-(code, runtime and memory percentiles, the runtime distribution graph), share posts with
-followers, attach demo videos, and run AI-graded mock interviews.
+Hevy for LeetCode. Your practice is logged as you do it — every problem opened, every
+submission judged, with code, runtime and memory percentiles and the runtime distribution graph.
+Share posts with followers, attach demo videos, and run AI-graded mock interviews.
 
-- **Chrome extension** captures the problem, your Monaco edits and judge results; starts and stops
-  the timer; triggers mock interviews.
+- **Chrome extension** captures problems, your Monaco edits and judge results on its own, with
+  nothing to start or stop; triggers mock interviews from its popup.
 - **Desktop app** (Tauri) reviews drafts, records your screen/camera/mic with Cap's recording stack,
   transcribes locally with whisper.cpp, edits and uploads to Bunny Stream, and reviews interviews
   with timestamped AI feedback.
