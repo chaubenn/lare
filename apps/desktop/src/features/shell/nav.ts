@@ -13,6 +13,11 @@ export interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  /**
+   * Display label for the command palette only — the sidebar deliberately does
+   * not show it. The binding itself is positional (⌘N picks NAV_ITEMS[N - 1] in
+   * AppShell), so reordering this list reassigns the shortcuts.
+   */
   shortcut: string;
   end?: boolean;
 }

@@ -57,12 +57,11 @@ export function Sidebar() {
                 >
                   {item.label}
                 </span>
-                <span className="relative z-10 flex items-center gap-1.5">
-                  {counts[item.to] !== undefined ? (
+                {counts[item.to] !== undefined ? (
+                  <span className="relative z-10">
                     <CountBadge count={counts[item.to] ?? 0} />
-                  ) : null}
-                  <span className="lare-micro text-[var(--text-tertiary)]">{item.shortcut}</span>
-                </span>
+                  </span>
+                ) : null}
               </>
             )}
           </NavLink>
