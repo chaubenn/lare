@@ -60,6 +60,12 @@ export interface DragToPageOptions {
  * Pointer-capture 1:1 drag with velocity history, ~10px hysteresis before committing
  * a direction, endpoint projection to choose the target page, then a spring handed
  * the release velocity. Reverse-vs-commit is decided on velocity sign, not position.
+ *
+ * The pointer is captured only once a drag has actually committed to our axis, never
+ * on pointerdown. Capturing early retargets the eventual `click` to this element, so
+ * a plain tap on a control *inside* a page — the play button on a video slide — would
+ * be swallowed and never reach its handler. Deferring means a tap behaves like a tap
+ * and a swipe can still start anywhere, including on top of that button.
  */
 export function useDragToPage(
   ref: RefObject<HTMLElement | null>,
@@ -76,6 +82,7 @@ export function useDragToPage(
   state.current = { page, pageCount, onPageChange, pageWidth, axis, disabled };
 
   const dragging = useRef(false);
+  const captured = useRef(false);
   const start = useRef({ x: 0, y: 0, page: 0 });
   const samples = useRef<Sample[]>([]);
   const offset = useRef(0);
@@ -101,13 +108,19 @@ export function useDragToPage(
       if (prefersReducedMotion()) return;
       dragging.current = true;
       locked.current = null;
+      captured.current = false;
       start.current = { x: event.clientX, y: event.clientY, page: state.current.page };
       samples.current = [{ t: event.timeStamp, x: event.clientX, y: event.clientY }];
-      el.setPointerCapture(event.pointerId);
     };
 
     const onPointerMove = (event: PointerEvent) => {
       if (!dragging.current) return;
+      // Without an early capture we can miss a pointerup that happens off the
+      // element, so drop a drag whose button/contact is already gone.
+      if (event.buttons === 0) {
+        dragging.current = false;
+        return;
+      }
       samples.current.push({ t: event.timeStamp, x: event.clientX, y: event.clientY });
       if (samples.current.length > 8) samples.current.shift();
 
@@ -118,6 +131,17 @@ export function useDragToPage(
         locked.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
       }
       if (locked.current !== state.current.axis) return;
+
+      // Committed to a real swipe: take the pointer now, so the rest of the drag is
+      // ours wherever it travels and the release does not land as a click.
+      if (!captured.current) {
+        captured.current = true;
+        try {
+          el.setPointerCapture(event.pointerId);
+        } catch {
+          // Pointer already gone; the drag ends on the next event.
+        }
+      }
 
       const raw = state.current.axis === "x" ? dx : dy;
       const width = state.current.pageWidth ?? el.clientWidth;
@@ -130,8 +154,10 @@ export function useDragToPage(
     const onPointerUp = (event: PointerEvent) => {
       if (!dragging.current) return;
       dragging.current = false;
+      const wasCaptured = captured.current;
+      captured.current = false;
       try {
-        el.releasePointerCapture(event.pointerId);
+        if (wasCaptured) el.releasePointerCapture(event.pointerId);
       } catch {
         // already released
       }
