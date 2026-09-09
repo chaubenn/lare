@@ -55,21 +55,48 @@ test.afterAll(async () => {
   await context?.close();
 });
 
+/**
+ * Wipe the extension's own tracked state between tests.
+ *
+ * `__reset` only clears what the fixture server recorded; `chrome.storage.local`
+ * survives, and a problem left tracked by an earlier test is skipped as already
+ * synced by the next one. Auth lives under a different key and is left alone.
+ */
+async function resetExtensionState(): Promise<void> {
+  await sw.evaluate(async () => {
+    await chrome.storage.local.remove("lare:state");
+  });
+}
+
 async function recorded(): Promise<RecordedRequest[]> {
   return (await (await fetch(`${BASE}/__requests`)).json()) as RecordedRequest[];
 }
 
-async function openProblem(): Promise<Page> {
+async function openProblem(slug = "two-sum"): Promise<Page> {
   const page = await context.newPage();
-  await page.goto(`${BASE}/problems/two-sum/`);
+  await page.goto(`${BASE}/problems/${slug}/`);
   await page.waitForSelector("body[data-monaco-ready='1']");
   return page;
+}
+
+/** Solve the fixture problem so the extension captures a submission for it. */
+async function submitOnce(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Submit" }).click();
+  await expect(page.getByTestId("result")).toHaveText("submit:Accepted");
+}
+
+async function openPopup() {
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(popup.getByText("Tracking submissions")).toBeVisible();
+  return popup;
 }
 
 const INBOX_SESSION_ID = "00000000-0000-4000-8000-0000000000b0";
 
 test("passive tracking: opening a problem and submitting is captured with no session", async () => {
   await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
   const page = await openProblem();
 
   // Nothing is injected into the page beyond the (hidden) recording dot: no
@@ -166,8 +193,45 @@ test("passive tracking: opening a problem and submitting is captured with no ses
   await page.close();
 });
 
+test("reviewing in Lare clears the popup list without touching the inbox", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+
+  // Solve one problem: the popup offers to review it.
+  const first = await openProblem("two-sum");
+  await submitOnce(first);
+  let popup = await openPopup();
+  await expect(popup.getByText("Two Sum")).toBeVisible();
+  const review = popup.getByRole("button", { name: /Review 1 problem in Lare/ });
+  await expect(review).toBeVisible();
+
+  // Handing it over clears it here...
+  await review.click();
+  await expect(popup.getByText(/Nothing tracked yet/)).toBeVisible();
+  await expect(popup.getByRole("button", { name: /Review .* in Lare/ })).toHaveCount(0);
+  await popup.close();
+
+  // ...and nothing was un-tracked server-side: no delete, and the problem row and
+  // its submission are still the ones written earlier. The desktop app reads the
+  // inbox, so it still lists this problem until it is actually posted.
+  const sb = (await recorded()).filter((r) => r.path.startsWith("/supabase/"));
+  expect(sb.filter((r) => r.method === "DELETE")).toHaveLength(0);
+  expect(sb.filter((r) => r.path.startsWith("/supabase/rest/v1/session_problems"))).toHaveLength(1);
+
+  // A different problem afterwards counts on its own, not on top of the cleared one.
+  const second = await openProblem("add-two-numbers");
+  await submitOnce(second);
+  popup = await openPopup();
+  await expect(popup.getByRole("button", { name: /Review 1 problem in Lare/ })).toBeVisible();
+
+  await popup.close();
+  await second.close();
+  await first.close();
+});
+
 test("mock interview cannot be started from the popup without the desktop app", async () => {
   await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
   const problem = await openProblem();
 
   const popup = await context.newPage();

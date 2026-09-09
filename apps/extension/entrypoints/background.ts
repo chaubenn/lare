@@ -151,8 +151,8 @@ async function handle(req: RuntimeRequest): Promise<RuntimeResponse> {
     case "SUBMISSION":
       return submission(req.slug, req.submission);
 
-    case "DISCARD_TRACKED":
-      return discardTracked(req.sessionProblemId);
+    case "MARK_TRACKED_REVIEWED":
+      return markTrackedReviewed();
   }
 }
 
@@ -400,6 +400,7 @@ async function trackProblem(problem: ProblemInfo, question: QuestionDetails | nu
       lastSeenAt: now,
       submissionCount: 0,
       acceptedCount: 0,
+      reviewedAt: null,
       synced: false,
     };
     return {
@@ -460,14 +461,23 @@ async function ensureInbox(): Promise<string> {
   return inboxSessionId;
 }
 
-/** Drop a tracked problem locally. The server row is left for the next publish to ignore. */
-async function discardTracked(sessionProblemId: string): Promise<RuntimeResponse> {
+/**
+ * Clear the popup list and the badge once the user has gone to review them in the
+ * desktop app. Local only: the `session_problems` rows stay on the inbox, so the
+ * desktop app keeps showing everything that has not been posted yet.
+ *
+ * Entries are marked rather than removed — see `reviewedAt` in InboxProblemSchema.
+ */
+async function markTrackedReviewed(): Promise<RuntimeResponse> {
+  const now = Date.now();
   await withState(async (s) => ({
     state: {
       ...s,
       tracking: {
         ...s.tracking,
-        problems: s.tracking.problems.filter((p) => p.sessionProblemId !== sessionProblemId),
+        problems: s.tracking.problems.map((p) =>
+          p.reviewedAt === null ? { ...p, reviewedAt: now } : p,
+        ),
       },
     },
     result: undefined,
@@ -649,6 +659,10 @@ async function submission(slug: string, sub: CapturedSubmission): Promise<Runtim
             submissionCount: p.submissionCount + 1,
             acceptedCount: p.acceptedCount + (sub.accepted ? 1 : 0),
             lastSeenAt: Date.now(),
+            // Submitting again is new work, so a problem already carried over to
+            // the desktop app comes back into the list. Merely re-opening it does
+            // not (see `trackProblem`).
+            reviewedAt: null,
           }
         : p,
     );
@@ -839,9 +853,9 @@ async function refreshBadge(): Promise<void> {
     return;
   }
 
-  // Otherwise the badge is the tracked-problem count — the "it is watching"
-  // signal, and a nudge that there is something to post.
-  const count = state.tracking.problems.length;
+  // Otherwise the badge is the count of problems still waiting to be reviewed —
+  // the "it is watching" signal, and a nudge that there is something to post.
+  const count = state.tracking.problems.filter((p) => p.reviewedAt === null).length;
   if (count === 0) {
     await chrome.action.setBadgeText({ text: "" });
     return;

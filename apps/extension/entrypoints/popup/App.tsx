@@ -102,7 +102,9 @@ export function App() {
   const auth = snap?.auth ?? null;
   const status = interview ? timerStatus(interview.events) : "idle";
   const sessionId = interview?.sessionId ?? null;
-  const tracked = snap?.state.tracking.problems ?? [];
+  // Only what is still waiting: reviewed problems stay in state as the slug -> row
+  // map, but the popup and the badge treat them as cleared.
+  const tracked = (snap?.state.tracking.problems ?? []).filter((p) => p.reviewedAt === null);
   const recording = snap?.recording ?? null;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is the trigger
@@ -245,7 +247,12 @@ export function App() {
               <button
                 type="button"
                 className="btn"
-                onClick={() => void sendRuntime({ type: "OPEN_APP", path: "drafts" })}
+                onClick={() => {
+                  void sendRuntime({ type: "OPEN_APP", path: "drafts" });
+                  // Handing them over clears them here; the desktop app keeps
+                  // listing everything that has not been posted.
+                  void run(() => sendRuntime({ type: "MARK_TRACKED_REVIEWED" }));
+                }}
               >
                 Review {tracked.length === 1 ? "1 problem" : `${tracked.length} problems`} in Lare
               </button>

@@ -51,8 +51,12 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("PAUSE_SESSION") }),
   z.object({ type: z.literal("RESUME_SESSION") }),
   z.object({ type: z.literal("END_SESSION") }),
-  /** Forget a passively-tracked problem without publishing it. */
-  z.object({ type: z.literal("DISCARD_TRACKED"), sessionProblemId: z.string() }),
+  /**
+   * The user has taken the tracked problems over to the desktop app, so clear them
+   * from the popup and the badge. Purely local: the rows stay in the inbox, and the
+   * desktop app still lists everything that has not been posted.
+   */
+  z.object({ type: z.literal("MARK_TRACKED_REVIEWED") }),
   z.object({
     type: z.literal("PROBLEM_OPENED"),
     problem: ProblemInfoSchema,
