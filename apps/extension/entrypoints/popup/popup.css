@@ -24,7 +24,7 @@ body {
   gap: 10px;
   padding: 12px;
   max-height: 600px;
-  overflow: hidden;
+  overflow-y: auto;
 }
 .header {
   display: flex;
