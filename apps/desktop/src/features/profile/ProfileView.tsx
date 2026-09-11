@@ -1,5 +1,5 @@
-import { formatDurationHuman, type SolvedActivity } from "@lare/shared";
-import { Lock } from "lucide-react";
+import { formatDurationHuman, type SolvedActivity, websiteHref, websiteLabel } from "@lare/shared";
+import { ExternalLink, Lock } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner, Spinner } from "@/components/ui/States";
 import { PostCard } from "@/features/feed/PostCard";
 import type { ProfileStats } from "@/lib/json";
+import { openExternal } from "@/lib/open";
 import { FollowListModal } from "./FollowListModal";
 import type { FollowListKind, UserPost } from "./queries";
 import { StatStrip } from "./StatStrip";
@@ -19,6 +20,7 @@ export function ProfileView({
   handle,
   avatarUrl,
   bio,
+  website,
   email,
   isPrivate,
   actions,
@@ -43,6 +45,7 @@ export function ProfileView({
   handle: string | null | undefined;
   avatarUrl: string | null | undefined;
   bio?: string | null;
+  website?: string | null;
   email?: string;
   isPrivate: boolean;
   actions?: ReactNode;
@@ -84,6 +87,16 @@ export function ProfileView({
             <p className="mt-1 select-text whitespace-pre-wrap text-sm text-zinc-300">{bio}</p>
           ) : email ? (
             <p className="mt-1 text-sm text-zinc-500">No bio yet.</p>
+          ) : null}
+          {website ? (
+            <button
+              type="button"
+              onClick={() => void openExternal(websiteHref(website))}
+              className="mt-1 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
+            >
+              <ExternalLink className="size-3" aria-hidden />
+              {websiteLabel(website)}
+            </button>
           ) : null}
           {email ? <p className="mt-1 text-xs text-zinc-600">{email}</p> : null}
         </div>

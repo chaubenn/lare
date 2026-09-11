@@ -15,6 +15,7 @@ const SettingsSchema = z.object({
     .min(1, "Add a display name.")
     .max(60, "Keep it under 60 characters."),
   bio: z.string().trim().max(280, "Keep your bio under 280 characters."),
+  website: z.string().trim().max(200, "Keep the website link under 200 characters."),
   is_private: z.boolean(),
 });
 
@@ -26,6 +27,7 @@ export async function updateProfile(
     handle: formData.get("handle"),
     display_name: formData.get("display_name"),
     bio: formData.get("bio") ?? "",
+    website: formData.get("website") ?? "",
     is_private: formData.get("is_private") === "on",
   });
   if (!parsed.success) {
@@ -33,7 +35,10 @@ export async function updateProfile(
     const field = issue?.path[0];
     return {
       error: issue?.message ?? "Check the form and try again.",
-      field: field === "handle" || field === "display_name" || field === "bio" ? field : null,
+      field:
+        field === "handle" || field === "display_name" || field === "bio" || field === "website"
+          ? field
+          : null,
     };
   }
 
@@ -48,6 +53,7 @@ export async function updateProfile(
       handle: parsed.data.handle,
       display_name: parsed.data.display_name,
       bio: parsed.data.bio.length > 0 ? parsed.data.bio : null,
+      website: parsed.data.website.length > 0 ? parsed.data.website : null,
       is_private: parsed.data.is_private,
     })
     .eq("id", userId);

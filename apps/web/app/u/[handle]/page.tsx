@@ -1,8 +1,8 @@
-import { formatDurationHuman, parseSolvedActivity } from "@lare/shared";
+import { formatDurationHuman, parseSolvedActivity, websiteHref, websiteLabel } from "@lare/shared";
 import type { Profile } from "@lare/supabase-types";
 import { ActivityChart } from "@lare/ui/ActivityChart";
 import { Card, Container, Tooltip } from "@lare/ui/primitives";
-import { Lock } from "lucide-react";
+import { ExternalLink, Lock } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -96,6 +96,17 @@ export default async function ProfilePage({ params }: Params) {
             <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
               {profile.bio}
             </p>
+          )}
+          {profile.website && (
+            <a
+              href={websiteHref(profile.website)}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="mt-1 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
+            >
+              <ExternalLink className="size-3" />
+              {websiteLabel(profile.website)}
+            </a>
           )}
         </div>
         <div className="shrink-0">

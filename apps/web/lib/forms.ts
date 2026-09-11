@@ -1,7 +1,7 @@
 /** Shared state shape for `useActionState`-driven profile forms (onboarding, settings). */
 export interface ProfileFormState {
   error: string | null;
-  field: "handle" | "display_name" | "bio" | null;
+  field: "handle" | "display_name" | "bio" | "website" | null;
   ok?: boolean;
 }
 
