@@ -60,6 +60,7 @@ export function UserProfilePage() {
       handle={profile.handle}
       avatarUrl={profile.avatar_url}
       bio={profile.bio}
+      website={profile.website}
       isPrivate={profile.is_private}
       actions={
         <>

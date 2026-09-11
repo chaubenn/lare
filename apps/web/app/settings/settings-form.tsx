@@ -47,6 +47,19 @@ export function SettingsForm({ profile }: { profile: Profile }) {
         <FieldError>{state.field === "bio" ? state.error : null}</FieldError>
       </div>
 
+      <div className="space-y-1.5">
+        <Label htmlFor="website">Website</Label>
+        <Input
+          id="website"
+          name="website"
+          defaultValue={profile.website ?? ""}
+          maxLength={200}
+          autoComplete="url"
+          placeholder="yourdomain.com"
+        />
+        <FieldError>{state.field === "website" ? state.error : null}</FieldError>
+      </div>
+
       <PrivateToggle defaultChecked={profile.is_private} />
 
       <div className="flex items-center gap-3">

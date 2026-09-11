@@ -356,6 +356,7 @@ export type Database = {
           id: string
           is_private: boolean
           updated_at: string
+          website: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -366,6 +367,7 @@ export type Database = {
           id: string
           is_private?: boolean
           updated_at?: string
+          website?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -376,6 +378,7 @@ export type Database = {
           id?: string
           is_private?: boolean
           updated_at?: string
+          website?: string | null
         }
         Relationships: []
       }
