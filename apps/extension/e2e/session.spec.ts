@@ -193,36 +193,30 @@ test("passive tracking: opening a problem and submitting is captured with no ses
   await page.close();
 });
 
-test("reviewing in Lare clears the popup list without touching the inbox", async () => {
+test("the popup lists tracked problems without a hand-off button, and keeps listing them", async () => {
   await fetch(`${BASE}/__reset`);
   await resetExtensionState();
 
-  // Solve one problem: the popup offers to review it.
+  // Solve one problem: the popup just shows it. Posting happens in the desktop app,
+  // which reads the inbox straight from Supabase, so there is nothing to hand off here.
   const first = await openProblem("two-sum");
   await submitOnce(first);
   let popup = await openPopup();
   await expect(popup.getByText("Two Sum")).toBeVisible();
-  const review = popup.getByRole("button", { name: /Review 1 problem in Lare/ });
-  await expect(review).toBeVisible();
-
-  // Handing it over clears it here...
-  await review.click();
-  await expect(popup.getByText(/Nothing tracked yet/)).toBeVisible();
   await expect(popup.getByRole("button", { name: /Review .* in Lare/ })).toHaveCount(0);
   await popup.close();
 
-  // ...and nothing was un-tracked server-side: no delete, and the problem row and
-  // its submission are still the ones written earlier. The desktop app reads the
-  // inbox, so it still lists this problem until it is actually posted.
+  // Nothing local or server-side got cleared just by looking at the popup.
   const sb = (await recorded()).filter((r) => r.path.startsWith("/supabase/"));
   expect(sb.filter((r) => r.method === "DELETE")).toHaveLength(0);
   expect(sb.filter((r) => r.path.startsWith("/supabase/rest/v1/session_problems"))).toHaveLength(1);
 
-  // A different problem afterwards counts on its own, not on top of the cleared one.
+  // A second problem accumulates alongside the first, not on top of it. (The fixture
+  // page always reports "Two Sum" regardless of slug, so two rows is the signal.)
   const second = await openProblem("add-two-numbers");
   await submitOnce(second);
   popup = await openPopup();
-  await expect(popup.getByRole("button", { name: /Review 1 problem in Lare/ })).toBeVisible();
+  await expect(popup.locator(".problems li")).toHaveCount(2);
 
   await popup.close();
   await second.close();

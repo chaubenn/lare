@@ -102,9 +102,10 @@ export function App() {
   const auth = snap?.auth ?? null;
   const status = interview ? timerStatus(interview.events) : "idle";
   const sessionId = interview?.sessionId ?? null;
-  // Only what is still waiting: reviewed problems stay in state as the slug -> row
-  // map, but the popup and the badge treat them as cleared.
-  const tracked = (snap?.state.tracking.problems ?? []).filter((p) => p.reviewedAt === null);
+  // Everything this device has noticed that hasn't been posted yet. Posting (and
+  // clearing) happens in the desktop app, which reads the real inbox from the
+  // server — this list is just a local, at-a-glance echo of it.
+  const tracked = snap?.state.tracking.problems ?? [];
   const recording = snap?.recording ?? null;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is the trigger
@@ -243,20 +244,6 @@ export function App() {
                 <li className="muted">Nothing tracked yet — open a LeetCode problem.</li>
               )}
             </ul>
-            {tracked.length > 0 && (
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  void sendRuntime({ type: "OPEN_APP", path: "drafts" });
-                  // Handing them over clears them here; the desktop app keeps
-                  // listing everything that has not been posted.
-                  void run(() => sendRuntime({ type: "MARK_TRACKED_REVIEWED" }));
-                }}
-              >
-                Review {tracked.length === 1 ? "1 problem" : `${tracked.length} problems`} in Lare
-              </button>
-            )}
           </section>
 
           <section className="card">
