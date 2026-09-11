@@ -43,18 +43,6 @@ export const InboxProblemSchema = z.object({
   lastSeenAt: z.number(),
   submissionCount: z.number().int().nonnegative().default(0),
   acceptedCount: z.number().int().nonnegative().default(0),
-  /**
-   * When the user last took this problem over to the desktop app, or null while it
-   * is still waiting to be looked at. Only unreviewed problems are counted on the
-   * badge and listed in the popup.
-   *
-   * Reviewed entries are kept rather than deleted because this list doubles as the
-   * slug -> `session_problems.id` map: dropping an entry would mint a fresh row the
-   * next time the same problem is opened, duplicating it in the inbox and in the
-   * desktop picker. The server row is untouched either way — the desktop app stays
-   * the source of truth for what has actually been posted.
-   */
-  reviewedAt: z.number().nullable().default(null),
   /** Whether the `session_problems` row exists in Supabase yet. */
   synced: z.boolean().default(false),
 });

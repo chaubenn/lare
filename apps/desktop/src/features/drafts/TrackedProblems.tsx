@@ -1,4 +1,5 @@
 import { DifficultyBadge } from "@lare/ui";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { Radio } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -7,7 +8,21 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { formatListWhen, plural } from "@/lib/format";
 import { errorMessage } from "@/lib/supabase";
-import { type TrackedProblemRow, usePublishTracked, useTrackedProblems } from "./queries";
+import { inTauri } from "@/lib/tauri";
+import {
+  type TrackedProblemRow,
+  useClearTracked,
+  usePublishTracked,
+  useTrackedProblems,
+} from "./queries";
+
+async function confirmClearAll(count: number): Promise<boolean> {
+  const message = `Remove all ${plural(count, "tracked problem")}? They will no longer be available to post.`;
+  if (inTauri) {
+    return ask(message, { title: "Clear tracked problems", kind: "warning", okLabel: "Clear" });
+  }
+  return window.confirm(message);
+}
 
 /**
  * Problems the extension tracked while you were solving, waiting to be posted.
@@ -19,6 +34,7 @@ import { type TrackedProblemRow, usePublishTracked, useTrackedProblems } from ".
 export function TrackedProblems() {
   const tracked = useTrackedProblems();
   const publish = usePublishTracked();
+  const clear = useClearTracked();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -52,6 +68,20 @@ export function TrackedProblems() {
     }
   }
 
+  async function doClearAll() {
+    if (rows.length === 0 || !(await confirmClearAll(rows.length))) return;
+    try {
+      await clear.mutateAsync(rows.map((r) => r.id));
+      setSelected(new Set());
+    } catch (err) {
+      toast({
+        title: "Couldn't clear tracked problems",
+        description: errorMessage(err),
+        variant: "error",
+      });
+    }
+  }
+
   // Nothing tracked and nothing loading: stay out of the way entirely.
   if (!tracked.isPending && rows.length === 0) return null;
 
@@ -64,10 +94,22 @@ export function TrackedProblems() {
             Captured automatically by the extension. Pick the ones to post together.
           </p>
         </div>
-        <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
-          <Radio className="size-3.5" aria-hidden />
-          {plural(rows.length, "problem")}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
+            <Radio className="size-3.5" aria-hidden />
+            {plural(rows.length, "problem")}
+          </span>
+          {rows.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={clear.isPending}
+              onClick={() => void doClearAll()}
+            >
+              Clear all
+            </Button>
+          )}
+        </div>
       </div>
 
       {tracked.isPending ? (

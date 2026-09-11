@@ -89,6 +89,21 @@ export function usePublishTracked() {
   });
 }
 
+/** Drop every tracked-but-unposted problem, e.g. after a burst of noise you never meant to post. */
+export function useClearTracked() {
+  const queryClient = useQueryClient();
+  const { userId } = useUser();
+  return useMutation({
+    mutationFn: async (problemIds: string[]) => {
+      const { error } = await supabase.from("session_problems").delete().in("id", problemIds);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: trackedKey(userId) });
+    },
+  });
+}
+
 export function useDrafts() {
   const { userId } = useUser();
   return useQuery({
