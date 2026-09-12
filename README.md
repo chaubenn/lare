@@ -46,41 +46,7 @@ run **Settings > Check for updates**.
 The extension talks to the desktop app over `127.0.0.1`, so the app must be running while you
 practise. Chrome Web Store listing is coming; until then the unpacked install is the supported path.
 
-## Development
-
-Prerequisites (macOS): Node 22, pnpm 11, Rust 1.88 (pinned by `rust-toolchain.toml`), and
-`brew install cmake pkg-config deno`. Windows: Visual Studio Build Tools with the LLVM component.
-
-`main` is the developer branch. Commit there without bumping versions. The GitHub Release installers are the stable packages. After a commit, preview this checkout with:
-
-```bash
-pnpm open:main
-```
-
-That quits `/Applications/Lare.app` (it would steal the window), starts the Chrome extension watcher, and opens a Tauri hot-reload window from this tree. Load `apps/extension/.output/chrome-mv3-dev` in `chrome://extensions` once if it is not already unpacked.
-
-```bash
-pnpm install
-node scripts/setup-native-deps.mjs   # prebuilt ffmpeg for the vendored Cap crates (+ .cargo/config.toml)
-cp .env.example apps/desktop/.env    # then keep only the VITE_* lines (see the file)
-pnpm --filter @lare/shared test
-pnpm dev:web
-```
-
-Useful checks: `pnpm lint`, `pnpm -r typecheck`, `cargo clippy -p lare-desktop -p lare-recording
--p lare-transcribe -p lare-bunny -- -D warnings`, and the recording smoke tests
-`cargo run -p lare-recording --example record_smoke -- studio 4 "<mic name>"` followed by
-`cargo run -p lare-recording --example export_smoke -- <project-dir>`.
-
-If `pnpm install` fails with `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` on macOS, point Node at the
-system CA bundle: `echo "cafile=/etc/ssl/cert.pem" >> ~/.npmrc`.
-
-### Environment
-
-`.env.example` lists every variable. Clients only need the Supabase URL + publishable key, the
-site URL and the Bunny library id. Server secrets never live in clients.
-
-## Releasing
+## Release process
 
 1. Bump the version in `apps/desktop/package.json`, `apps/desktop/src-tauri/tauri.conf.json`,
    `apps/desktop/src-tauri/Cargo.toml` (they must match the tag) and
