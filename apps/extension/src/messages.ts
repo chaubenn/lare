@@ -83,6 +83,8 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
     title: z.string().min(1).max(200),
   }),
   z.object({ type: z.literal("PUBLISH_PROBLEMS"), ids: z.array(z.string().uuid()).min(1) }),
+  /** Remove tracked problems from the inbox without posting them (all of them when omitted). */
+  z.object({ type: z.literal("CLEAR_TRACKED"), ids: z.array(z.string().uuid()).optional() }),
 ]);
 export type RuntimeRequest = z.infer<typeof RuntimeRequestSchema>;
 
@@ -96,6 +98,8 @@ export interface RuntimeSnapshot {
   state: z.infer<typeof ExtensionStateSchema>;
   auth: AuthInfo;
   appConnected: boolean;
+  /** Why a graded interview cannot start right now; null when it can. */
+  gradingBlocker: string | null;
   recording: RecordingInfo | null;
 }
 
@@ -105,6 +109,7 @@ export function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | nul
     state: res.state,
     auth: res.auth ?? null,
     appConnected: res.appConnected ?? false,
+    gradingBlocker: res.gradingBlocker ?? null,
     recording: res.recording ?? null,
     capture: res.capture ?? null,
   };

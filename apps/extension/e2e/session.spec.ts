@@ -215,7 +215,11 @@ test("the side panel lists tracked problems without a hand-off button, and keeps
   // Nothing local or server-side got cleared just by looking at the side panel.
   const sb = (await recorded()).filter((r) => r.path.startsWith("/supabase/"));
   expect(sb.filter((r) => r.method === "DELETE")).toHaveLength(0);
-  expect(sb.filter((r) => r.path.startsWith("/supabase/rest/v1/session_problems"))).toHaveLength(1);
+  expect(
+    sb.filter(
+      (r) => r.method === "POST" && r.path.startsWith("/supabase/rest/v1/session_problems"),
+    ),
+  ).toHaveLength(1);
 
   // A second problem accumulates alongside the first, not on top of it. (The fixture
   // page always reports "Two Sum" regardless of slug, so two rows is the signal.)
@@ -239,12 +243,17 @@ test("grading is explicit: cloud-only interview is available without desktop", a
 
   // The side panel is the only control surface now.
   await expect(panel.getByText("Tracking submissions")).toBeVisible();
+  // Without a desktop app the panel starts ungraded instead of on a dead, disabled button.
   const start = panel.getByRole("button", { name: /Start mock interview/ });
-  await expect(start).toBeDisabled();
-  await expect(panel.getByText(/Requires a compatible desktop app/)).toBeVisible();
-  await panel.getByRole("checkbox", { name: "Transcript & AI review" }).uncheck();
+  const gradedBox = panel.getByRole("checkbox", { name: "Transcript & AI review" });
+  await expect(gradedBox).not.toBeChecked();
   await expect(start).toBeEnabled();
   await expect(panel.getByText(/Disables both transcript and AI review/)).toBeVisible();
+
+  // Asking for grading says exactly what is missing.
+  await gradedBox.check();
+  await expect(start).toBeDisabled();
+  await expect(panel.getByText(/desktop app isn't running/)).toBeVisible();
 
   await panel.close();
   await problem.close();
@@ -265,6 +274,67 @@ test("publish selected cloud inbox problems opens a draft without desktop", asyn
   await draft.close();
   await panel.close();
   await problem.close();
+});
+
+const badgeText = () => sw.evaluate(() => chrome.action.getBadgeText({}));
+
+test("clear all removes tracked problems from the panel, the badge and the inbox", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  const problem = await openProblem();
+  await submitOnce(problem);
+  await expect.poll(badgeText).toBe("1");
+
+  const panel = await openPanel();
+  await expect(panel.getByText("Two Sum")).toBeVisible();
+  await panel.getByRole("button", { name: "Clear all" }).click();
+  await panel.getByRole("button", { name: "Confirm clear" }).click();
+  await expect(panel.getByText(/Nothing tracked yet/)).toBeVisible();
+  await expect.poll(badgeText).toBe("");
+
+  const deletes = (await recorded()).filter(
+    (r) => r.method === "DELETE" && r.path.startsWith("/supabase/rest/v1/session_problems"),
+  );
+  expect(deletes).toHaveLength(1);
+  expect(deletes[0]?.path).toContain(`session_id=eq.${INBOX_SESSION_ID}`);
+
+  await panel.close();
+  await problem.close();
+});
+
+test("problems posted from another client drop off the panel and the badge", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  const problem = await openProblem();
+  await submitOnce(problem);
+  await expect.poll(badgeText).toBe("1");
+
+  // The desktop app publishes (or clears) them: they leave the server inbox.
+  await fetch(`${BASE}/__inbox/empty`);
+  const panel = await openPanel();
+  await expect(panel.getByText(/Nothing tracked yet/)).toBeVisible();
+  await expect.poll(badgeText).toBe("");
+
+  await panel.close();
+  await problem.close();
+});
+
+test("the permission tab asks for the microphone, reports back and closes itself", async () => {
+  const panel = await context.newPage();
+  await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  const result = panel.evaluate(
+    () =>
+      new Promise((resolve) => {
+        chrome.runtime.onMessage.addListener((msg) => {
+          if (msg?.type === "LARE_MEDIA_PERMISSION_RESULT") resolve(msg);
+        });
+      }),
+  );
+  const tab = await context.newPage();
+  await tab.goto(`chrome-extension://${extensionId}/permissions.html?camera=0`);
+  expect(await result).toMatchObject({ granted: true, error: null });
+  await tab.waitForEvent("close");
+  await panel.close();
 });
 
 test("offscreen code records real media chunks, uploads during recording and finalizes", async () => {

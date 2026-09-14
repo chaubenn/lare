@@ -32,6 +32,8 @@ let checkCalls = new Map();
 let submitCounter = 1000;
 let submissionIdForRun = 0;
 const uploads = new Map();
+/** `session_problems` ids currently on the mock inbox, so reads and deletes see earlier writes. */
+const inboxProblems = new Set();
 
 const question = {
   questionId: "1",
@@ -141,6 +143,12 @@ const server = createServer(async (req, res) => {
     requests.length = 0;
     checkCalls = new Map();
     submittedCode.clear();
+    inboxProblems.clear();
+    return json(res, 200, { ok: true });
+  }
+  // Simulates another client (the desktop app) posting or clearing every inbox problem.
+  if (path === "/__inbox/empty") {
+    inboxProblems.clear();
     return json(res, 200, { ok: true });
   }
 
@@ -299,7 +307,10 @@ const server = createServer(async (req, res) => {
     if (sub.startsWith("/rest/v1/rpc/")) {
       const fn = sub.slice("/rest/v1/rpc/".length).split("?")[0];
       if (fn === "practice_inbox") return json(res, 200, INBOX_SESSION_ID);
-      if (fn === "publish_practice_problems") return json(res, 200, crypto.randomUUID());
+      if (fn === "publish_practice_problems") {
+        for (const id of body?.problem_ids ?? []) inboxProblems.delete(id);
+        return json(res, 200, crypto.randomUUID());
+      }
       return json(res, 404, { message: `unmocked rpc ${fn}` });
     }
 
@@ -308,6 +319,25 @@ const server = createServer(async (req, res) => {
       const wantsRepresentation = String(req.headers.prefer ?? "").includes(
         "return=representation",
       );
+      if (table === "session_problems") {
+        if (method === "POST") {
+          const rows = Array.isArray(body) ? body : [body ?? {}];
+          for (const row of rows)
+            if (row.session_id === INBOX_SESSION_ID) inboxProblems.add(row.id);
+        }
+        if (method === "GET" && url.searchParams.get("session_id") === `eq.${INBOX_SESSION_ID}`) {
+          return json(
+            res,
+            200,
+            [...inboxProblems].map((id) => ({ id })),
+          );
+        }
+        if (method === "DELETE") {
+          const ids = /^in\.\((.*)\)$/.exec(url.searchParams.get("id") ?? "")?.[1] ?? "";
+          for (const id of ids.split(",")) inboxProblems.delete(id.replaceAll('"', ""));
+          return json(res, 200, []);
+        }
+      }
       if (method === "POST") {
         const rows = Array.isArray(body) ? body : [body ?? {}];
         const withIds = rows.map((r) => ({ id: crypto.randomUUID(), ...r }));

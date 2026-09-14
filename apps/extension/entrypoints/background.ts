@@ -26,7 +26,9 @@ import {
 import { loadState, withState } from "@/src/storage";
 import { currentUserId, getSupabase } from "@/src/supabase";
 import {
+  deleteInboxProblems,
   finalizeSession,
+  listInboxProblemIds,
   publishInboxProblems,
   resolveInboxSession,
   syncProblemClose,
@@ -41,6 +43,8 @@ import { repairGroup, restoreGroup, startGroup } from "@/src/tabGroup";
 import { DesktopClient } from "@/src/ws";
 
 const TICK_ALARM = "lare-tick";
+/** Periodically drops tracked problems that were posted or cleared from another client. */
+const RECONCILE_ALARM = "lare-reconcile";
 const desktop = new DesktopClient();
 /**
  * In-flight `session_problems` upserts, keyed by slug. `submissions` has a
@@ -87,6 +91,11 @@ export default defineBackground(() => {
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === TICK_ALARM) void refreshBadge();
+    if (alarm.name === RECONCILE_ALARM) void reconcileTracked().catch(console.warn);
+  });
+  // `create` resets the period, and the worker restarts far more often than every few minutes.
+  void chrome.alarms.get(RECONCILE_ALARM).then((alarm) => {
+    if (!alarm) return chrome.alarms.create(RECONCILE_ALARM, { periodInMinutes: 2 });
   });
 
   chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
@@ -249,10 +258,38 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
         },
         result: undefined,
       }));
+      await refreshBadge();
       await broadcast();
       return { ok: true, postId, ...(await snapshot()) };
     }
+    case "CLEAR_TRACKED": {
+      const state = await loadState();
+      const ids = new Set(req.ids ?? state.tracking.problems.map((p) => p.sessionProblemId));
+      const synced = state.tracking.problems
+        .filter((p) => p.synced && ids.has(p.sessionProblemId))
+        .map((p) => p.sessionProblemId);
+      if (synced.length > 0) {
+        const inboxSessionId = state.tracking.inboxSessionId;
+        if (!inboxSessionId) throw new Error("Practice inbox unavailable; try again");
+        await deleteInboxProblems(inboxSessionId, synced);
+      }
+      await withState(async (s) => ({
+        state: {
+          ...s,
+          tracking: {
+            ...s.tracking,
+            problems: s.tracking.problems.filter((p) => !ids.has(p.sessionProblemId)),
+          },
+        },
+        result: undefined,
+      }));
+      await refreshBadge();
+      await broadcast();
+      return { ok: true, ...(await snapshot()) };
+    }
     case "GET_STATE":
+      // The side panel opening is the moment a stale list would be noticed.
+      if (sourceTabId === undefined) void reconcileTracked().catch(console.warn);
       return { ok: true, ...(await snapshot()) };
 
     case "SIGN_IN":
@@ -275,6 +312,7 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
       await signOut();
       desktop.close();
       await chrome.storage.local.remove(["lare:state", CAPTURE_KEY]);
+      await refreshBadge();
       await broadcast();
       return { ok: true, ...(await snapshot()) };
     }
@@ -615,6 +653,39 @@ async function trackProblem(problem: ProblemInfo, question: QuestionDetails | nu
   }
 }
 
+/**
+ * Forget tracked problems that are no longer on the server inbox: posted (from
+ * the desktop app, the web or elsewhere) or cleared. Without this the side panel
+ * and the badge keep counting work that has already been dealt with, and later
+ * submissions attach to a row that now belongs to a published post.
+ *
+ * Only entries already synced before the request went out are candidates, so a
+ * row whose upsert lands mid-request is never mistaken for a deleted one.
+ */
+async function reconcileTracked(): Promise<void> {
+  const { tracking } = await loadState();
+  const { inboxSessionId } = tracking;
+  const synced = tracking.problems.filter((p) => p.synced).map((p) => p.sessionProblemId);
+  if (!inboxSessionId || synced.length === 0 || !(await currentUserId())) return;
+
+  const onServer = await listInboxProblemIds(inboxSessionId);
+  const handled = new Set(synced.filter((id) => !onServer.has(id)));
+  if (handled.size === 0) return;
+  await withState(async (s) => ({
+    state: {
+      ...s,
+      tracking: {
+        // An empty inbox may mean the inbox itself is gone; re-resolve it next time.
+        inboxSessionId: onServer.size === 0 ? null : s.tracking.inboxSessionId,
+        problems: s.tracking.problems.filter((p) => !handled.has(p.sessionProblemId)),
+      },
+    },
+    result: undefined,
+  }));
+  await refreshBadge();
+  await broadcast();
+}
+
 /** The inbox session id, resolved once per worker lifetime and cached in state. */
 async function ensureInbox(): Promise<string> {
   const cached = (await loadState()).tracking.inboxSessionId;
@@ -858,6 +929,10 @@ async function submission(
 // ---------------------------------------------------------------------------
 async function probeDesktop(userId: string | null): Promise<boolean> {
   try {
+    // Capabilities are fixed at handshake time, so a connection made before the app signed in or
+    // downloaded its speech model would report "unavailable" forever. Handshake again instead.
+    if (desktop.connected && !desktop.gradingAvailable(userId) && !(await loadState()).interview)
+      desktop.close();
     await desktop.connect(userId, 3000);
     return desktop.gradingAvailable(userId);
   } catch {
@@ -930,6 +1005,7 @@ async function snapshot(): Promise<RuntimeSnapshot> {
     state: { ...state, appConnected },
     auth,
     appConnected,
+    gradingBlocker: desktop.gradingBlocker(auth?.userId ?? null),
     capture,
     recording: capture
       ? {

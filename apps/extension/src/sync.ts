@@ -74,6 +74,35 @@ export async function trackInboxProblem(
   if (error) throw new Error(`session_problems upsert: ${error.message}`);
 }
 
+/**
+ * Ids of the problems still on the inbox. Publishing moves rows off it and the
+ * desktop app's "Clear all" deletes them, so anything missing has been handled.
+ */
+export async function listInboxProblemIds(inboxSessionId: string): Promise<Set<string>> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("session_problems")
+    .select("id")
+    .eq("session_id", inboxSessionId);
+  if (error) throw new Error(`session_problems list: ${error.message}`);
+  return new Set(data.map((row) => row.id));
+}
+
+/** Drop tracked problems from the inbox without posting them. */
+export async function deleteInboxProblems(
+  inboxSessionId: string,
+  sessionProblemIds: string[],
+): Promise<void> {
+  if (sessionProblemIds.length === 0) return;
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("session_problems")
+    .delete()
+    .eq("session_id", inboxSessionId)
+    .in("id", sessionProblemIds);
+  if (error) throw new Error(`session_problems delete: ${error.message}`);
+}
+
 /** Publish a chosen set of tracked problems as one draft post. Returns the post id. */
 export async function publishInboxProblems(
   sessionProblemIds: string[],

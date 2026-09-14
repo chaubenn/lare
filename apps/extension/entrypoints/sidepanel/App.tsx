@@ -1,6 +1,7 @@
 import { activeMs, formatDuration, timerStatus } from "@lare/shared";
 import { Emblem } from "@lare/ui/brand";
 import { useCallback, useEffect, useState } from "react";
+import { hasMediaPermission, requestMediaPermission } from "@/src/mediaPermission";
 import { type RuntimeSnapshot, type StateBroadcast, sendRuntime, toSnapshot } from "@/src/messages";
 import { PAGE_PROBLEM_REQUEST, type PageProblemReply } from "@/src/pageController";
 
@@ -14,7 +15,10 @@ export function App() {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [confirmEnd, setConfirmEnd] = useState(false);
-  const [graded, setGraded] = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
+  // Follows whether the desktop app can grade until the user picks, so a fresh install without the
+  // app is not stuck on a disabled Start button.
+  const [gradedChoice, setGraded] = useState<boolean | null>(null);
   const [facecam, setFacecam] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [, setTick] = useState(0);
@@ -59,7 +63,6 @@ export function App() {
       else {
         const next = toSnapshot(res);
         if (next) setSnap(next);
-        if (res.postId) await chrome.tabs.create({ url: `${SITE_URL}/drafts/${res.postId}` });
       }
       return res;
     } finally {
@@ -91,15 +94,19 @@ export function App() {
       setError("Open a LeetCode problem tab first.");
       return;
     }
-    // Permission prompts need a visible extension document, not the hidden offscreen page.
-    try {
-      const permission = await navigator.mediaDevices.getUserMedia({ audio: true, video: facecam });
-      for (const track of permission.getTracks()) track.stop();
-    } catch (e) {
-      setError(
-        `Microphone${facecam ? " and camera" : ""} permission required: ${e instanceof Error ? e.message : String(e)}`,
-      );
-      return;
+    // The side panel cannot show a permission prompt, so ask from a tab (see mediaPermission.ts).
+    if (!(await hasMediaPermission(facecam))) {
+      setBusy(true);
+      try {
+        const result = await requestMediaPermission(facecam);
+        if (!result.granted) {
+          setError(result.error ?? "Microphone access is required for a mock interview.");
+          return;
+        }
+      } finally {
+        setBusy(false);
+      }
+      await chrome.tabs.update(tab.id, { active: true }).catch(() => undefined);
     }
     await run(() =>
       sendRuntime({
@@ -122,6 +129,10 @@ export function App() {
   // server — this list is just a local, at-a-glance echo of it.
   const tracked = snap?.state.tracking.problems ?? [];
   const recording = snap?.recording ?? null;
+  const graded = gradedChoice ?? !!snap?.appConnected;
+  const gradingBlocker = snap?.gradingBlocker ?? null;
+  // Ids posted or cleared elsewhere must not stay selected.
+  const selectedIds = selected.filter((id) => tracked.some((p) => p.sessionProblemId === id));
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is the trigger
   useEffect(() => {
@@ -250,12 +261,12 @@ export function App() {
                     type="checkbox"
                     aria-label={`Select ${p.title || p.slug}`}
                     disabled={!p.synced}
-                    checked={selected.includes(p.sessionProblemId)}
+                    checked={selectedIds.includes(p.sessionProblemId)}
                     onChange={(e) =>
                       setSelected(
                         e.target.checked
-                          ? [...selected, p.sessionProblemId]
-                          : selected.filter((id) => id !== p.sessionProblemId),
+                          ? [...selectedIds, p.sessionProblemId]
+                          : selectedIds.filter((id) => id !== p.sessionProblemId),
                       )
                     }
                   />
@@ -274,13 +285,58 @@ export function App() {
             <button
               type="button"
               className="btn"
-              disabled={busy || selected.length === 0}
+              disabled={busy || selectedIds.length === 0}
               onClick={() =>
-                void run(() => sendRuntime({ type: "PUBLISH_PROBLEMS", ids: selected }))
+                void run(() => sendRuntime({ type: "PUBLISH_PROBLEMS", ids: selectedIds })).then(
+                  (res) => {
+                    setSelected([]);
+                    if (res.ok && res.postId)
+                      void chrome.tabs.create({ url: `${SITE_URL}/drafts/${res.postId}` });
+                  },
+                )
               }
             >
               Create draft from selected problems
             </button>
+            {tracked.length > 0 && !confirmClear && (
+              <button
+                type="button"
+                className="link"
+                disabled={busy}
+                onClick={() => setConfirmClear(true)}
+              >
+                {selectedIds.length > 0 ? `Clear ${selectedIds.length} selected` : "Clear all"}
+              </button>
+            )}
+            {confirmClear && (
+              <div className="confirm-sheet" role="dialog" aria-label="Clear tracked problems">
+                <p>
+                  {selectedIds.length > 0
+                    ? `Remove ${selectedIds.length} selected problem${selectedIds.length === 1 ? "" : "s"}`
+                    : "Remove every tracked problem"}{" "}
+                  from your inbox without posting? Their captured submissions are deleted too.
+                </p>
+                <div className="row">
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    disabled={busy}
+                    onClick={() => {
+                      setConfirmClear(false);
+                      const ids = selectedIds.length > 0 ? selectedIds : undefined;
+                      void run(() => sendRuntime({ type: "CLEAR_TRACKED", ids })).then(() =>
+                        setSelected([]),
+                      );
+                    }}
+                  >
+                    Confirm clear
+                  </button>
+                  <button type="button" className="btn" onClick={() => setConfirmClear(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="card">
@@ -391,9 +447,15 @@ export function App() {
                 </label>
                 <p className="muted">
                   {graded
-                    ? "Requires a compatible desktop app running local Whisper. Older builds cannot grade this recording."
+                    ? "Transcribed by local Whisper in the desktop app, then AI reviewed."
                     : "Ungraded: video only. Disables both transcript and AI review; desktop is not required."}
                 </p>
+                {graded && gradingBlocker && (
+                  <p className="error" role="status">
+                    Can't grade yet: {gradingBlocker} Or untick Transcript &amp; AI review to record
+                    without it.
+                  </p>
+                )}
                 <label>
                   <input
                     type="checkbox"
@@ -413,7 +475,7 @@ export function App() {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={busy || (graded && !snap.appConnected)}
+                  disabled={busy || (graded && !!gradingBlocker)}
                   onClick={() => void startInterview()}
                 >
                   Start mock interview
