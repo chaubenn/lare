@@ -13,7 +13,7 @@ pub mod ws_server;
 
 use std::sync::{Arc, Mutex};
 
-use lare_core::{WS_PORT, protocol::AppToExt};
+use lare_core::WS_PORT;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -52,15 +52,6 @@ fn ws_status(state: State<'_, AppState>) -> WsStatus {
         connected: state.ws.connected(),
         port: WS_PORT,
     }
-}
-
-/// Broadcast an `AppToExt` frame (as JSON) to every connected extension client.
-#[tauri::command]
-fn ws_send(state: State<'_, AppState>, message: serde_json::Value) -> Result<(), String> {
-    let msg: AppToExt =
-        serde_json::from_value(message).map_err(|e| format!("not a valid AppToExt message: {e}"))?;
-    state.ws.broadcast(msg);
-    Ok(())
 }
 
 #[tauri::command]
@@ -162,13 +153,9 @@ pub fn run() {
             focus_main_window(app);
         }))
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState {
@@ -183,7 +170,6 @@ pub fn run() {
             commands::prepare_bunny_upload,
             set_current_user,
             ws_status,
-            ws_send,
             app_version,
             take_initial_deeplink,
             commands::list_devices,

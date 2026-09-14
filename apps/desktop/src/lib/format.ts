@@ -5,13 +5,6 @@ export function formatDateTime(iso: string | null | undefined): string {
   return formatLocalTimestamp(iso);
 }
 
-export function formatDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { dateStyle: "medium" });
-}
-
 export function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
   return `${n} ${n === 1 ? singular : pluralForm}`;
 }
