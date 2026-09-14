@@ -1,8 +1,8 @@
 name: CI (dev)
 
 # The fast lane. `dev` is the shared integration branch: @chaubenn and @psilde push to it
-# freely and QA each other's work locally, so it needs a signal in minutes, not the ~40
-# the full matrix takes. This runs only the checks that catch the mistakes a reviewer
+# freely and QA each other's work locally, so it needs a signal in minutes, not the ~10
+# (warm) to much longer (cold cache) the full matrix takes. This runs only the checks that catch the mistakes a reviewer
 # cannot see at a glance — formatting, types, unit tests, and that the web app still
 # builds.
 #

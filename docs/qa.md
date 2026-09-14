@@ -69,6 +69,11 @@ going through Bunny.
   retry window). The panel lists the problem as `n/m accepted`.
 - Open a second problem: a second `session_problems` row joins the same inbox session, and both
   show up under **Tracked problems** in the desktop app's Drafts page *and* on the web `/drafts`.
+- The toolbar badge counts unposted tracked problems. Post or **Clear all** them from the
+  desktop app, then open the side panel: they drop off the panel and the badge clears (the
+  worker also re-checks every two minutes).
+- **Clear all** in the side panel (or tick some and **Clear N selected**) asks to confirm, then
+  deletes those rows from the inbox: gone from the panel, the badge, and the desktop picker.
 - **Publishing** a subset from the panel or from Drafts calls `publish_practice_problems`: the
   chosen problems move off the inbox onto the new post's session and disappear from the picker;
   the ones left behind stay. `active_ms` is 0 for passively captured problems and no duration is
@@ -81,9 +86,16 @@ going through Bunny.
 
 ### Interview capture (the extension owns this now)
 
+- **First interview on a fresh profile**: Chrome cannot show a permission prompt in a side
+  panel, so **Start** opens a small Lare tab that asks for the mic (and camera, if ticked),
+  closes itself once allowed, and the interview starts. Deny it: the panel says what to change.
+  On macOS with Chrome switched off under Privacy & Security → Microphone, the message says so
+  instead of a bare "Permission denied".
+- **Transcript & AI review** starts ticked only when the desktop app can grade. Tick it without
+  one and the panel names the blocker: app not running, signed out, a different account, or no
+  speech model. Fix it and press **Check desktop grading connection**: it reconnects and clears.
 - **Graded, desktop app running**: start a mock interview from the side panel with **Transcript &
-  AI review** on. Grant mic (and camera, if ticked) when the panel asks — the prompt comes from
-  the panel, not from the hidden offscreen document.
+  AI review** on.
   - The red dot appears on the problem page and Chrome's tab strip turns red
     ("Lare • Recording").
   - Upload progresses *while recording*. Watch the network panel or the panel's progress.
@@ -115,7 +127,13 @@ going through Bunny.
 
 ## Desktop
 
-- First launch: sign in (GitHub, loopback redirect), onboarding sets a handle.
+- First launch: sign in (GitHub, loopback redirect), onboarding sets a handle, then **Set up
+  recording** lists Screen Recording, Camera and Microphone plus the speech model. Allow each,
+  **Quit & reopen Lare** after Screen Recording, and it does not come back once everything is
+  granted. **Skip for now** is remembered for that app version only.
+- Install the next build over it: with a stable signing identity configured
+  (`docs/releasing.md`) nothing is asked again; without one, setup reappears listing what the
+  update revoked.
 - Settings -> Recording: permissions show Granted after allowing Screen Recording, Microphone and
   Camera (macOS needs a restart after Screen Recording). Device pickers list displays/mics/cameras.
   Download `small.en` once — grading is unavailable without a local model.

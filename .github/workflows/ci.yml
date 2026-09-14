@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   # Every PR, which in practice means dev -> main. Pushes to dev run the fast lane in
-  # ci-dev.yml instead; this workflow is the ~40 minute one and is paid once, at the PR.
+  # ci-dev.yml instead; this workflow is the slow one (~10 min warm) and is paid once, at the PR.
   pull_request:
     branches: [main]
 
