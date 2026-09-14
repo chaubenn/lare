@@ -5,7 +5,7 @@
  * metrics. "Beats" is LeetCode's runtime percentile for the best accepted submission;
  * we never guess a Big-O complexity because we do not have one.
  */
-import { type Difficulty, LANGUAGE_LABELS } from "./leetcode";
+import { type Difficulty, LANGUAGE_LABELS } from "../leetcode/leetcode";
 
 export const DIFFICULTIES: readonly Difficulty[] = ["Easy", "Medium", "Hard"] as const;
 

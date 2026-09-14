@@ -4,8 +4,8 @@
  * by crates/lare-core/src/protocol.rs — keep both in sync (PROTOCOL_VERSION).
  */
 import { z } from "zod";
+import { DifficultySchema } from "../leetcode/leetcode";
 import { EditEventSchema } from "./edits";
-import { DifficultySchema } from "./leetcode";
 
 export const ProblemInfoSchema = z.object({
   slug: z.string(),
