@@ -2,6 +2,7 @@ import { Navigate, Outlet } from "react-router";
 import { ErrorState, PageSpinner } from "@/components/ui/States";
 import { useAuth } from "./AuthProvider";
 import { OnboardingPage } from "./OnboardingPage";
+import { SetupGate } from "./SetupPage";
 
 /** Gate: restores the session, forces onboarding until a handle exists, then renders children. */
 export function RequireAuth() {
@@ -17,5 +18,9 @@ export function RequireAuth() {
     );
   }
   if (!profile || profile.handle === null) return <OnboardingPage />;
-  return <Outlet />;
+  return (
+    <SetupGate>
+      <Outlet />
+    </SetupGate>
+  );
 }
