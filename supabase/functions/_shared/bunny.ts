@@ -22,6 +22,8 @@ export interface BunnyVideo {
   encodeProgress: number;
   availableResolutions: string | null;
   thumbnailFileName: string | null;
+  hasMP4Fallback?: boolean;
+  outputCodecs?: string;
 }
 
 export async function createVideo(title: string): Promise<BunnyVideo> {
@@ -126,9 +128,8 @@ export function mapWebhookStatus(
     case 0: // Queued
     case 1: // Processing
     case 2: // Encoding
-    case 4: // Resolution finished: Bunny encodes lowest-first, so the first of these means only
-      // 360p exists. Publishing now would pin viewers to 360p; wait for 3 (all renditions).
       return "processing";
+    case 4: // First resolution finished means playable: https://bunny.net/docs/stream/webhooks
     case 3: // Finished
       return "ready";
     case 5: // Failed
