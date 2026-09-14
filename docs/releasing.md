@@ -7,7 +7,8 @@ has been through the full CI matrix. `dev` is the shared integration branch.
 
 ```
 feature work ──▶ dev ──(PR)──▶ main ──(tag)──▶ release
-                 │              │
+                 │  │           │
+                 │  └─(dev tag)─┴──▶ dev release (prerelease, QA only)
             fast CI (~3 min)   full CI (~40 min)
 ```
 
@@ -20,6 +21,41 @@ feature work ──▶ dev ──(PR)──▶ main ──(tag)──▶ release
   than once per commit.
 - Never push straight to `main`. The full matrix is the only thing standing between a
   commit and a signed build on someone's machine.
+
+## Dev releases
+
+A dev release is a QA build cut straight from `dev`. It exists for the two things that
+cannot be tested from a local `pnpm dev`: installing the desktop app from a fresh
+download, and loading the packaged Chrome extension. It is **not** a shipping path — no
+PR to `main`, no full CI matrix, nothing marked latest.
+
+```
+git tag dev-v1.0.0-1 && git push origin dev-v1.0.0-1
+```
+
+Tag `dev-vX.Y.Z-N` on a `dev` commit: `X.Y.Z` is the current app version, `N` counts the
+QA builds cut against it. `dev-release.yml` then builds the same three installers and the
+extension zip that `release.yml` does, and publishes them as a GitHub **pre-release**.
+
+What it deliberately skips:
+
+- **The `dev -> main` PR gate.** No Rust matrix beyond the build itself, no Playwright
+  e2e, no lint or unit tests. Those protect `main`; a QA build does not need them.
+- **`latest.json`.** The dev release carries only the four downloads. Installed apps poll
+  `releases/latest/download/latest.json`, and GitHub never resolves `latest` to a
+  pre-release, so a dev build cannot reach anyone who did not download it by hand.
+
+The build itself is not free: compiling three Rust targets takes roughly 30–40 minutes
+wall clock (they run in parallel), the same as a real release. The extension zip lands in
+a couple of minutes. Nothing about the fast path makes the compiler faster — what is
+saved is the ~40 minute gate, not the build.
+
+Because the app version stays `X.Y.Z`, a machine that installed `dev-v1.0.0-3` reports the
+same version as the eventual `v1.0.0` and will not self-update onto it. QA machines
+reinstall over the top when the real release ships.
+
+Triggering is tag-only, on purpose: `workflow_dispatch` requires the workflow file to
+exist on the default branch, and `dev-release.yml` lives only on `dev`.
 
 ## Cutting a release
 
