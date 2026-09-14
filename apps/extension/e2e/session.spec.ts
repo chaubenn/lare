@@ -366,6 +366,78 @@ test("a refused tab capture parks Start on the toolbar icon, and Cancel restores
   await problem.close();
 });
 
+test("a recording survives the tab loading frames or reloading, and keeps its consent dot", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  const problem = await openProblem();
+  const tabId = await sw.evaluate(
+    async () => (await chrome.tabs.query({ url: "http://localhost/problems/*" }))[0]?.id ?? null,
+  );
+  // An interview recording on this tab, as the background and offscreen document record it.
+  await sw.evaluate(async (id) => {
+    const sessionId = "00000000-0000-4000-8000-0000000000c1";
+    const t = Date.now();
+    await chrome.storage.local.set({
+      "lare:capture": { sessionId, tabId: id, graded: false, state: "recording" },
+      "lare:state": {
+        version: 2,
+        interview: {
+          sessionId,
+          kind: "interview",
+          scope: "problem",
+          startedAt: t,
+          events: [{ t, type: "start" }],
+          problems: [],
+          currentSlug: null,
+          tabId: id,
+          facecam: false,
+          synced: true,
+        },
+        tracking: { inboxSessionId: null, problems: [] },
+        appConnected: false,
+        pendingSync: [],
+      },
+    });
+  }, tabId);
+  // Ending the session would stop the capture; with no offscreen document here that fails and
+  // parks the session in pendingSync, so an empty pendingSync means nothing tried to end it.
+  const status = () =>
+    sw.evaluate(async () => {
+      const got = await chrome.storage.local.get(["lare:capture", "lare:state"]);
+      const capture = got["lare:capture"] as { state?: string } | undefined;
+      const state = got["lare:state"] as { interview: unknown; pendingSync: string[] } | undefined;
+      return {
+        capture: capture?.state,
+        interview: !!state?.interview,
+        pendingSync: state?.pendingSync.length ?? 0,
+      };
+    });
+  const alive = { capture: "recording", interview: true, pendingSync: 0 };
+  const dot = (page: Page) => page.locator("lare-overlay").locator(".lare-rec");
+
+  // LeetCode's Run (and plenty else) loads frames inside the page: the tab reports "loading".
+  await problem.evaluate(() => {
+    const frame = document.createElement("iframe");
+    frame.src = "/problems/two-sum/?frame=1";
+    document.body.append(frame);
+  });
+  await expect(dot(problem)).toHaveCount(1);
+  await problem.waitForTimeout(1500);
+  expect(await status()).toEqual(alive);
+
+  // A real reload loses the dot for a moment; it comes back and the recording carries on.
+  await problem.reload();
+  await problem.waitForSelector("body[data-monaco-ready='1']");
+  await expect(dot(problem)).toHaveCount(1);
+  await problem.waitForTimeout(1500);
+  expect(await status()).toEqual(alive);
+
+  await sw.evaluate(async () => {
+    await chrome.storage.local.remove(["lare:capture", "lare:state"]);
+  });
+  await problem.close();
+});
+
 test("the permission tab asks for the microphone, reports back and closes itself", async () => {
   const panel = await context.newPage();
   await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);

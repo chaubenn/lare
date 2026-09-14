@@ -60,11 +60,14 @@ export default defineBackground(() => {
   chrome.action.onClicked.addListener((tab) => void onActionClicked(tab).catch(console.warn));
   chrome.tabs.onUpdated.addListener((id, change) => {
     if (change.groupId !== undefined) void repairGroup().catch(console.warn);
-    if (change.status === "loading")
+    // Chrome reports "loading" for far more than a reload: subframes loading, in-page URL changes,
+    // LeetCode's own Run. Ending on it stopped interviews mid-problem. Wait for the load to finish
+    // and put the consent dot back; stop only when it cannot be shown, i.e. the page really left.
+    if (change.status === "complete")
       void getCapture()
-        .then((c) => {
-          // A full navigation destroys the consent dot; stop rather than record an unmarked page.
-          if (c?.tabId === id && ["recording", "paused"].includes(c.state)) return endSession();
+        .then(async (c) => {
+          if (c?.tabId !== id || !["recording", "paused"].includes(c.state)) return;
+          if (!(await showIndicator(id))) return endSession();
         })
         .catch(console.warn);
   });
@@ -448,6 +451,22 @@ async function startInterview(
     text: "Mock interview started. Recording.",
   });
   return { ok: true, ...(await snapshot()) };
+}
+
+/**
+ * Ask the page to show the consent dot. After a real reload the content script injects at
+ * document_idle, which can land just after Chrome reports the tab complete, so retry briefly.
+ */
+async function showIndicator(tabId: number): Promise<boolean> {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const ok = await chrome.tabs
+      .sendMessage(tabId, { type: "LARE_RECORDING_INDICATOR", visible: true })
+      .then((res) => res?.ok === true)
+      .catch(() => false);
+    if (ok) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
