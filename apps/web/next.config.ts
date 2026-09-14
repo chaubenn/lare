@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source; make sure they go through the compiler.
-  transpilePackages: ["@lare/shared", "@lare/ui", "@lare/supabase-types"],
+  transpilePackages: ["@lare/capture", "@lare/shared", "@lare/ui", "@lare/supabase-types"],
   experimental: {
     // Every page here reads cookies, so every route is dynamic, and a dynamic route's
     // client cache is off by default (`dynamic: 0`). That made each navigation — including

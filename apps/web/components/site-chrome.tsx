@@ -7,6 +7,7 @@ import { House, LogIn, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { Sidebar } from "./app-shell/sidebar";
 import { AvatarMenu } from "./avatar-menu";
 
 export interface SiteViewer {
@@ -22,7 +23,8 @@ export function SiteChrome({ viewer, pending }: { viewer: SiteViewer | null; pen
 
   return (
     <>
-      <header className="lare-material-regular sticky top-0 z-30">
+      {viewer && <Sidebar viewer={viewer} pending={pending} />}
+      <header className={cn("lare-material-regular sticky top-0 z-30", viewer && "md:hidden")}>
         <Container width="wide" className="flex h-12 items-center justify-between gap-4">
           <div className="flex items-center gap-5">
             <Link href="/" className="text-lg text-[var(--text)]">
