@@ -239,8 +239,6 @@
   backdrop-filter: blur(var(--lare-material-thick-blur));
 }
 
-/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
-
 .t-tabs {
   position: relative;
   display: inline-flex;
