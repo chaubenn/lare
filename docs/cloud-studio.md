@@ -32,6 +32,16 @@ be logged or persisted. Responses are `no-store`; native download rejects redire
 
 Bunny documents `/{video_id}/original`, but **Keep Original Files** must have been
 enabled before upload and CDN exposure is a separate setting (`ExposeOriginals`).
+
+`ExposeOriginals` is separate but **not independent**: Bunny forces it on when
+**Allow Early Play** is enabled, and refuses to turn it off while Early Play
+stays on (`VideoLibrary.ExposeOriginalsAndEarlyPlayConflict` — "Expose Originals
+is a prerequisite for Early Play"). Enabling Early Play to shorten the encode
+wait therefore also enables it, without asking. That is harmless while
+`KeepOriginalFiles` is false, because no original exists to serve — but the two
+settings must be reasoned about together, and turning `KeepOriginalFiles` on
+later would publish originals at a guessable path with only CDN token
+authentication in front of them.
 This implementation intentionally uses a known MP4 rendition rather than assuming
 an original is available, exposed, or in a format the native editor supports.
 Enabling MP4 Fallback now does not retroactively create files. Existing videos
