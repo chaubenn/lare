@@ -1,6 +1,6 @@
 {
   "name": "@lare/extension",
-  "version": "0.4.3",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Lare for LeetCode: session timer, problem/submission capture, mock-interview trigger.",
@@ -14,6 +14,7 @@
     "build:e2e": "wxt build --mode e2e"
   },
   "dependencies": {
+    "@lare/capture": "workspace:*",
     "@fontsource-variable/outfit": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@lare/shared": "workspace:*",

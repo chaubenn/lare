@@ -46,6 +46,7 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
     problem: ProblemInfoSchema.nullable(),
     question: QuestionDetailsSchema.nullable(),
     facecam: z.boolean().default(false),
+    graded: z.boolean(),
     tabId: z.number().nullable().default(null),
   }),
   z.object({ type: z.literal("PAUSE_SESSION") }),
@@ -75,6 +76,13 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("OPEN_APP"), path: z.string().optional() }),
   z.object({ type: z.literal("CANCEL_START") }),
   z.object({ type: z.literal("RETRY_SYNC") }),
+  z.object({ type: z.literal("DISCARD_RECORDING") }),
+  z.object({
+    type: z.literal("CREATE_VIDEO_DRAFT"),
+    videoId: z.string().uuid(),
+    title: z.string().min(1).max(200),
+  }),
+  z.object({ type: z.literal("PUBLISH_PROBLEMS"), ids: z.array(z.string().uuid()).min(1) }),
 ]);
 export type RuntimeRequest = z.infer<typeof RuntimeRequestSchema>;
 
@@ -84,6 +92,7 @@ export interface RecordingInfo {
 }
 
 export interface RuntimeSnapshot {
+  capture?: import("./capture").CaptureState | null;
   state: z.infer<typeof ExtensionStateSchema>;
   auth: AuthInfo;
   appConnected: boolean;
@@ -97,6 +106,7 @@ export function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | nul
     auth: res.auth ?? null,
     appConnected: res.appConnected ?? false,
     recording: res.recording ?? null,
+    capture: res.capture ?? null,
   };
 }
 

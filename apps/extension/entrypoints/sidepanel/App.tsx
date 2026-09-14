@@ -14,6 +14,9 @@ export function App() {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [graded, setGraded] = useState(true);
+  const [facecam, setFacecam] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
   const [, setTick] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -56,6 +59,7 @@ export function App() {
       else {
         const next = toSnapshot(res);
         if (next) setSnap(next);
+        if (res.postId) await chrome.tabs.create({ url: `${SITE_URL}/drafts/${res.postId}` });
       }
       return res;
     } finally {
@@ -64,8 +68,8 @@ export function App() {
   };
 
   /**
-   * Interviews are the one thing still started by hand, and the popup cannot see
-   * the page, so ask the active tab which problem is open first.
+   * Interviews are the one thing still started by hand, and the side panel cannot
+   * see the page, so ask the active tab which problem is open first.
    */
   const startInterview = async () => {
     setError(null);
@@ -87,12 +91,23 @@ export function App() {
       setError("Open a LeetCode problem tab first.");
       return;
     }
+    // Permission prompts need a visible extension document, not the hidden offscreen page.
+    try {
+      const permission = await navigator.mediaDevices.getUserMedia({ audio: true, video: facecam });
+      for (const track of permission.getTracks()) track.stop();
+    } catch (e) {
+      setError(
+        `Microphone${facecam ? " and camera" : ""} permission required: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return;
+    }
     await run(() =>
       sendRuntime({
         type: "START_INTERVIEW",
         problem: reply.problem,
         question: reply.question,
-        facecam: false,
+        facecam,
+        graded,
         tabId: tab.id ?? null,
       }),
     );
@@ -114,7 +129,7 @@ export function App() {
   }, [sessionId]);
 
   return (
-    <div className="popup">
+    <div className="sidepanel">
       <header className="header">
         <Emblem className="logo" />
         <div>
@@ -226,12 +241,24 @@ export function App() {
               <span className="badge running">on</span>
             </div>
             <p className="muted">
-              Every problem you open and every submission you make is saved automatically. Pick
-              which ones to post from the desktop app.
+              Problems and submissions are saved to your cloud inbox. No desktop app needed.
             </p>
             <ul className="problems">
               {tracked.map((p) => (
                 <li key={p.sessionProblemId}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${p.title || p.slug}`}
+                    disabled={!p.synced}
+                    checked={selected.includes(p.sessionProblemId)}
+                    onChange={(e) =>
+                      setSelected(
+                        e.target.checked
+                          ? [...selected, p.sessionProblemId]
+                          : selected.filter((id) => id !== p.sessionProblemId),
+                      )
+                    }
+                  />
                   <span>{p.title || p.slug}</span>
                   <span className="muted">
                     {p.submissionCount === 0
@@ -244,6 +271,16 @@ export function App() {
                 <li className="muted">Nothing tracked yet — open a LeetCode problem.</li>
               )}
             </ul>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy || selected.length === 0}
+              onClick={() =>
+                void run(() => sendRuntime({ type: "PUBLISH_PROBLEMS", ids: selected }))
+              }
+            >
+              Create draft from selected problems
+            </button>
           </section>
 
           <section className="card">
@@ -256,6 +293,21 @@ export function App() {
                 <div className="timer" role="timer">
                   {formatDuration(activeMs(interview.events, Date.now()))}
                 </div>
+                <p className="muted">
+                  {snap.capture?.graded
+                    ? "Graded: local Whisper and AI review"
+                    : "Ungraded: video only, no transcript or AI review"}
+                </p>
+                {snap.capture?.message && <p role="status">{snap.capture.message}</p>}
+                {!!snap.capture?.recordedBytes && (
+                  <p className="muted">
+                    {((snap.capture.uploadedBytes ?? 0) / 1048576).toFixed(1)} /{" "}
+                    {(snap.capture.recordedBytes / 1048576).toFixed(1)} MB uploaded
+                  </p>
+                )}
+                {snap.capture?.transcript && (
+                  <section aria-label="Live transcript">{snap.capture.transcript}</section>
+                )}
                 {recording?.state === "recording" && (
                   <p className="muted">Recording. A red dot shows on the problem page.</p>
                 )}
@@ -284,13 +336,13 @@ export function App() {
                     <button
                       type="button"
                       className="btn"
-                      disabled={busy}
+                      disabled={busy || status === "ended"}
                       onClick={() => void run(() => sendRuntime({ type: "RESUME_SESSION" }))}
                     >
                       Resume
                     </button>
                   )}
-                  {!confirmEnd ? (
+                  {!confirmEnd && status !== "ended" ? (
                     <button
                       type="button"
                       className="btn btn-primary"
@@ -327,14 +379,41 @@ export function App() {
               <>
                 <div className="card-title">Mock interview</div>
                 <p className="muted">
-                  {snap.appConnected
-                    ? "Records your screen and mic on the problem you have open, then grades it."
-                    : "Open the Lare desktop app to record a mock interview."}
+                  Record this problem tab and microphone in Chrome. Camera is optional.
                 </p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={graded}
+                    onChange={(e) => setGraded(e.target.checked)}
+                  />{" "}
+                  Transcript &amp; AI review
+                </label>
+                <p className="muted">
+                  {graded
+                    ? "Requires a compatible desktop app running local Whisper. Older builds cannot grade this recording."
+                    : "Ungraded: video only. Disables both transcript and AI review; desktop is not required."}
+                </p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={facecam}
+                    onChange={(e) => setFacecam(e.target.checked)}
+                  />{" "}
+                  Include camera
+                </label>
+                <button
+                  type="button"
+                  className="link"
+                  disabled={busy}
+                  onClick={() => void run(() => sendRuntime({ type: "PROBE_APP" }))}
+                >
+                  Check desktop grading connection
+                </button>
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={busy || !snap.appConnected}
+                  disabled={busy || (graded && !snap.appConnected)}
                   onClick={() => void startInterview()}
                 >
                   Start mock interview
@@ -359,10 +438,54 @@ export function App() {
               >
                 Retry sync
               </button>
+              {snap.capture?.state === "error" && (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  disabled={busy}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Permanently discard the failed video and save the session without video, transcript or AI review?",
+                      )
+                    )
+                      void run(() => sendRuntime({ type: "DISCARD_RECORDING" }));
+                  }}
+                >
+                  Discard failed video and keep session
+                </button>
+              )}
+            </section>
+          )}
+
+          {!interview && snap.capture?.state === "complete" && (
+            <section className="card" aria-label="Last recording">
+              <div className="card-title">
+                {snap.capture.graded ? "Graded interview saved" : "Ungraded session saved"}
+              </div>
+              {snap.capture.message && <p role="status">{snap.capture.message}</p>}
+              <p className="muted">
+                {snap.capture.graded
+                  ? "Local transcript and AI review included."
+                  : "No transcript or AI review included."}{" "}
+                Upload acknowledgement does not mean playback encoding is finished.
+              </p>
+              <a href={`${SITE_URL}/drafts`} target="_blank" rel="noreferrer" className="link">
+                Review and publish your draft
+              </a>
             </section>
           )}
 
           <section className="links">
+            <button
+              type="button"
+              className="link"
+              onClick={() =>
+                void chrome.tabs.create({ url: chrome.runtime.getURL("recorder.html") })
+              }
+            >
+              Record summary / demo
+            </button>
             <button
               type="button"
               className="link"
@@ -372,6 +495,9 @@ export function App() {
             </button>
             <a href={SITE_URL} target="_blank" rel="noreferrer" className="link">
               Open lare.app
+            </a>
+            <a href={`${SITE_URL}/drafts`} target="_blank" rel="noreferrer" className="link">
+              Review drafts
             </a>
           </section>
         </>

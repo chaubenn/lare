@@ -31,6 +31,7 @@ const requests = [];
 let checkCalls = new Map();
 let submitCounter = 1000;
 let submissionIdForRun = 0;
+const uploads = new Map();
 
 const question = {
   questionId: "1",
@@ -161,6 +162,38 @@ const server = createServer(async (req, res) => {
   });
 
   // ---- LeetCode judge ----------------------------------------------------------
+  if (path === "/tus" && method === "POST") {
+    const id = crypto.randomUUID();
+    uploads.set(id, { offset: 0, length: null });
+    return json(
+      res,
+      201,
+      {},
+      {
+        Location: `/tus/${id}`,
+        "access-control-expose-headers": "Location,Upload-Offset,Upload-Length",
+      },
+    );
+  }
+  if (path.startsWith("/tus/")) {
+    const upload = uploads.get(path.split("/").pop());
+    if (!upload) return json(res, 404, {});
+    if (method === "PATCH") {
+      if (Number(req.headers["upload-offset"]) !== upload.offset) return json(res, 409, {});
+      upload.offset += body.length;
+      if (req.headers["upload-length"]) upload.length = Number(req.headers["upload-length"]);
+    }
+    return json(
+      res,
+      200,
+      {},
+      {
+        "Upload-Offset": String(upload.offset),
+        ...(upload.length === null ? {} : { "Upload-Length": String(upload.length) }),
+        "access-control-expose-headers": "Upload-Offset,Upload-Length",
+      },
+    );
+  }
   if (method === "POST" && /^\/problems\/[a-z0-9-]+\/submit\/?$/.test(path)) {
     const id = ++submitCounter;
     submittedCode.set(id, body?.typed_code ?? "");
@@ -242,6 +275,19 @@ const server = createServer(async (req, res) => {
     if (sub.startsWith("/auth/v1/token")) {
       return json(res, 200, fakeSession());
     }
+    if (sub === "/functions/v1/bunny-create-upload") {
+      return json(res, 200, {
+        videoId: crypto.randomUUID(),
+        bunnyVideoId: crypto.randomUUID(),
+        libraryId: 1,
+        tus: {
+          endpoint: `http://localhost:${PORT}/tus`,
+          headers: {},
+          metadata: { filetype: body.mimeType, title: "Test recording" },
+        },
+      });
+    }
+    if (sub === "/functions/v1/bunny-finalize-recording") return json(res, 200, { ok: true });
     if (sub.startsWith("/auth/v1/user")) {
       return json(res, 200, fakeSession().user);
     }

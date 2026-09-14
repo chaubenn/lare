@@ -16,11 +16,23 @@ export default defineConfig({
     description:
       "Log LeetCode sessions with a pausable timer, capture submissions, and run AI-graded mock interviews with the Lare desktop app.",
     key: process.env.LARE_EXTENSION_KEY ?? EXTENSION_PUBLIC_KEY,
-    permissions: ["storage", "identity", "alarms", "tabs"],
+    permissions: [
+      "storage",
+      "identity",
+      "alarms",
+      "tabs",
+      "activeTab",
+      "sidePanel",
+      "tabGroups",
+      "offscreen",
+      "tabCapture",
+    ],
+    side_panel: { default_path: "sidepanel.html" },
     host_permissions: [
       "https://leetcode.com/*",
       "https://jndqrvwkwoyvzoqcveev.supabase.co/*",
       "http://127.0.0.1/*",
+      "https://video.bunnycdn.com/*",
       // Local fixture page + mocked backend for e2e tests (dev/e2e builds only).
       ...(mode === "production" ? [] : ["http://localhost/*"]),
     ],
@@ -52,7 +64,7 @@ export default defineConfig({
   }),
   vite: () => ({
     define: {
-      __EXT_VERSION__: JSON.stringify(process.env.npm_package_version ?? "0.1.0"),
+      __EXT_VERSION__: JSON.stringify(process.env.npm_package_version ?? "1.0.0"),
     },
   }),
 });

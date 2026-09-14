@@ -14,16 +14,15 @@
 }
 body {
   margin: 0;
-  width: 320px;
-  max-height: 600px;
-  overflow: hidden;
+  min-width: 250px;
+  min-height: 100vh;
 }
-.popup {
+.sidepanel {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  max-height: 600px;
+  min-height: 100vh;
   overflow-y: auto;
 }
 .header {
@@ -137,6 +136,7 @@ body {
   gap: 8px;
 }
 .row input {
+  min-width: 0;
   flex: 1;
   padding: 8px 10px;
   border: 1px solid var(--lare-line-strong);
@@ -227,6 +227,8 @@ body {
 }
 .links {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: space-between;
   padding: 0 4px;
 }
