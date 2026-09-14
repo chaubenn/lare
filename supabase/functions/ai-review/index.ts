@@ -63,10 +63,11 @@ Deno.serve(
     const admin = adminClient();
     const { data: session } = await admin
       .from("sessions")
-      .select("id, user_id, kind, started_at, ended_at, active_ms, recording_started_at")
+      .select("id, user_id, kind, graded, started_at, ended_at, active_ms, recording_started_at")
       .eq("id", body.sessionId)
       .maybeSingle();
     if (!session || session.user_id !== userId) throw new HttpError("Session not found", 404);
+    if (!session.graded) throw new HttpError("AI review is disabled for ungraded sessions", 409);
 
     // Return the cached review unless a regeneration is requested.
     if (!body.force) {
@@ -281,6 +282,7 @@ Deno.serve(
       .upsert(row, { onConflict: "session_id" })
       .select("*")
       .single();
+    if (error?.code === "42501") throw new HttpError("AI review is disabled for this session", 409);
     if (error) throw new HttpError(`interview_reviews upsert failed: ${error.message}`, 500);
     return json({ review: saved, cached: false });
   }),

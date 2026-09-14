@@ -15,10 +15,10 @@ import { getViewer } from "@/lib/viewer";
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ scope?: string | string[] }>;
+  searchParams: Promise<{ scope?: string | string[]; landing?: string }>;
 }) {
   const viewer = await getViewer();
-  if (!viewer) return <Landing />;
+  if (!viewer || (await searchParams).landing === "1") return <Landing />;
   if (!viewer.profile?.handle) redirect("/onboarding");
 
   const scope = parseFeedScope((await searchParams).scope);

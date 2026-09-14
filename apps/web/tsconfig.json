@@ -5,6 +5,7 @@
     "jsx": "preserve",
     "moduleResolution": "bundler",
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "incremental": true,
     "noEmit": true,
     "paths": { "@/*": ["./*"] }

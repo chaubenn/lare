@@ -10,10 +10,12 @@ export function AvatarMenu({
   avatarUrl,
   displayName,
   handle,
+  placement = "bottom",
 }: {
   avatarUrl: string | null;
   displayName: string | null;
   handle: string | null;
+  placement?: "top" | "bottom";
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -51,7 +53,9 @@ export function AvatarMenu({
       </button>
 
       {open && (
-        <div className="lare-dropdown absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-xl shadow-black/40">
+        <div
+          className={`lare-dropdown absolute right-0 z-20 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-xl shadow-black/40 ${placement === "top" ? "bottom-full mb-2 w-48" : "mt-2 w-56"}`}
+        >
           <div className="border-b border-zinc-800 px-3 py-2.5">
             <p className="truncate text-sm font-medium text-zinc-100">{name}</p>
             {handle && <p className="truncate text-xs text-zinc-500">@{handle}</p>}

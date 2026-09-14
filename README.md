@@ -1,17 +1,40 @@
-# Lare
+<div align="center">
 
-Hevy for LeetCode. Your practice is logged as you do it — every problem opened, every
-submission judged, with code, runtime and memory percentiles and the runtime distribution graph.
+<img src="brand/wordmark.png" alt="Lare" width="260">
+
+**Hevy for LeetCode.**
+Your practice logs itself — every problem opened, every submission judged, with code,
+runtime and memory percentiles and the runtime distribution graph.
+
+[![CI](https://github.com/chaubenn/lare/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/chaubenn/lare/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/chaubenn/lare?color=%2310b981&label=release)](https://github.com/chaubenn/lare/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/chaubenn/lare/total?color=%2310b981)](https://github.com/chaubenn/lare/releases)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Chrome-lightgrey)
+
+[Install](#install) · [Architecture](docs/architecture.md) · [Releasing](docs/releasing.md) · [QA](docs/qa.md) · [Privacy](docs/privacy.md)
+
+</div>
+
+---
+
 Share posts with followers, attach demo videos, and run AI-graded mock interviews.
 
-- **Chrome extension** captures problems, your Monaco edits and judge results on its own, with
-  nothing to start or stop; triggers mock interviews from its popup.
-- **Desktop app** (Tauri) reviews drafts, records your screen/camera/mic with Cap's recording stack,
-  transcribes locally with whisper.cpp, edits and uploads to Bunny Stream, and reviews interviews
-  with timestamped AI feedback.
-- **Web** shows posts, profiles and your follower feed.
+| | |
+| --- | --- |
+| **Chrome extension** | Captures problems, your Monaco edits and judge results on its own — nothing to start or stop. Records mock interviews from a side panel. |
+| **Desktop app** (Tauri) | Records your screen natively with Cap's recording stack, edits takes in the studio, and **transcribes interviews locally with whisper.cpp**. |
+| **Web** | The same app: feed, posts, profiles, drafts, sessions — plus recording in the browser. |
 
-Docs: [architecture](docs/architecture.md) · [QA checklist](docs/qa.md) · [privacy](docs/privacy.md)
+**You can do everything on the web except be graded.** A mock interview is *graded* when the
+desktop app is running: the extension streams your microphone to it over loopback, whisper.cpp
+transcribes it on your machine while you talk, and the AI review is built from that transcript.
+Without the app, an interview is *ungraded* — video only, no transcript, no AI — and the extension
+says so before you start rather than degrading quietly. Local transcription is the reason the
+desktop app exists; it is not going to the cloud.
+
+Video uploads while it records, not after you stop, so stopping is roughly instant no matter how
+long you recorded.
 
 ## Install
 
@@ -40,36 +63,34 @@ run **Settings > Check for updates**.
 1. Download [Lare-Chrome-Extension.zip](https://github.com/chaubenn/lare/releases/latest/download/Lare-Chrome-Extension.zip) and unzip it.
 2. Open `chrome://extensions`, turn on **Developer mode** (top right).
 3. Click **Load unpacked** and pick the unzipped folder.
-4. Pin the Lare icon, open the desktop app and sign in, then open any LeetCode problem. The
-   footer in the desktop app shows **Extension: connected**.
+4. Pin the Lare icon and click it to open the side panel, then sign in and open any LeetCode
+   problem. Practice starts logging itself immediately.
 
-The extension talks to the desktop app over `127.0.0.1`, so the app must be running while you
-practise. Chrome Web Store listing is coming; until then the unpacked install is the supported path.
+The extension works on its own — sign-in, passive capture, drafts and ungraded interviews need
+nothing else running. It talks to the desktop app over `127.0.0.1` only to hand it interview
+audio for local transcription, so the app has to be open for a *graded* interview and the
+desktop footer shows **Extension: connected**. Chrome 116+. Chrome Web Store listing is coming;
+until then the unpacked install is the supported path.
 
-## Release process
+## Development
 
-1. Bump the version in `apps/desktop/package.json`, `apps/desktop/src-tauri/tauri.conf.json`,
-   `apps/desktop/src-tauri/Cargo.toml` (they must match the tag) and
-   `apps/extension/package.json` — the extension carries the same number as the app it talks to,
-   even when nothing in it changed, so a support question only ever needs one version.
-2. `git tag vX.Y.Z && git push origin vX.Y.Z`.
+```bash
+pnpm install
+pnpm dev:web          # Next.js
+pnpm dev:extension    # wxt, then load apps/extension/.output as unpacked
+pnpm dev:desktop      # Tauri
+```
 
-The Release workflow builds installers for macOS (Apple Silicon + Intel) and Windows x64 and the
-extension zip, signs the updater bundles with `TAURI_SIGNING_PRIVATE_KEY`, writes `latest.json`
-and publishes the GitHub release as **latest**. Installed apps (tauri-plugin-updater) read
-`releases/latest/download/latest.json` on launch and self-update. The release ships only the four
-stable download names (`Lare-macOS-AppleSilicon.dmg`, `Lare-macOS-Intel.dmg`,
-`Lare-Windows-x64-Setup.exe`, `Lare-Chrome-Extension.zip`) — everything people need to run the
-app — plus `latest.json` and the signed updater artifacts it references; duplicate versioned
-installers are deleted after publishing. Running the workflow manually produces a draft release
-that is never marked latest.
+```bash
+pnpm lint             # biome
+pnpm typecheck
+pnpm test
+```
 
-The updater public key lives in `tauri.conf.json` (`plugins.updater.pubkey`); the private key is
-the `TAURI_SIGNING_PRIVATE_KEY` repository secret. Losing it means shipped apps can no longer
-verify updates, so keep a backup. Apple notarisation is optional and picked up from the usual
-`APPLE_*` secrets when present.
+Rust needs prebuilt ffmpeg — `pnpm setup:native` writes the cargo env for your target.
 
+Branching, CI lanes and how to cut a release: **[docs/releasing.md](docs/releasing.md)**.
 
 ## License
 
-AGPL-3.0-only. Portions derived from Cap (AGPL-3.0 / MIT); see `NOTICE`.
+AGPL-3.0-only. Portions derived from Cap (AGPL-3.0 / MIT); see [`NOTICE`](NOTICE).

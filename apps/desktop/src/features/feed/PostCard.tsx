@@ -8,8 +8,8 @@ import { CommentsPreview } from "@/features/feed/CommentsPreview";
 import { PostLinkButton } from "@/features/feed/PostLinkButton";
 import { PostSlides } from "@/features/feed/PostSlides";
 import type { FeedPost } from "@/features/feed/queries";
-import { useToggleLike } from "@/features/posts/social";
 import type { UserPost } from "@/features/profile/queries";
+import { useToggleLike } from "@/features/publishing/posts/social";
 import { errorMessage } from "@/lib/supabase";
 
 const cardClass = "rounded-2xl border border-zinc-800/80 bg-zinc-900/40";

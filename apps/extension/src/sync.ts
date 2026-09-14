@@ -93,7 +93,11 @@ export async function publishInboxProblems(
 // Mock interviews
 // ---------------------------------------------------------------------------
 
-export async function syncSessionStart(session: ActiveSession, userId: string): Promise<void> {
+export async function syncSessionStart(
+  session: ActiveSession,
+  userId: string,
+  graded = false,
+): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.from("sessions").upsert(
     {
@@ -104,6 +108,7 @@ export async function syncSessionStart(session: ActiveSession, userId: string): 
       status: "active",
       started_at: iso(session.startedAt),
       client: `extension/${__EXT_VERSION__}`,
+      graded,
     },
     { onConflict: "id" },
   );
@@ -206,15 +211,20 @@ async function gzipJson(value: unknown): Promise<Blob> {
 }
 
 /**
- * End of session: upload edit logs, close problems, mark the session ended and
- * create the draft post. Returns the draft post id.
+ * Persist the code timeline and session duration before desktop requests AI review.
  */
-export async function finalizeSession(
+export async function syncSessionEnd(
   session: ActiveSession,
   userId: string,
   endedAt: number,
-): Promise<string> {
+): Promise<void> {
+  if (session.tabId !== null)
+    await chrome.tabs
+      .sendMessage(session.tabId, { type: "LARE_FLUSH_EDITS" })
+      .catch(() => undefined);
   const supabase = getSupabase();
+  const { getCapture } = await import("./capture");
+  const capture = await getCapture();
   const total = activeMs(session.events, endedAt);
 
   for (const tp of session.problems) {
@@ -240,7 +250,7 @@ export async function finalizeSession(
       .update({
         closed_at: iso(closedAt),
         active_ms: problemActiveMs(session.events, tp.problem.slug, closedAt),
-        edits_path: editsPath,
+        ...(editsPath ? { edits_path: editsPath } : {}),
       })
       .eq("id", tp.sessionProblemId);
     if (error) throw new Error(`session_problems finalize: ${error.message}`);
@@ -248,9 +258,29 @@ export async function finalizeSession(
 
   const { error: sessErr } = await supabase
     .from("sessions")
-    .update({ status: "ended", ended_at: iso(endedAt), active_ms: total })
+    .update({
+      status: "ended",
+      ended_at: iso(endedAt),
+      active_ms: total,
+      graded: capture?.sessionId === session.sessionId && capture.graded === true,
+    })
     .eq("id", session.sessionId);
   if (sessErr) throw new Error(`sessions end: ${sessErr.message}`);
+}
+
+export async function finalizeSession(
+  session: ActiveSession,
+  userId: string,
+  endedAt: number,
+): Promise<string> {
+  await syncSessionEnd(session, userId, endedAt);
+  const supabase = getSupabase();
+  const { getCapture } = await import("./capture");
+  const capture = await getCapture();
+  const videoId =
+    capture?.sessionId === session.sessionId && capture.state === "complete"
+      ? capture.videoId
+      : undefined;
 
   const first = session.problems[0];
   const title =
@@ -271,7 +301,8 @@ export async function finalizeSession(
         status: "draft",
         visibility: "public",
         title,
-        video_kind: "none",
+        video_kind: videoId ? "full" : "none",
+        ...(videoId ? { video_id: videoId } : {}),
         include_ai_insights: false,
       },
       { onConflict: "session_id" },

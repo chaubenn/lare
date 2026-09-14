@@ -44,8 +44,13 @@ export const sessionEditLogKey = (id: string, problemId: string) =>
 const SESSION_DETAIL_SELECT =
   "*, session_problems(*, submissions(*)), session_events(t, type)" as const;
 
-function sessionQuery(id: string) {
-  return supabase.from("sessions").select(SESSION_DETAIL_SELECT).eq("id", id).maybeSingle();
+function sessionQuery(id: string, userId: string) {
+  return supabase
+    .from("sessions")
+    .select(SESSION_DETAIL_SELECT)
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
 }
 
 /** A session with its problems and their submissions. */
@@ -53,11 +58,13 @@ export type SessionDetail = NonNullable<QueryData<ReturnType<typeof sessionQuery
 export type SessionDetailProblem = SessionDetail["session_problems"][number];
 
 export function useSession(id: string) {
+  const { userId } = useUser();
   return useQuery({
-    queryKey: sessionKey(id),
+    queryKey: [...sessionKey(id), userId],
     enabled: id.length > 0,
+    refetchInterval: (query) => (query.state.data?.status === "active" ? 3000 : false),
     queryFn: async () => {
-      const { data, error } = await sessionQuery(id);
+      const { data, error } = await sessionQuery(id, userId);
       if (error) throw error;
       return data;
     },
@@ -100,6 +107,7 @@ export function useSessionTranscript(sessionId: string) {
   return useQuery({
     queryKey: sessionTranscriptKey(sessionId),
     enabled: sessionId.length > 0,
+    refetchInterval: 5000,
     queryFn: async (): Promise<SessionTranscript | null> => {
       const { data, error } = await supabase
         .from("transcripts")

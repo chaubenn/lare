@@ -1,0 +1,202 @@
+import { formatDurationHuman } from "@lare/shared";
+import type { Database } from "@lare/supabase-types";
+import { Card, Container, PageHeader } from "@lare/ui/primitives";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { CodeTimeline } from "@/components/code-timeline";
+import { DesktopCapability } from "@/components/desktop-capability";
+import { InterviewReview } from "@/components/interview-review";
+import { ProblemSection } from "@/components/problem-section";
+import { RefreshWorkspace } from "@/components/refresh-workspace";
+import { Transcript } from "@/components/transcript";
+import { VideoEmbed } from "@/components/video-embed";
+import { parseTranscriptSegments, toReviewView } from "@/lib/parse";
+import { isUuid } from "@/lib/post-utils";
+import { createClient } from "@/lib/supabase/server";
+import { requireViewer } from "@/lib/viewer";
+
+export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const viewer = await requireViewer(`/sessions/${id}`);
+  if (!isUuid(id)) notFound();
+  const supabase = await createClient();
+  const { data: session, error } = await supabase
+    .from("sessions")
+    .select("*, session_problems(*, submissions(*)), posts(id, slug, status, title)")
+    .eq("id", id)
+    .eq("user_id", viewer.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!session) notFound();
+  const [videos, transcript, review] = await Promise.all([
+    supabase
+      .from("videos")
+      .select("*")
+      .eq("session_id", id)
+      .eq("user_id", viewer.id)
+      .order("created_at", { ascending: false }),
+    supabase.from("transcripts").select("*").eq("session_id", id).maybeSingle(),
+    supabase.from("interview_reviews").select("*").eq("session_id", id).maybeSingle(),
+  ]);
+  if (videos.error) throw videos.error;
+  if (transcript.error) throw transcript.error;
+  if (review.error) throw review.error;
+  const events: Database["public"]["Tables"]["session_events"]["Row"][] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const page = await supabase
+      .from("session_events")
+      .select("*")
+      .eq("session_id", id)
+      .order("t")
+      .order("id")
+      .range(offset, offset + 999);
+    if (page.error) throw page.error;
+    events.push(...page.data);
+    if (page.data.length < 1000) break;
+  }
+  const problems = [...session.session_problems].sort((a, b) =>
+    a.opened_at.localeCompare(b.opened_at),
+  );
+  const timeline = [
+    { id: "start", t: session.started_at, label: "Session started", detail: null },
+    ...events.map((event) => ({
+      id: `event-${event.id}`,
+      t: event.t,
+      label: event.type.replaceAll("_", " "),
+      detail: JSON.stringify(event.payload, null, 2),
+    })),
+    ...problems.flatMap((problem) => [
+      {
+        id: `problem-${problem.id}`,
+        t: problem.opened_at,
+        label: `Opened ${problem.title}`,
+        detail: null,
+      },
+      ...problem.submissions.map((submission) => ({
+        id: `submission-${submission.id}`,
+        t: submission.submitted_at,
+        label: `${problem.title}: ${submission.status_display || (submission.accepted ? "Accepted" : "Not accepted")}`,
+        detail: `${submission.lang_verbose || submission.lang || "Unknown language"}; runtime ${submission.runtime_display ?? "not recorded"}; memory ${submission.memory_display ?? "not recorded"}`,
+      })),
+    ]),
+    ...(session.ended_at
+      ? [{ id: "end", t: session.ended_at, label: "Session ended", detail: null }]
+      : []),
+  ].sort((a, b) => a.t.localeCompare(b.t));
+  const ungraded = "graded" in session && session.graded === false;
+  const segments = transcript.data ? parseTranscriptSegments(transcript.data.segments) : [];
+  return (
+    <Container width="page" className="space-y-5">
+      <PageHeader
+        title={
+          session.posts?.title ||
+          (session.is_practice_inbox
+            ? "Practice inbox"
+            : session.kind === "interview"
+              ? "Mock interview"
+              : "Practice session")
+        }
+        actions={
+          <Link href="/sessions" className="text-sm underline">
+            All sessions
+          </Link>
+        }
+      />
+      <Card className="space-y-2 p-4 text-sm">
+        <RefreshWorkspace />
+        <p>
+          Owner-only / {session.status} / {formatDurationHuman(session.active_ms)} active /{" "}
+          {problems.length} problems / {problems.reduce((n, p) => n + p.submissions.length, 0)}{" "}
+          submissions
+        </p>
+        <p>
+          Started {new Date(session.started_at).toLocaleString()}
+          {session.ended_at
+            ? ` / Ended ${new Date(session.ended_at).toLocaleString()}`
+            : " / Still open"}
+        </p>
+        {session.kind === "interview" && (
+          <p>
+            {ungraded
+              ? "Ungraded interview: video only. Transcript & AI review were disabled."
+              : "Graded interview: transcript is generated by local Whisper on desktop."}
+          </p>
+        )}
+        {session.posts && (
+          <Link
+            className="inline-block underline"
+            href={
+              session.posts.status === "draft"
+                ? `/drafts/${session.posts.id}`
+                : `/p/${session.posts.slug}`
+            }
+          >
+            {session.posts.status === "draft"
+              ? "Continue draft / record summary"
+              : "View published post"}
+          </Link>
+        )}
+      </Card>
+      {videos.data.map((video) => (
+        <section key={video.id} className="space-y-2">
+          <h2 className="font-medium">{video.title || "Session video"}</h2>
+          <VideoEmbed
+            videoId={video.id}
+            status={video.status}
+            bunnyVideoId={video.bunny_video_id}
+            durationMs={video.duration_ms}
+          />
+          <Link href={`/studio/${video.id}`} className="text-sm underline">
+            Trim / desktop studio options
+          </Link>
+        </section>
+      ))}
+      <Card className="p-4">
+        <h2 className="mb-3 font-medium">Full session timeline</h2>
+        <ol className="max-h-[32rem] space-y-3 overflow-auto">
+          {timeline.map((item) => (
+            <li key={item.id} className="border-l border-[var(--border)] pl-3 text-sm">
+              <time dateTime={item.t} className="text-xs text-[var(--text-tertiary)]">
+                {new Date(item.t).toLocaleTimeString()}
+              </time>
+              <p>{item.label}</p>
+              {item.detail && item.detail !== "{}" && (
+                <details>
+                  <summary className="cursor-pointer text-xs text-[var(--text-secondary)]">
+                    Event details
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap break-all text-xs">{item.detail}</pre>
+                </details>
+              )}
+            </li>
+          ))}
+        </ol>
+      </Card>
+      {problems.map((problem, index) => (
+        <section key={problem.id} className="space-y-3">
+          <ProblemSection problem={problem} index={index} />
+          <CodeTimeline
+            path={problem.edits_path}
+            title={problem.title}
+            startedAt={session.recording_started_at ?? session.started_at}
+          />
+        </section>
+      ))}
+      {!problems.length && <Card className="p-4 text-sm">No problems have been captured yet.</Card>}
+      {!ungraded && segments.length > 0 && (
+        <Transcript segments={segments} language={transcript.data?.language ?? "Unknown"} />
+      )}
+      {!ungraded && review.data && <InterviewReview review={toReviewView(review.data)} />}
+      {session.kind === "interview" && (ungraded || !segments.length || !review.data) && (
+        <>
+          <p className="text-sm text-[var(--text-secondary)]">
+            {ungraded
+              ? "No transcript or AI review is expected for this ungraded interview."
+              : "Transcript or review is not available yet. Local transcription requires the desktop app; this page does not send audio to a cloud transcription service."}
+          </p>
+          <DesktopCapability />
+        </>
+      )}
+    </Container>
+  );
+}

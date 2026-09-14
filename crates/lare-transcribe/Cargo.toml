@@ -6,9 +6,13 @@ license.workspace = true
 repository.workspace = true
 description = "whisper.cpp transcription for Lare: model download, ffmpeg audio decode, timestamped segments."
 
+[features]
+default = ["media"]
+media = ["dep:ffmpeg"]
+
 [dependencies]
 whisper-rs = { version = "0.16", default-features = false }
-ffmpeg = { workspace = true }
+ffmpeg = { workspace = true, optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }
 tokio = { workspace = true }
 futures-util = "0.3"

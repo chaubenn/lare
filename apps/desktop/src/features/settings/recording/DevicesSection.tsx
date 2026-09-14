@@ -3,7 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
 import { Spinner } from "@/components/ui/States";
-import { devicesKey, useDevices } from "@/features/recording/hooks";
+import { devicesKey, useDevices } from "@/features/media/hooks";
 import { errorMessage } from "@/lib/supabase";
 import { NULL_VALUE, type Option, SettingSelect, SubSection, useSettingsPatch } from "./shared";
 

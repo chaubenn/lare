@@ -161,6 +161,10 @@ export class PageController {
     sendResponse: (res: unknown) => void,
   ): boolean | undefined => {
     const msg = raw as { type?: string } & Partial<Omit<StateBroadcast, "type">>;
+    if (msg?.type === "LARE_FLUSH_EDITS") {
+      void this.flush().then(() => sendResponse({ ok: true }));
+      return true;
+    }
     // The popup has no view of the page, so it asks the tab which problem is
     // open before starting an interview.
     if (msg?.type === PAGE_PROBLEM_REQUEST) {
@@ -268,7 +272,7 @@ export class PageController {
     else if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flush(), FLUSH_MS);
   }
 
-  private flush() {
+  private async flush() {
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.flushTimer = null;
     const slug = this.state.problem?.slug;
@@ -278,7 +282,7 @@ export class PageController {
     }
     const events = this.buffer;
     this.buffer = [];
-    void sendRuntime({ type: "EDITS", slug, language: this.bufferLanguage, events });
+    await sendRuntime({ type: "EDITS", slug, language: this.bufferLanguage, events });
   }
 
   private onSubmit(body: unknown) {

@@ -6,18 +6,19 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use axum::Router;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{head, patch, post};
-use axum::Router;
 use lare_bunny::{TusCredentials, TusMetadata, upload_file};
 
 #[derive(Default)]
 struct MockState {
     uploads: Mutex<HashMap<String, (u64, Vec<u8>)>>, // id -> (declared length, bytes)
     fail_next_patch: AtomicUsize,
+    fail_after_commit: AtomicUsize,
     seen_auth: Mutex<Vec<(String, String)>>,
 }
 
@@ -26,7 +27,10 @@ async fn create(State(st): State<Arc<MockState>>, headers: HeaderMap) -> Respons
         .get("Upload-Length")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
+        .unwrap_or_else(|| {
+            assert_eq!(headers.get("Upload-Defer-Length").unwrap(), "1");
+            u64::MAX
+        });
     let sig = headers
         .get("AuthorizationSignature")
         .and_then(|v| v.to_str().ok())
@@ -53,7 +57,10 @@ async fn create(State(st): State<Arc<MockState>>, headers: HeaderMap) -> Respons
         .insert(id.clone(), (len, Vec::new()));
     (
         StatusCode::CREATED,
-        [("Location", format!("/tusupload/{id}")), ("Tus-Resumable", "1.0.0".into())],
+        [
+            ("Location", format!("/tusupload/{id}")),
+            ("Tus-Resumable", "1.0.0".into()),
+        ],
     )
         .into_response()
 }
@@ -61,6 +68,14 @@ async fn create(State(st): State<Arc<MockState>>, headers: HeaderMap) -> Respons
 async fn head_offset(State(st): State<Arc<MockState>>, Path(id): Path<String>) -> Response {
     let uploads = st.uploads.lock().unwrap();
     match uploads.get(&id) {
+        Some((len, bytes)) if *len == u64::MAX => (
+            StatusCode::OK,
+            [
+                ("Upload-Offset", bytes.len().to_string()),
+                ("Upload-Defer-Length", "1".into()),
+            ],
+        )
+            .into_response(),
         Some((len, bytes)) => (
             StatusCode::OK,
             [
@@ -94,16 +109,27 @@ async fn patch_chunk(
         Some("application/offset+octet-stream")
     );
     let mut uploads = st.uploads.lock().unwrap();
-    let Some((_, bytes)) = uploads.get_mut(&id) else {
+    let Some((length, bytes)) = uploads.get_mut(&id) else {
         return StatusCode::NOT_FOUND.into_response();
     };
     if offset != bytes.len() as u64 {
         return StatusCode::CONFLICT.into_response();
     }
     bytes.extend_from_slice(&body);
+    if let Some(value) = headers.get("Upload-Length") {
+        *length = value.to_str().unwrap().parse().unwrap();
+        assert_eq!(*length, bytes.len() as u64);
+    }
+    if st.fail_after_commit.load(Ordering::SeqCst) > 0 {
+        st.fail_after_commit.fetch_sub(1, Ordering::SeqCst);
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
     (
         StatusCode::NO_CONTENT,
-        [("Upload-Offset", bytes.len().to_string()), ("Tus-Resumable", "1.0.0".into())],
+        [
+            ("Upload-Offset", bytes.len().to_string()),
+            ("Tus-Resumable", "1.0.0".into()),
+        ],
     )
         .into_response()
 }
@@ -125,7 +151,10 @@ fn creds(endpoint: String) -> TusCredentials {
     headers.insert("AuthorizationSignature".into(), "sig123".into());
     headers.insert("AuthorizationExpire".into(), "9999999999".into());
     headers.insert("LibraryId".into(), "743884".into());
-    headers.insert("VideoId".into(), "11111111-2222-3333-4444-555555555555".into());
+    headers.insert(
+        "VideoId".into(),
+        "11111111-2222-3333-4444-555555555555".into(),
+    );
     TusCredentials {
         endpoint,
         headers,
@@ -155,15 +184,27 @@ async fn uploads_in_chunks_and_recovers_from_a_transient_failure() {
     .await
     .expect("upload succeeds");
 
-    assert!(url.ends_with("/tusupload/upl1"), "absolute upload url: {url}");
+    assert!(
+        url.ends_with("/tusupload/upl1"),
+        "absolute upload url: {url}"
+    );
     let uploads = state.uploads.lock().unwrap();
     let (declared, bytes) = uploads.get("upl1").unwrap();
     assert_eq!(*declared, payload.len() as u64);
     assert_eq!(bytes, &payload, "server must hold the exact file bytes");
     assert_eq!(progress.last().copied(), Some(payload.len() as u64));
-    assert!(progress.windows(2).all(|w| w[0] <= w[1]), "progress is monotonic");
+    assert!(
+        progress.windows(2).all(|w| w[0] <= w[1]),
+        "progress is monotonic"
+    );
     let auth = state.seen_auth.lock().unwrap();
-    assert_eq!(auth[0], ("sig123".to_string(), "11111111-2222-3333-4444-555555555555".to_string()));
+    assert_eq!(
+        auth[0],
+        (
+            "sig123".to_string(),
+            "11111111-2222-3333-4444-555555555555".to_string()
+        )
+    );
 }
 
 #[tokio::test]
@@ -180,12 +221,19 @@ async fn resumes_from_server_offset() {
         "upl9".into(),
         (payload.len() as u64, payload[..100_000].to_vec()),
     );
-    let resume = format!("{}/upl9", endpoint);
+    let resume = format!("{endpoint}/upl9");
     let client = reqwest::Client::new();
     let mut first_progress = None;
-    let url = upload_file(&client, &path, &creds(endpoint), Some(&resume), 32 * 1024, |p| {
-        first_progress.get_or_insert(p.uploaded);
-    })
+    let url = upload_file(
+        &client,
+        &path,
+        &creds(endpoint),
+        Some(&resume),
+        32 * 1024,
+        |p| {
+            first_progress.get_or_insert(p.uploaded);
+        },
+    )
     .await
     .unwrap();
     assert_eq!(url, resume);
@@ -213,5 +261,113 @@ async fn recreates_when_resume_target_is_gone() {
     .await
     .unwrap();
     assert!(url.ends_with("/upl1"));
-    assert_eq!(state.uploads.lock().unwrap().get("upl1").unwrap().1.len(), 10_000);
+    assert_eq!(
+        state.uploads.lock().unwrap().get("upl1").unwrap().1.len(),
+        10_000
+    );
+}
+
+#[tokio::test]
+async fn tails_growing_file_and_declares_length_only_after_close() {
+    use lare_bunny::{create_deferred_upload, upload_growing_file};
+    use tokio::io::AsyncWriteExt;
+    let state = Arc::new(MockState::default());
+    state.fail_next_patch.store(1, Ordering::SeqCst);
+    let creds = creds(spawn_server(state.clone()).await);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("growing.webm");
+    let mut file = tokio::fs::File::create(&path).await.unwrap();
+    let client = reqwest::Client::new();
+    let url = create_deferred_upload(&client, &creds).await.unwrap();
+    let (tx, rx) = tokio::sync::watch::channel(false);
+    let producer_state = state.clone();
+    let producer = async move {
+        file.write_all(b"first").await.unwrap();
+        file.flush().await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if producer_state
+                    .uploads
+                    .lock()
+                    .unwrap()
+                    .get("upl1")
+                    .unwrap()
+                    .1
+                    .len()
+                    == 5
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            producer_state
+                .uploads
+                .lock()
+                .unwrap()
+                .get("upl1")
+                .unwrap()
+                .0,
+            u64::MAX
+        );
+        file.write_all(b"second").await.unwrap();
+        file.flush().await.unwrap();
+        drop(file);
+        tx.send(true).unwrap();
+    };
+    let (result, ()) = tokio::join!(
+        upload_growing_file(&client, &path, &creds, &url, 65536, rx, |_| {}),
+        producer
+    );
+    result.unwrap();
+    let uploads = state.uploads.lock().unwrap();
+    assert_eq!(uploads.get("upl1").unwrap(), &(11, b"firstsecond".to_vec()));
+    assert!(
+        path.exists(),
+        "uploader never deletes the caller's recording"
+    );
+}
+
+#[tokio::test]
+async fn producer_disconnect_does_not_finalize_partial_recording() {
+    use lare_bunny::{BunnyError, create_deferred_upload, upload_growing_file};
+    let state = Arc::new(MockState::default());
+    let creds = creds(spawn_server(state.clone()).await);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("partial.webm");
+    std::fs::write(&path, b"partial").unwrap();
+    let client = reqwest::Client::new();
+    let url = create_deferred_upload(&client, &creds).await.unwrap();
+    let (tx, rx) = tokio::sync::watch::channel(false);
+    drop(tx);
+    let result = upload_growing_file(&client, &path, &creds, &url, 65536, rx, |_| {}).await;
+    assert!(matches!(result, Err(BunnyError::ProducerDisconnected)));
+    assert_eq!(
+        state.uploads.lock().unwrap().get("upl1").unwrap().0,
+        u64::MAX
+    );
+}
+
+#[tokio::test]
+async fn lost_final_response_is_reconciled_from_declared_head_length() {
+    use lare_bunny::{create_deferred_upload, upload_growing_file};
+    let state = Arc::new(MockState::default());
+    state.fail_after_commit.store(1, Ordering::SeqCst);
+    let creds = creds(spawn_server(state.clone()).await);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("finished.webm");
+    std::fs::write(&path, b"finished").unwrap();
+    let client = reqwest::Client::new();
+    let url = create_deferred_upload(&client, &creds).await.unwrap();
+    let (_tx, rx) = tokio::sync::watch::channel(true);
+    upload_growing_file(&client, &path, &creds, &url, 65536, rx, |_| {})
+        .await
+        .unwrap();
+    assert_eq!(
+        state.uploads.lock().unwrap().get("upl1").unwrap(),
+        &(8, b"finished".to_vec())
+    );
 }

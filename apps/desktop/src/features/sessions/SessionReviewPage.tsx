@@ -11,8 +11,8 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner, Spinner } from "@/components/ui/States";
 import { VideoEmbed } from "@/components/VideoEmbed";
-import { useInterviewReview } from "@/features/posts/queries";
-import { useVideo } from "@/features/recording/hooks";
+import { useVideo } from "@/features/media/hooks";
+import { useInterviewReview } from "@/features/publishing/posts/queries";
 import { formatDateTime, plural } from "@/lib/format";
 import { errorMessage, invokeFunction } from "@/lib/supabase";
 import { CodeTimeline } from "./CodeTimeline";
@@ -67,7 +67,7 @@ function SessionReview({ session }: { session: SessionDetail }) {
 
   const post = useSessionPost(session.id);
   const transcript = useSessionTranscript(session.id);
-  const review = useInterviewReview(session.id);
+  const review = useInterviewReview(session.graded ? session.id : null);
   // Prefer the video the post points at; otherwise the newest one uploaded for the session.
   const latestEnabled = !post.isPending && !post.data?.video_id;
   const latestVideo = useLatestSessionVideo(session.id, latestEnabled);
@@ -90,7 +90,7 @@ function SessionReview({ session }: { session: SessionDetail }) {
     () => mediaClock(session, session.session_events ?? []),
     [session],
   );
-  const segments = transcript.data?.segments ?? null;
+  const segments = session.graded ? (transcript.data?.segments ?? null) : null;
 
   // One clock for the whole page (media seconds). `seekTarget` only changes on explicit seeks
   // (segment / marker / moment clicks, scrubber release) because it re-loads the player.
@@ -141,15 +141,16 @@ function SessionReview({ session }: { session: SessionDetail }) {
     [review.data],
   );
 
-  const hasEditLogs = problems.some((p) => !!p.edits_path);
   const hasTranscript = (segments?.length ?? 0) > 0;
   const generateBlocked = !isInterview
     ? "AI review is only available for mock interviews."
-    : transcript.isPending
-      ? null
-      : !hasTranscript && !hasEditLogs
-        ? "Nothing to review yet — no transcript or code edits were captured for this session."
-        : null;
+    : !session.graded
+      ? "This interview was recorded without transcript and AI review."
+      : transcript.isPending
+        ? null
+        : !hasTranscript
+          ? "Local transcription must finish before this interview can be graded."
+          : null;
 
   const generate = useMutation({
     mutationFn: (force: boolean) =>
@@ -201,6 +202,9 @@ function SessionReview({ session }: { session: SessionDetail }) {
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
           <KindBadge kind={session.kind} />
           <SessionStatusBadge status={session.status} />
+          {isInterview && (
+            <span>{session.graded ? "Local transcript & AI review" : "Ungraded: video only"}</span>
+          )}
           <span>{formatDurationHuman(session.active_ms)} active</span>
           <span aria-hidden>·</span>
           <span>started {formatDateTime(session.started_at)}</span>
@@ -209,11 +213,7 @@ function SessionReview({ session }: { session: SessionDetail }) {
         </div>
         {isInterview && !videoPending && !video.data ? (
           <p className="mt-2 text-xs text-zinc-500">
-            Processing did not finish?{" "}
-            <Link to="/recordings" className="text-emerald-400 hover:underline">
-              Resume from Recordings
-            </Link>
-            .
+            Keep the extension recording page open until its upload finishes.
           </p>
         ) : null}
       </header>
@@ -224,6 +224,12 @@ function SessionReview({ session }: { session: SessionDetail }) {
             {video.data ? (
               <>
                 <VideoEmbed video={video.data} title={title} startAt={seekTarget ?? undefined} />
+                <Link
+                  to={`/studio/${video.data.id}${post.data ? `?post=${post.data.id}` : ""}`}
+                  className="text-sm text-emerald-400 hover:underline"
+                >
+                  Open in studio
+                </Link>
                 {video.data.status === "ready" ? (
                   <p className="mt-1.5 text-xs text-zinc-500">
                     Seeking re-loads the player at the chosen time.
@@ -247,12 +253,8 @@ function SessionReview({ session }: { session: SessionDetail }) {
                 description={
                   isInterview ? (
                     <>
-                      The interview recording is processed automatically when the session ends. If
-                      it did not finish, resume it from{" "}
-                      <Link to="/recordings" className="text-emerald-400 hover:underline">
-                        Recordings
-                      </Link>
-                      .
+                      The extension uploads the interview during capture. Check its recording page
+                      for progress or retry.
                     </>
                   ) : (
                     "No recording was made for this session."
@@ -271,15 +273,17 @@ function SessionReview({ session }: { session: SessionDetail }) {
             onSeek={seekTo}
           />
 
-          <TranscriptList
-            segments={segments}
-            model={transcript.data?.row.model}
-            isPending={transcript.isPending}
-            error={transcript.error}
-            onRetry={() => void transcript.refetch()}
-            currentTime={currentTime}
-            onSeek={seekTo}
-          />
+          {session.graded && (
+            <TranscriptList
+              segments={segments}
+              model={transcript.data?.row.model}
+              isPending={transcript.isPending}
+              error={transcript.error}
+              onRetry={() => void transcript.refetch()}
+              currentTime={currentTime}
+              onSeek={seekTo}
+            />
+          )}
         </div>
 
         <div className="space-y-4">
@@ -291,7 +295,12 @@ function SessionReview({ session }: { session: SessionDetail }) {
             onJump={scrubTo}
           />
 
-          {review.isPending ? (
+          {!isInterview || !session.graded ? (
+            <Card>
+              <SectionTitle>AI review</SectionTitle>
+              <p className="text-sm text-zinc-400">{generateBlocked}</p>
+            </Card>
+          ) : review.isPending ? (
             <Card>
               <SectionTitle>AI review</SectionTitle>
               <Spinner className="py-8" label="Loading review…" />

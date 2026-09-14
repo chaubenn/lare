@@ -10,6 +10,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
+use futures::FutureExt;
 use lare_core::protocol::{AppToExt, RecordingState};
 use lare_recording::{Feeds, RecordingMode, StartRequest};
 use serde::{Deserialize, Serialize};
@@ -124,6 +125,21 @@ pub struct DemoStart {
     pub facecam: bool,
     #[serde(default = "default_true")]
     pub mic: bool,
+    /// Deferred TUS object prepared before capture begins (instant mode only).
+    pub upload: Option<LiveUploadTarget>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveUploadTarget {
+    pub tus: lare_bunny::TusCredentials,
+    pub upload_url: String,
+}
+
+struct LiveUpload {
+    target: LiveUploadTarget,
+    task: futures::future::Shared<futures::future::BoxFuture<'static, Result<String, String>>>,
+    abort: tokio::task::AbortHandle,
 }
 
 fn default_true() -> bool {
@@ -141,6 +157,7 @@ pub struct StartSpec {
     pub post_id: Option<String>,
     pub facecam: bool,
     pub mic: bool,
+    pub upload: Option<LiveUploadTarget>,
 }
 
 struct Active {
@@ -188,6 +205,8 @@ pub struct Recorder {
     last_finish: Mutex<Option<Finish>>,
     settings: RwLock<RecorderSettings>,
     recordings_dir: PathBuf,
+    live_uploads: Mutex<std::collections::HashMap<PathBuf, LiveUpload>>,
+    prepared_upload: Mutex<Option<LiveUploadTarget>>,
 }
 
 impl Recorder {
@@ -207,11 +226,55 @@ impl Recorder {
             last_finish: Mutex::new(None),
             settings: RwLock::new(settings),
             recordings_dir,
+            live_uploads: Mutex::new(std::collections::HashMap::new()),
+            prepared_upload: Mutex::new(None),
         })
     }
 
     pub fn recordings_dir(&self) -> &Path {
         &self.recordings_dir
+    }
+
+    pub async fn prepare_upload(&self, tus: lare_bunny::TusCredentials) -> Result<String, String> {
+        // The desktop prepares immediately before demo start. Consume this once, even
+        // when starting fails or the chosen mode is studio, so it cannot leak to a later take.
+        let mut pending = self.prepared_upload.lock().await;
+        *pending = None;
+        let upload_url = lare_bunny::create_deferred_upload(&lare_bunny::http_client(), &tus)
+            .await.map_err(|e| e.to_string())?;
+        *pending = Some(LiveUploadTarget { tus, upload_url: upload_url.clone() });
+        Ok(upload_url)
+    }
+
+    pub async fn take_prepared_upload(&self) -> Option<LiveUploadTarget> {
+        self.prepared_upload.lock().await.take()
+    }
+
+    /// Join the original tailer rather than starting a second PATCH writer at stop.
+    pub async fn join_live_upload(&self, path: &Path, tus: &lare_bunny::TusCredentials, url: Option<&str>) -> Result<Option<String>, String> {
+        let (task, matches) = {
+            let uploads = self.live_uploads.lock().await;
+            let Some(upload) = uploads.get(path) else { return Ok(None); };
+            (upload.task.clone(), upload.target.tus.headers == tus.headers
+                && url.is_none_or(|url| url == upload.target.upload_url))
+        };
+        // Never hold the registry lock while waiting for stop: cancellation must
+        // be able to abort this writer even if an upload command arrived early.
+        let result = task.await;
+        self.live_uploads.lock().await.remove(path);
+        if !matches {
+            return Ok(None);
+        }
+        result.map(Some)
+    }
+
+    async fn abort_live_upload(&self, path: Option<PathBuf>) {
+        if let Some(path) = path {
+            if let Some(upload) = self.live_uploads.lock().await.remove(&path) {
+                upload.abort.abort();
+                let _ = upload.task.await;
+            }
+        }
     }
 
     pub fn models_dir(&self) -> PathBuf {
@@ -410,6 +473,40 @@ impl Recorder {
         let rec = lare_recording::start(req, feeds)
             .await
             .map_err(|e| format!("Could not start recording: {e:#}"))?;
+        if let (Some(target), Some((path, completion))) = (spec.upload.clone(), rec.live_output()) {
+            let marker = path.with_extension("upload.json");
+            if let Err(error) = tokio::fs::write(&marker, serde_json::json!({
+                "uploadUrl": target.upload_url, "headers": target.tus.headers,
+            }).to_string()).await {
+                let _ = rec.cancel().await;
+                feeds.release_mic().await;
+                feeds.release_camera().await;
+                return Err(format!("Could not persist live upload: {error}"));
+            }
+            let app = self.app.clone();
+            let upload_path = path.clone();
+            let upload_target = target.clone();
+            let job_id = recording_id.clone();
+            let task = tokio::spawn(async move {
+                let result = lare_bunny::upload_growing_file(
+                    &lare_bunny::http_client(), &upload_path, &upload_target.tus,
+                    &upload_target.upload_url, lare_bunny::DEFAULT_CHUNK_SIZE, completion,
+                    |p| { let _ = app.emit("upload:progress", crate::commands::UploadProgress {
+                        job_id: job_id.clone(), uploaded: p.uploaded, total: p.total,
+                    }); },
+                ).await.map_err(|e| e.to_string());
+                if let Err(message) = &result {
+                    warn!(%message, "live upload failed; preserving local source for retry");
+                    let _ = app.emit("recording:upload-error", serde_json::json!({"recordingId": job_id, "message": message}));
+                }
+                result
+            });
+            let abort = task.abort_handle();
+            let task = async move {
+                task.await.map_err(|e| format!("live upload task failed: {e}"))?
+            }.boxed().shared();
+            self.live_uploads.lock().await.insert(path, LiveUpload { target, task, abort });
+        }
         let started_at = rec.started_at_epoch_ms();
         let payload = StatePayload {
             state: RecordingState::Recording,
@@ -499,7 +596,9 @@ impl Recorder {
         self.emit_state(&stopping);
 
         let feeds = self.feeds().await;
+        let live_path = active.rec.live_output().map(|(path, _)| path);
         let result = active.rec.stop().await;
+        if result.is_err() { self.abort_live_upload(live_path).await; }
         feeds.release_mic().await;
         feeds.release_camera().await;
 
@@ -578,6 +677,7 @@ impl Recorder {
         crate::windows::hide_camera(&self.app);
         let sid = active.session_id.clone();
         let path = active.rec.project_path().to_path_buf();
+        self.abort_live_upload(active.rec.live_output().map(|(path, _)| path)).await;
         let feeds = self.feeds().await;
         let res = active.rec.cancel().await.map_err(|e| format!("cancel failed: {e:#}"));
         feeds.release_mic().await;
@@ -725,6 +825,7 @@ impl RecordingBackend for CapRecordingBackend {
                         post_id: None,
                         facecam: req.facecam,
                         mic: req.mic,
+                        upload: None,
                     },
                     Some(hub),
                 )

@@ -4,7 +4,7 @@ import { useToast } from "@/components/toast/ToastProvider";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
-import { permissionsKey, usePermissions } from "@/features/recording/hooks";
+import { permissionsKey, usePermissions } from "@/features/media/hooks";
 import { type PermissionStatus, type Permissions, recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";

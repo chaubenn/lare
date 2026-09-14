@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { FollowButton } from "@/features/friends/FollowButton";
-import { useViewerLikes } from "@/features/posts/social";
+import { useViewerLikes } from "@/features/publishing/posts/social";
 import { profileWebUrl } from "@/lib/env";
 import { openExternal } from "@/lib/open";
 import { ProfileView } from "./ProfileView";

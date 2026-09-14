@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/ui/Card";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
-import { useViewerLikes } from "@/features/posts/social";
+import { useViewerLikes } from "@/features/publishing/posts/social";
 import { PostCard } from "./PostCard";
 import { type FeedScope, useFeed } from "./queries";
 

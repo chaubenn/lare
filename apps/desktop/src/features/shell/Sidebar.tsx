@@ -3,7 +3,7 @@ import { Emblem, Wordmark } from "@lare/ui/brand";
 import { motion } from "motion/react";
 import { NavLink } from "react-router";
 import { CountBadge } from "@/components/ui/Badge";
-import { useDrafts } from "@/features/drafts/queries";
+import { useDrafts } from "@/features/publishing/drafts/queries";
 import { useFollowRequests } from "@/features/requests/queries";
 import { NAV_ITEMS } from "./nav";
 

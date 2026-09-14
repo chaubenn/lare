@@ -1,0 +1,216 @@
+name: Dev release
+
+# QA builds cut straight from `dev`, without the `dev -> main` PR gate.
+#
+# The point of a dev release is to exercise the two things only a real artifact can test:
+# installing the desktop app from a fresh download, and loading the packaged Chrome
+# extension. It is not a shipping path — the release is published as a **prerelease**, so
+# `releases/latest` never resolves to it and no installed app can self-update onto it.
+#
+# Trigger: push a tag `dev-vX.Y.Z-N` (e.g. `dev-v0.4.4-1`). The `v*` pattern in
+# release.yml does not match `dev-v*`, so the real release workflow stays out of it, and
+# ci-dev.yml only runs on branch pushes — tagging costs nothing but the build itself.
+#
+# Unlike release.yml this skips the version/tag agreement check (a dev tag deliberately
+# carries a `-N` suffix the app version does not) and writes no `latest.json`.
+on:
+  push:
+    tags: ["dev-v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # Same public client configuration as release.yml: a dev release is a build of `dev`,
+  # not a separate backend. QA runs against the real Supabase project and site.
+  VITE_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
+  VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
+  VITE_SITE_URL: https://lare-one.vercel.app
+  VITE_BUNNY_LIBRARY_ID: "743884"
+
+jobs:
+  create-release:
+    name: Create draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+      tag: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create draft release
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --prerelease --title "Lare $TAG (dev QA build)" --target "$GITHUB_SHA" --notes-file - <<'EOF'
+          Unreleased QA build from the `dev` branch. Not a shipping release: it is marked
+          pre-release, so installed apps will not update onto it.
+
+          ## Download
+
+          | Platform | File |
+          | --- | --- |
+          | macOS (Apple Silicon) | `Lare-macOS-AppleSilicon.dmg` |
+          | macOS (Intel) | `Lare-macOS-Intel.dmg` |
+          | Windows 10/11 (x64) | `Lare-Windows-x64-Setup.exe` |
+          | Chrome extension | `Lare-Chrome-Extension.zip` |
+
+          Builds are not notarised. macOS: right-click the app > Open the first time (or
+          `xattr -dr com.apple.quarantine /Applications/Lare.app`). Windows: choose "More info"
+          > "Run anyway" on the SmartScreen prompt.
+
+          The extension is unpacked, not from the Web Store: unzip it, then load the folder
+          at `chrome://extensions` with Developer mode on.
+          EOF
+          fi
+          # Drafts are not resolvable via /releases/tags/{tag}; look the id up in the list,
+          # retrying past the temporary `untagged-*` name GitHub reports right after creation.
+          ID=""
+          for attempt in 1 2 3 4 5 6; do
+            ID=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+            [ -n "$ID" ] && break
+            sleep 5
+          done
+          [ -n "$ID" ] || { echo "::error::could not resolve release id for $TAG"; exit 1; }
+          echo "release_id=$ID" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            asset: Lare-macOS-AppleSilicon.dmg
+            glob: "target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"
+          - name: macOS x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            asset: Lare-macOS-Intel.dmg
+            glob: "target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"
+          - name: Windows x64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            asset: Lare-Windows-x64-Setup.exe
+            glob: "target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Shares the release workflow's cache key: dev builds and release builds compile
+          # the same dependency graph, so the first dev release after a release is warm.
+          key: release-${{ matrix.target }}
+      - run: pnpm install --frozen-lockfile
+      - name: cmake (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake || true
+      - name: Native deps (prebuilt ffmpeg, cargo env)
+        env:
+          RUST_TARGET_TRIPLE: ${{ matrix.target }}
+        run: node scripts/setup-native-deps.mjs
+      - name: Build installers
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # tauri.conf.json has createUpdaterArtifacts on, so the bundler needs the key even
+          # here. The signed bundles are trimmed off the dev release below — nothing points
+          # at them, because a dev release writes no latest.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          args: --target ${{ matrix.target }}
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          includeUpdaterJson: false
+      - name: Attach stable-named installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          shopt -s nullglob
+          files=( ${{ matrix.glob }} )
+          if [ ${#files[@]} -eq 0 ]; then echo "::error::no installer matched ${{ matrix.glob }}"; exit 1; fi
+          cp "${files[0]}" "${{ matrix.asset }}"
+          gh release upload "$TAG" "${{ matrix.asset }}" --clobber
+
+  extension:
+    name: Chrome extension
+    needs: create-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build and zip
+        working-directory: apps/extension
+        env:
+          WXT_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
+          WXT_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
+          WXT_SITE_URL: https://lare-one.vercel.app
+        run: pnpm build && pnpm zip
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          zip=$(ls apps/extension/.output/*-chrome.zip | head -n1)
+          cp "$zip" Lare-Chrome-Extension.zip
+          gh release upload "$TAG" Lare-Chrome-Extension.zip --clobber
+
+  publish:
+    name: Publish prerelease
+    needs: [create-release, desktop, extension]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify assets and undraft as prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | tee assets.txt
+          for required in Lare-macOS-AppleSilicon.dmg Lare-macOS-Intel.dmg Lare-Windows-x64-Setup.exe Lare-Chrome-Extension.zip; do
+            grep -qx "$required" assets.txt || { echo "::error::missing asset $required"; exit 1; }
+          done
+          # --prerelease, and never --latest: this is what keeps the in-app updater, which
+          # reads releases/latest/download/latest.json, from ever seeing a dev build.
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+      - name: Trim to the four QA downloads
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          # A dev release serves no updater, so unlike release.yml it keeps nothing but the
+          # installers: no latest.json, no versioned .sig / .app.tar.gz bundles.
+          for asset in $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'); do
+            case "$asset" in
+              Lare-macOS-*.dmg|Lare-Windows-x64-Setup.exe|Lare-Chrome-Extension.zip) continue ;;
+              *) gh release delete-asset "$TAG" "$asset" --repo "$GITHUB_REPOSITORY" --yes ;;
+            esac
+          done

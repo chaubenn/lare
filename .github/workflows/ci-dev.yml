@@ -1,0 +1,44 @@
+name: CI (dev)
+
+# The fast lane. `dev` is the shared integration branch: @chaubenn and @psilde push to it
+# freely and QA each other's work locally, so it needs a signal in minutes, not the ~40
+# the full matrix takes. This runs only the checks that catch the mistakes a reviewer
+# cannot see at a glance — formatting, types, unit tests, and that the web app still
+# builds.
+#
+# Deliberately NOT here: the Rust matrix (macOS + Windows, up to 90 min) and the
+# Playwright extension e2e. Those run in ci.yml on the `dev -> main` pull request, which
+# is the gate that actually protects a release.
+
+on:
+  push:
+    branches: [dev]
+
+concurrency:
+  group: ci-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: Lint, typecheck, unit tests, web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm -r --if-present typecheck
+      - run: pnpm --filter @lare/shared test
+      - name: Web build
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
+          NEXT_PUBLIC_SITE_URL: https://lare-one.vercel.app
+          NEXT_PUBLIC_BUNNY_LIBRARY_ID: "743884"
+        run: pnpm build

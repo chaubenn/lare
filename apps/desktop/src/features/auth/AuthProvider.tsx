@@ -1,10 +1,12 @@
 import type { Profile } from "@lare/supabase-types";
 import type { Session } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/toast/ToastProvider";
+import { env } from "@/lib/env";
 import { errorMessage, supabase } from "@/lib/supabase";
-import { setCurrentUser, useTauriEvent } from "@/lib/tauri";
+import { inTauri, setCurrentUser, useTauriEvent } from "@/lib/tauri";
 
 export const profileQueryKey = (userId: string) => ["profile", userId] as const;
 
@@ -80,7 +82,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (session === undefined) return;
     setCurrentUser(userId).catch((err: unknown) => console.error("set_current_user failed", err));
+    if (inTauri)
+      void invoke("configure_pcm", {
+        auth: session
+          ? {
+              userId: session.user.id,
+              token: session.access_token,
+              url: env.VITE_SUPABASE_URL,
+              key: env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            }
+          : null,
+      }).catch((err: unknown) => console.error("Local grading configuration failed", err));
   }, [session, userId]);
+
+  useTauriEvent("ext:message", (raw) => {
+    const message = raw as { type?: string; sessionId?: string; message?: string };
+    if (message.type === "review.error")
+      toast({ title: "AI review failed", description: message.message, variant: "error" });
+    if (["transcript.partial", "pcm.complete", "review.complete"].includes(message.type ?? "")) {
+      void queryClient.invalidateQueries({ queryKey: ["session", message.sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["interview-review", message.sessionId] });
+    }
+  });
 
   // OAuth loopback: the Rust server received ?code=... on 127.0.0.1:47831/auth/callback.
   useTauriEvent("auth:callback", ({ code }) => {

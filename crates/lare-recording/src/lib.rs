@@ -28,6 +28,8 @@ pub mod devices;
 pub mod edit;
 pub mod permissions;
 pub mod thumbnail;
+mod fragmented;
+mod live;
 
 /// Path of the primary display track of a studio project (first segment).
 pub fn find_display_track(project_path: &Path) -> Option<PathBuf> {
@@ -185,7 +187,7 @@ impl Feeds {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RecordingMode {
-    /// One MP4 (`content/output.mp4`), camera preview window captured as part of the screen.
+    /// One append-only MP4 (`content/capture.mp4`), camera preview captured with the screen.
     Instant,
     /// Separate display/camera/mic tracks in a `.cap` project, rendered later via [`export_studio`].
     Studio,
@@ -241,6 +243,7 @@ pub struct ActiveRecording {
     handle: Handle,
     _mic: Option<Arc<MicrophoneFeedLock>>,
     _camera: Option<Arc<CameraFeedLock>>,
+    live: Option<live::LiveOutput>,
 }
 
 fn now_ms() -> u64 {
@@ -327,6 +330,26 @@ pub async fn start(req: StartRequest, feeds: &Feeds) -> anyhow::Result<ActiveRec
         }
     };
 
+    let live = if let Handle::Instant(h) = &handle {
+        let result = h.take_segment_rx().ok_or_else(|| anyhow!("capture has no closed-fragment stream")).and_then(|rx| {
+            live::LiveOutput::start(&req.dir, mic.is_some() || req.system_audio, move |timeout| {
+                use cap_enc_ffmpeg::segmented_stream::SegmentMediaType;
+                rx.recv_timeout(timeout).map(|event| live::Fragment {
+                    track: match event.media_type { SegmentMediaType::Video => 0, SegmentMediaType::Audio => 1 },
+                    path: event.path, index: event.index, is_init: event.is_init,
+                })
+            })
+        });
+        match result {
+            Ok(output) => Some(output),
+            Err(error) => {
+                let _ = h.cancel().await;
+                return Err(error);
+            }
+        }
+    } else {
+        None
+    };
     Ok(ActiveRecording {
         mode: req.mode,
         project_path: req.dir,
@@ -334,10 +357,16 @@ pub async fn start(req: StartRequest, feeds: &Feeds) -> anyhow::Result<ActiveRec
         handle,
         _mic: mic,
         _camera: camera,
+        live,
     })
 }
 
 impl ActiveRecording {
+    /// Append-only combined MP4 and a completion signal sent only after clean stop/close.
+    pub fn live_output(&self) -> Option<(PathBuf, tokio::sync::watch::Receiver<bool>)> {
+        self.live.as_ref().map(|live| (live.path.clone(), live.completion()))
+    }
+
     pub fn mode(&self) -> RecordingMode {
         self.mode
     }
@@ -365,37 +394,16 @@ impl ActiveRecording {
         }
     }
 
-    /// Stop and finalise files. Instant mode yields `content/output.mp4`.
+    /// Stop and finalise files. Instant mode yields the live `content/capture.mp4`.
     pub async fn stop(self) -> anyhow::Result<CompletedRecording> {
         let ended = now_ms();
         match self.handle {
             Handle::Instant(h) => {
-                let done = h.stop().await.context("stopping instant recording")?;
-                // Cap's instant pipeline writes DASH fragments (content/display, content/audio);
-                // mux them into one progressive MP4 for upload.
-                let content = done.project_path.join("content");
-                let output = content.join("output.mp4");
-                if !output.exists() {
-                    let display_dir = content.join("display");
-                    let audio_dir = content.join("audio");
-                    let out = output.clone();
-                    let completion = done.clean_completion;
-                    tokio::task::spawn_blocking(move || {
-                        use cap_recording::recovery::RecoveryManager;
-                        match completion {
-                            Some(c) => RecoveryManager::finalize_completed_instant_output(
-                                &display_dir,
-                                &audio_dir,
-                                &out,
-                                c,
-                            ),
-                            None => RecoveryManager::finalize_instant_output(&display_dir, &audio_dir, &out),
-                        }
-                    })
-                    .await
-                    .context("finalize task panicked")?
-                    .map_err(|e| anyhow!("finalizing instant recording: {e}"))?;
-                }
+                let result = h.stop().await.context("stopping instant recording");
+                let live = self.live.ok_or_else(|| anyhow!("missing live muxer"))?;
+                let output = live.finish(result.is_ok()).await;
+                let done = result?;
+                let output = output?;
                 Ok(CompletedRecording {
                     mode: RecordingMode::Instant,
                     project_path: done.project_path,
@@ -432,10 +440,12 @@ impl ActiveRecording {
 
     /// Abort and discard.
     pub async fn cancel(self) -> anyhow::Result<()> {
-        match self.handle {
+        let result = match self.handle {
             Handle::Instant(h) => h.cancel().await,
             Handle::Studio(h) => h.cancel().await,
-        }
+        };
+        if let Some(live) = self.live { let _ = live.finish(false).await; }
+        result
     }
 }
 
@@ -541,13 +551,18 @@ pub fn remux_studio_if_needed(project_path: &Path) -> anyhow::Result<bool> {
 ///
 /// [`ActiveRecording::stop`] does this with the actor's own completion handle; this is the same
 /// work for the two cases where that handle is gone: `stop` itself failed, and the process was
-/// killed mid-recording. Instant projects are muxed into `content/output.mp4` (returned); studio
+/// killed mid-recording. Instant projects reuse a certified live output or are recovered into
+/// `content/output.mp4` (returned); studio
 /// projects are remuxed into the per-segment `display.mp4` files the exporter reads, and have no
 /// single output until [`export_studio`] runs.
 pub fn finalize_project(mode: RecordingMode, project_path: &Path) -> anyhow::Result<Option<PathBuf>> {
     match mode {
         RecordingMode::Instant => {
             let content = project_path.join("content");
+            let live = content.join("capture.mp4");
+            if content.join("capture.complete").exists() && live.exists() {
+                return Ok(Some(live));
+            }
             let output = content.join("output.mp4");
             if !output.exists() {
                 cap_recording::recovery::RecoveryManager::finalize_instant_output(

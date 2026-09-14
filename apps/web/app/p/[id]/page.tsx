@@ -84,24 +84,48 @@ export default async function PostPage({ params }: Params) {
     <Container width="page">
       <article className="space-y-6">
         {isOwner && viewer && (
-          <OwnerControls
-            postId={post.id}
-            userId={viewer.id}
-            status={post.status}
-            visibility={post.visibility}
-            title={post.title ?? ""}
-            body={post.body ?? ""}
-            showVideo={post.show_video}
-            showDemoVideo={post.show_demo_video}
-            includeAiInsights={post.include_ai_insights}
-            includeOgCard={post.include_og_card}
-            ogShowAiScores={post.og_show_ai_scores}
-            hasVideo={Boolean(post.videos) && post.video_kind !== "none"}
-            hasDemoVideo={Boolean(post.demo_videos)}
-            isInterview={session?.kind === "interview"}
-            coverMediaId={post.cover_media_id}
-            images={post.images}
-          />
+          <>
+            <OwnerControls
+              postId={post.id}
+              userId={viewer.id}
+              status={post.status}
+              visibility={post.visibility}
+              title={post.title ?? ""}
+              body={post.body ?? ""}
+              showVideo={post.show_video}
+              showDemoVideo={post.show_demo_video}
+              includeAiInsights={post.include_ai_insights}
+              includeOgCard={post.include_og_card}
+              ogShowAiScores={post.og_show_ai_scores}
+              hasVideo={Boolean(post.videos) && post.video_kind !== "none"}
+              hasDemoVideo={Boolean(post.demo_videos)}
+              isInterview={session?.kind === "interview"}
+              coverMediaId={post.cover_media_id}
+              images={post.images}
+            />
+            <nav aria-label="Owner workspace" className="flex flex-wrap gap-4 text-sm">
+              {post.status === "draft" && (
+                <Link href={`/drafts/${post.id}`} className="underline">
+                  Continue draft stepper
+                </Link>
+              )}
+              {session && (
+                <Link href={`/sessions/${session.id}`} className="underline">
+                  Private session timeline
+                </Link>
+              )}
+              {post.videos && (
+                <Link href={`/studio/${post.videos.id}`} className="underline">
+                  Trim full video
+                </Link>
+              )}
+              {post.demo_videos && (
+                <Link href={`/studio/${post.demo_videos.id}`} className="underline">
+                  Trim summary video
+                </Link>
+              )}
+            </nav>
+          </>
         )}
 
         <header>

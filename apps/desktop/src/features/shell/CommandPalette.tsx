@@ -37,8 +37,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       {
         id: "record",
         label: "Start recording",
-        hint: "Recordings",
-        run: () => go("/recordings"),
+        hint: "Draft media",
+        run: () => go("/drafts"),
       },
       { id: "draft", label: "New draft", hint: "Drafts", run: () => go("/drafts") },
       {
@@ -49,7 +49,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           onClose();
         },
       },
-      { id: "settings", label: "Open settings", hint: "⌘7", run: () => go("/settings") },
+      { id: "settings", label: "Open settings", hint: "⌘6", run: () => go("/settings") },
     ];
     const q = query.trim().toLowerCase();
     if (!q) return actions;

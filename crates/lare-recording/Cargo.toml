@@ -7,13 +7,13 @@ repository.workspace = true
 description = "Thin facade over the vendored Cap crates: devices, permissions, instant/studio recording and headless export."
 
 [dependencies]
-cap-recording = { path = "../cap/recording" }
-cap-project = { path = "../cap/project" }
-cap-export = { path = "../cap/export" }
-cap-camera = { path = "../cap/camera" }
-cap-enc-ffmpeg = { path = "../cap/enc-ffmpeg" }
-cap-media-info = { path = "../cap/media-info" }
-scap-targets = { path = "../cap/scap-targets" }
+cap-recording = { path = "../vendor/cap/recording" }
+cap-project = { path = "../vendor/cap/project" }
+cap-export = { path = "../vendor/cap/export" }
+cap-camera = { path = "../vendor/cap/camera" }
+cap-enc-ffmpeg = { path = "../vendor/cap/enc-ffmpeg" }
+cap-media-info = { path = "../vendor/cap/media-info" }
+scap-targets = { path = "../vendor/cap/scap-targets" }
 kameo = "0.17.2"
 cpal = { workspace = true }
 ffmpeg = { workspace = true }
@@ -27,5 +27,5 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-scap-screencapturekit = { path = "../cap/scap-screencapturekit" }
+scap-screencapturekit = { path = "../vendor/cap/scap-screencapturekit" }
 cidre = { workspace = true }

@@ -4346,7 +4346,7 @@ dependencies = [
 
 [[package]]
 name = "lare-desktop"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -4378,6 +4378,7 @@ dependencies = [
  "tokio-tungstenite 0.30.0",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -6886,6 +6887,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",

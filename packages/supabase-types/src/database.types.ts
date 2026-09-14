@@ -475,6 +475,7 @@ export type Database = {
       }
       sessions: {
         Row: {
+          graded: boolean
           active_ms: number
           client: string | null
           created_at: string
@@ -497,6 +498,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           is_practice_inbox?: boolean
+          graded?: boolean
           kind?: Database["public"]["Enums"]["session_kind"]
           recording_id?: string | null
           recording_started_at?: string | null
@@ -513,6 +515,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           is_practice_inbox?: boolean
+          graded?: boolean
           kind?: Database["public"]["Enums"]["session_kind"]
           recording_id?: string | null
           recording_started_at?: string | null
@@ -649,6 +652,7 @@ export type Database = {
       }
       videos: {
         Row: {
+          capture_source: Database["public"]["Enums"]["capture_source"]
           bunny_video_id: string | null
           created_at: string
           duration_ms: number | null
@@ -669,6 +673,7 @@ export type Database = {
         }
         Insert: {
           bunny_video_id?: string | null
+          capture_source?: Database["public"]["Enums"]["capture_source"]
           created_at?: string
           duration_ms?: number | null
           error?: string | null
@@ -688,6 +693,7 @@ export type Database = {
         }
         Update: {
           bunny_video_id?: string | null
+          capture_source?: Database["public"]["Enums"]["capture_source"]
           created_at?: string
           duration_ms?: number | null
           error?: string | null
@@ -727,6 +733,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      upsert_transcript_segments: {
+        Args: { p_session_id: string; p_model: string; p_language: string; p_segments: Json }
+        Returns: Database["public"]["Tables"]["transcripts"]["Row"]
+      }
       accept_follow: { Args: { follower: string }; Returns: undefined }
       decline_follow: { Args: { follower: string }; Returns: undefined }
       feed: {
@@ -775,6 +785,7 @@ export type Database = {
       toggle_post_like: { Args: { post: string }; Returns: Json }
     }
     Enums: {
+      capture_source: "desktop" | "extension" | "web"
       follow_status: "pending" | "accepted"
       post_status: "draft" | "published"
       post_visibility: "public" | "private"
@@ -926,6 +937,7 @@ export const Constants = {
   public: {
     Enums: {
       follow_status: ["pending", "accepted"],
+      capture_source: ["desktop", "extension", "web"],
       post_status: ["draft", "published"],
       post_visibility: ["public", "private"],
       problem_difficulty: ["Easy", "Medium", "Hard"],

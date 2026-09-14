@@ -43,3 +43,11 @@ body {
     0 0 0 2px var(--surface),
     0 0 0 4px var(--focus);
 }
+
+@media (min-width: 48rem) {
+  body:has([data-app-sidebar]) main,
+  body:has([data-app-sidebar]) > footer,
+  body:has([data-app-sidebar]) > div > footer {
+    margin-left: 14rem;
+  }
+}

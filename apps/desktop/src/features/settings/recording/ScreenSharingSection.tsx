@@ -3,7 +3,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { MonitorX } from "lucide-react";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
-import { usePermissions } from "@/features/recording/hooks";
+import { usePermissions } from "@/features/media/hooks";
 import { recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { SubSection } from "./shared";

@@ -1,7 +1,7 @@
 import type { QueryData } from "@supabase/supabase-js";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { decoratePosts, type PostDecoration } from "@/features/posts/media";
-import { fetchTopComments, type PostComment } from "@/features/posts/social";
+import { decoratePosts, type PostDecoration } from "@/features/publishing/posts/media";
+import { fetchTopComments, type PostComment } from "@/features/publishing/posts/social";
 import { supabase } from "@/lib/supabase";
 
 export const FEED_PAGE_SIZE = 20;

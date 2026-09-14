@@ -13,7 +13,9 @@ use std::time::Duration;
 use anyhow::{Context, anyhow};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use whisper_rs::{
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
+};
 
 pub const SAMPLE_RATE: u32 = 16_000;
 
@@ -431,7 +433,10 @@ where
             }
         }
         if !resumable {
-            tracing::warn!(bytes = part_len, "discarding unverifiable partial model download");
+            tracing::warn!(
+                bytes = part_len,
+                "discarding unverifiable partial model download"
+            );
             let _ = tokio::fs::remove_file(&tmp).await;
             let _ = tokio::fs::remove_file(&state_path).await;
         }
@@ -550,6 +555,7 @@ where
 }
 
 /// Decode any container/codec ffmpeg understands into 16 kHz mono f32 samples.
+#[cfg(feature = "media")]
 pub fn decode_to_pcm16k(input: &Path) -> anyhow::Result<Vec<f32>> {
     ffmpeg::init().ok();
     let mut ictx =
@@ -607,6 +613,7 @@ pub fn decode_to_pcm16k(input: &Path) -> anyhow::Result<Vec<f32>> {
     Ok(out)
 }
 
+#[cfg(feature = "media")]
 fn append_samples(frame: &ffmpeg::frame::Audio, out: &mut Vec<f32>) {
     let n = frame.samples();
     if n == 0 {
@@ -650,83 +657,202 @@ pub fn transcribe_pcm<F>(
     model_path: &Path,
     pcm: &[f32],
     opts: &TranscribeOptions,
-    mut on_progress: F,
+    on_progress: F,
 ) -> anyhow::Result<Vec<Segment>>
 where
     F: FnMut(Progress) + Send + 'static,
 {
-    if pcm.len() < SAMPLE_RATE as usize / 2 {
-        return Ok(Vec::new());
+    PcmTranscriber::new(model_path)?.transcribe(pcm, opts, on_progress)
+}
+
+/// Reuses the model allocation and decoder state across rolling windows.
+pub struct PcmTranscriber {
+    state: WhisperState,
+}
+
+impl PcmTranscriber {
+    pub fn new(model_path: &Path) -> anyhow::Result<Self> {
+        let ctx = WhisperContext::new_with_params(
+            model_path
+                .to_str()
+                .ok_or_else(|| anyhow!("model path is not UTF-8"))?,
+            WhisperContextParameters::default(),
+        )
+        .map_err(|e| anyhow!("loading whisper model: {e}"))?;
+        Ok(Self {
+            state: ctx
+                .create_state()
+                .map_err(|e| anyhow!("whisper state: {e}"))?,
+        })
     }
-    let ctx = WhisperContext::new_with_params(
-        model_path
-            .to_str()
-            .ok_or_else(|| anyhow!("model path is not UTF-8"))?,
-        WhisperContextParameters::default(),
-    )
-    .map_err(|e| anyhow!("loading whisper model: {e}"))?;
-    let mut state = ctx
-        .create_state()
-        .map_err(|e| anyhow!("whisper state: {e}"))?;
 
-    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-    // whisper.cpp's GGML thread pool has well-documented hangs on Windows at higher
-    // thread counts; cap lower there. Other platforms keep the wider cap.
-    #[cfg(target_os = "windows")]
-    const MAX_THREADS: usize = 4;
-    #[cfg(not(target_os = "windows"))]
-    const MAX_THREADS: usize = 8;
-    let threads = opts.threads.unwrap_or_else(|| {
-        std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
-            .min(MAX_THREADS)
-    });
-    params.set_n_threads(threads as i32);
-    params.set_translate(false);
-    params.set_language(opts.language.as_deref());
-    params.set_print_special(false);
-    params.set_print_progress(false);
-    params.set_print_realtime(false);
-    params.set_print_timestamps(false);
-    params.set_token_timestamps(false);
-    params.set_suppress_blank(true);
-    params.set_max_len(0);
-    if let Some(prompt) = &opts.initial_prompt {
-        params.set_initial_prompt(prompt);
-    }
-    params.set_progress_callback_safe(move |p: i32| {
-        on_progress(Progress::Transcribing {
-            percent: p.clamp(0, 100) as u32,
-        });
-    });
-
-    state
-        .full(params, pcm)
-        .map_err(|e| anyhow!("whisper full() failed: {e}"))?;
-
-    let mut segments = Vec::new();
-    for seg in state.as_iter() {
-        let text = seg
-            .to_str_lossy()
-            .map(|c| c.trim().to_string())
-            .unwrap_or_default();
-        if text.is_empty() || (text.starts_with('[') && text.ends_with(']')) {
-            continue; // skip empty and pure non-speech markers like [BLANK_AUDIO]
+    pub fn transcribe<F>(
+        &mut self,
+        pcm: &[f32],
+        opts: &TranscribeOptions,
+        mut on_progress: F,
+    ) -> anyhow::Result<Vec<Segment>>
+    where
+        F: FnMut(Progress) + Send + 'static,
+    {
+        if pcm.len() < SAMPLE_RATE as usize / 2 {
+            return Ok(Vec::new());
         }
-        // whisper timestamps are in centiseconds.
-        let s = (seg.start_timestamp().max(0) as u64) * 10;
-        let e = (seg.end_timestamp().max(0) as u64) * 10;
-        segments.push(Segment {
-            s,
-            e: e.max(s),
-            text,
+        anyhow::ensure!(pcm.iter().all(|s| s.is_finite()), "non-finite PCM sample");
+        let state = &mut self.state;
+
+        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        // whisper.cpp's GGML thread pool has well-documented hangs on Windows at higher
+        // thread counts; cap lower there. Other platforms keep the wider cap.
+        #[cfg(target_os = "windows")]
+        const MAX_THREADS: usize = 4;
+        #[cfg(not(target_os = "windows"))]
+        const MAX_THREADS: usize = 8;
+        let threads = opts.threads.unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4)
+                .min(MAX_THREADS)
         });
+        params.set_n_threads(threads as i32);
+        params.set_translate(false);
+        params.set_language(opts.language.as_deref());
+        params.set_print_special(false);
+        params.set_print_progress(false);
+        params.set_print_realtime(false);
+        params.set_print_timestamps(false);
+        params.set_token_timestamps(false);
+        params.set_suppress_blank(true);
+        params.set_max_len(0);
+        if let Some(prompt) = &opts.initial_prompt {
+            params.set_initial_prompt(prompt);
+        }
+        params.set_progress_callback_safe(move |p: i32| {
+            on_progress(Progress::Transcribing {
+                percent: p.clamp(0, 100) as u32,
+            });
+        });
+
+        state
+            .full(params, pcm)
+            .map_err(|e| anyhow!("whisper full() failed: {e}"))?;
+
+        let mut segments = Vec::new();
+        for seg in state.as_iter() {
+            let text = seg
+                .to_str_lossy()
+                .map(|c| c.trim().to_string())
+                .unwrap_or_default();
+            if text.is_empty() || (text.starts_with('[') && text.ends_with(']')) {
+                continue; // skip empty and pure non-speech markers like [BLANK_AUDIO]
+            }
+            // whisper timestamps are in centiseconds.
+            let s = (seg.start_timestamp().max(0) as u64) * 10;
+            let e = (seg.end_timestamp().max(0) as u64) * 10;
+            segments.push(Segment {
+                s,
+                e: e.max(s),
+                text,
+            });
+        }
+        Ok(segments)
     }
-    Ok(segments)
+}
+
+/// Bounded rolling audio buffer. Timestamps remain relative to the entire PCM stream.
+pub struct RollingTranscriber {
+    engine: PcmTranscriber,
+    pcm: Vec<f32>,
+    offset: u64,
+    pub segments: Vec<Segment>,
+    pub next_sample: u64,
+    finished: bool,
+}
+
+impl RollingTranscriber {
+    pub fn new(model: &Path) -> anyhow::Result<Self> {
+        Ok(Self {
+            engine: PcmTranscriber::new(model)?,
+            pcm: Vec::new(),
+            offset: 0,
+            segments: Vec::new(),
+            next_sample: 0,
+            finished: false,
+        })
+    }
+
+    pub fn push(&mut self, pcm: &[f32], finish: bool) -> anyhow::Result<()> {
+        anyhow::ensure!(!self.finished, "transcription already finished");
+        anyhow::ensure!(
+            pcm.len() <= SAMPLE_RATE as usize * 30,
+            "PCM frame exceeds 30 seconds"
+        );
+        anyhow::ensure!(pcm.iter().all(|s| s.is_finite()), "non-finite PCM sample");
+        self.pcm.extend_from_slice(pcm);
+        self.next_sample += pcm.len() as u64;
+        let window = SAMPLE_RATE as usize * 30;
+        let stride = SAMPLE_RATE as usize * 28;
+        while self.pcm.len() >= window || (finish && !self.pcm.is_empty()) {
+            let count = self.pcm.len().min(window);
+            let result = self.engine.transcribe(
+                &self.pcm[..count],
+                &TranscribeOptions::default(),
+                |_| {},
+            )?;
+            append_window(
+                &mut self.segments,
+                result,
+                self.offset * 1000 / u64::from(SAMPLE_RATE),
+            );
+            let consumed = if count < window { count } else { stride };
+            self.pcm.drain(..consumed);
+            self.offset += consumed as u64;
+        }
+        self.finished = finish;
+        Ok(())
+    }
+}
+
+fn append_window(existing: &mut Vec<Segment>, incoming: Vec<Segment>, offset: u64) {
+    for mut segment in incoming {
+        segment.s += offset;
+        segment.e += offset;
+        if let Some(last) = existing.last() {
+            if segment.e <= last.e {
+                continue;
+            }
+            if segment.s <= last.e {
+                let previous: Vec<_> = existing
+                    .iter()
+                    .filter(|s| s.e > offset)
+                    .flat_map(|s| s.text.split_whitespace())
+                    .collect();
+                let words: Vec<_> = segment.text.split_whitespace().collect();
+                let normalize = |s: &str| {
+                    s.trim_matches(|c: char| !c.is_alphanumeric())
+                        .to_lowercase()
+                };
+                let overlap = (1..=previous.len().min(words.len()))
+                    .rev()
+                    .find(|&n| {
+                        previous[previous.len() - n..]
+                            .iter()
+                            .zip(&words[..n])
+                            .all(|(a, b)| normalize(a) == normalize(b))
+                    })
+                    .unwrap_or(0);
+                segment.text = words[overlap..].join(" ");
+                segment.s = last.e;
+            }
+        }
+        if !segment.text.is_empty() && segment.e > segment.s {
+            existing.push(segment);
+        }
+    }
 }
 
 /// Decode + transcribe a media file. Blocking; call from `spawn_blocking`.
+#[cfg(feature = "media")]
 pub fn transcribe_file<F>(
     model_path: &Path,
     input: &Path,
@@ -766,6 +892,98 @@ pub fn to_webvtt(segments: &[Segment]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rolling_seam_removes_repeated_words_and_offsets_timestamps() {
+        let mut segments = vec![Segment {
+            s: 27000,
+            e: 29500,
+            text: "use a Hash map.".into(),
+        }];
+        append_window(
+            &mut segments,
+            vec![Segment {
+                s: 0,
+                e: 4000,
+                text: "hash map for lookup".into(),
+            }],
+            28000,
+        );
+        assert_eq!(
+            segments[1],
+            Segment {
+                s: 29500,
+                e: 32000,
+                text: "for lookup".into()
+            }
+        );
+    }
+
+    #[test]
+    fn rolling_seam_skips_covered_segments_but_preserves_later_repetition() {
+        let mut segments = vec![Segment {
+            s: 27000,
+            e: 30000,
+            text: "yes".into(),
+        }];
+        append_window(
+            &mut segments,
+            vec![
+                Segment {
+                    s: 0,
+                    e: 1000,
+                    text: "yes".into(),
+                },
+                Segment {
+                    s: 3000,
+                    e: 4000,
+                    text: "yes".into(),
+                },
+            ],
+            28000,
+        );
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[1].s, 31000);
+    }
+
+    #[test]
+    fn rolling_engine_can_move_to_the_blocking_worker() {
+        fn assert_send<T: Send>() {}
+        assert_send::<RollingTranscriber>();
+    }
+
+    #[test]
+    fn rolling_seam_deduplicates_across_segment_boundaries() {
+        let mut segments = vec![
+            Segment {
+                s: 28000,
+                e: 29000,
+                text: "a hash".into(),
+            },
+            Segment {
+                s: 29000,
+                e: 30000,
+                text: "map".into(),
+            },
+        ];
+        append_window(
+            &mut segments,
+            vec![Segment {
+                s: 1000,
+                e: 4000,
+                text: "hash map lookup".into(),
+            }],
+            28000,
+        );
+        assert_eq!(
+            segments.last().unwrap(),
+            &Segment {
+                s: 30000,
+                e: 32000,
+                text: "lookup".into()
+            }
+        );
+    }
 
     #[test]
     fn webvtt_formats_timestamps() {

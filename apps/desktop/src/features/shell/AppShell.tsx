@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
-import { useDraftsRealtime } from "@/features/drafts/queries";
-import { JobsTray } from "@/features/recording/JobsTray";
-import { useRecordingEvents } from "@/features/recording/useRecordingEvents";
+import { JobsTray } from "@/features/media/JobsTray";
+import { useRecordingEvents } from "@/features/media/useRecordingEvents";
+import { useDraftsRealtime } from "@/features/publishing/drafts/queries";
 import { CommandPalette } from "./CommandPalette";
 import { NAV_ITEMS } from "./nav";
 import { Sidebar } from "./Sidebar";

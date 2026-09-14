@@ -31,11 +31,17 @@ test.beforeAll(async () => {
   context = await chromium.launchPersistentContext("", {
     channel: "chromium",
     headless: true,
-    args: [`--disable-extensions-except=${EXT_PATH}`, `--load-extension=${EXT_PATH}`],
+    args: [
+      `--disable-extensions-except=${EXT_PATH}`,
+      `--load-extension=${EXT_PATH}`,
+      "--use-fake-device-for-media-stream",
+      "--use-fake-ui-for-media-stream",
+      "--autoplay-policy=no-user-gesture-required",
+    ],
   });
   sw = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
-  // chrome-extension://<id>/popup.html — needed to drive the popup, which is now
-  // the only UI the extension has.
+  // chrome-extension://<id>/sidepanel.html — needed to drive the side panel, which
+  // is now the only UI the extension has.
   extensionId = new URL(sw.url()).host;
   // Seed a Supabase session so the extension believes the user is signed in.
   const res = await fetch(`${BASE}/__reset`);
@@ -85,11 +91,11 @@ async function submitOnce(page: Page): Promise<void> {
   await expect(page.getByTestId("result")).toHaveText("submit:Accepted");
 }
 
-async function openPopup() {
-  const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(popup.getByText("Tracking submissions")).toBeVisible();
-  return popup;
+async function openPanel() {
+  const panel = await context.newPage();
+  await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  await expect(panel.getByText("Tracking submissions")).toBeVisible();
+  return panel;
 }
 
 const INBOX_SESSION_ID = "00000000-0000-4000-8000-0000000000b0";
@@ -193,20 +199,20 @@ test("passive tracking: opening a problem and submitting is captured with no ses
   await page.close();
 });
 
-test("the popup lists tracked problems without a hand-off button, and keeps listing them", async () => {
+test("the side panel lists tracked problems without a hand-off button, and keeps listing them", async () => {
   await fetch(`${BASE}/__reset`);
   await resetExtensionState();
 
-  // Solve one problem: the popup just shows it. Posting happens in the desktop app,
+  // Solve one problem: the side panel just shows it. Posting happens in the desktop app,
   // which reads the inbox straight from Supabase, so there is nothing to hand off here.
   const first = await openProblem("two-sum");
   await submitOnce(first);
-  let popup = await openPopup();
-  await expect(popup.getByText("Two Sum")).toBeVisible();
-  await expect(popup.getByRole("button", { name: /Review .* in Lare/ })).toHaveCount(0);
-  await popup.close();
+  let panel = await openPanel();
+  await expect(panel.getByText("Two Sum")).toBeVisible();
+  await expect(panel.getByRole("button", { name: /Review .* in Lare/ })).toHaveCount(0);
+  await panel.close();
 
-  // Nothing local or server-side got cleared just by looking at the popup.
+  // Nothing local or server-side got cleared just by looking at the side panel.
   const sb = (await recorded()).filter((r) => r.path.startsWith("/supabase/"));
   expect(sb.filter((r) => r.method === "DELETE")).toHaveLength(0);
   expect(sb.filter((r) => r.path.startsWith("/supabase/rest/v1/session_problems"))).toHaveLength(1);
@@ -215,30 +221,123 @@ test("the popup lists tracked problems without a hand-off button, and keeps list
   // page always reports "Two Sum" regardless of slug, so two rows is the signal.)
   const second = await openProblem("add-two-numbers");
   await submitOnce(second);
-  popup = await openPopup();
-  await expect(popup.locator(".problems li")).toHaveCount(2);
+  panel = await openPanel();
+  await expect(panel.locator(".problems li")).toHaveCount(2);
 
-  await popup.close();
+  await panel.close();
   await second.close();
   await first.close();
 });
 
-test("mock interview cannot be started from the popup without the desktop app", async () => {
+test("grading is explicit: cloud-only interview is available without desktop", async () => {
   await fetch(`${BASE}/__reset`);
   await resetExtensionState();
   const problem = await openProblem();
 
-  const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  const panel = await context.newPage();
+  await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
 
-  // The popup is the only control surface now.
-  await expect(popup.getByText("Tracking submissions")).toBeVisible();
-  const start = popup.getByRole("button", { name: /Start mock interview/ });
+  // The side panel is the only control surface now.
+  await expect(panel.getByText("Tracking submissions")).toBeVisible();
+  const start = panel.getByRole("button", { name: /Start mock interview/ });
   await expect(start).toBeDisabled();
-  await expect(popup.getByText(/Open the Lare desktop app/)).toBeVisible();
+  await expect(panel.getByText(/Requires a compatible desktop app/)).toBeVisible();
+  await panel.getByRole("checkbox", { name: "Transcript & AI review" }).uncheck();
+  await expect(start).toBeEnabled();
+  await expect(panel.getByText(/Disables both transcript and AI review/)).toBeVisible();
 
-  await popup.close();
+  await panel.close();
   await problem.close();
+});
+
+test("publish selected cloud inbox problems opens a draft without desktop", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  const problem = await openProblem();
+  const panel = await openPanel();
+  await panel.getByRole("checkbox", { name: "Select Two Sum" }).check();
+  const draftPromise = context.waitForEvent("page");
+  await panel.getByRole("button", { name: "Create draft from selected problems" }).click();
+  const draft = await draftPromise;
+  await expect.poll(() => draft.url()).toContain("/drafts/");
+  const request = (await recorded()).find((r) => r.path.includes("publish_practice_problems"));
+  expect(request?.body).toMatchObject({ problem_ids: [expect.any(String)] });
+  await draft.close();
+  await panel.close();
+  await problem.close();
+});
+
+test("offscreen code records real media chunks, uploads during recording and finalizes", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  await sw.evaluate(async () => {
+    await chrome.storage.local.remove("lare:capture");
+  });
+  const document = await context.newPage();
+  // Exercise the real recorder/compositor/uploader with Chrome's fake physical devices.
+  // Only tabCapture's user-gesture stream token is substituted in this harness.
+  await document.addInitScript(() => {
+    const get = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (constraints) =>
+      get({ audio: !!constraints?.audio, video: !!constraints?.video });
+  });
+  await document.goto(`chrome-extension://${extensionId}/offscreen.html`);
+  const result = await sw.evaluate(async () =>
+    chrome.runtime.sendMessage({
+      target: "offscreen",
+      command: "start",
+      sessionId: "00000000-0000-4000-8000-000000000099",
+      tabId: 1,
+      streamId: "test-device",
+      userId: "00000000-0000-4000-8000-000000000001",
+      graded: false,
+      facecam: true,
+    }),
+  );
+  expect(result, JSON.stringify(result)).toMatchObject({
+    ok: true,
+    state: { state: "recording", graded: false },
+  });
+  try {
+    await expect
+      .poll(
+        async () =>
+          (await recorded()).filter((r) => r.method === "PATCH" && r.path.startsWith("/tus/"))
+            .length,
+      )
+      .toBeGreaterThan(0);
+  } catch (error) {
+    throw new Error(
+      `${error}\nCapture: ${JSON.stringify(await sw.evaluate(() => chrome.runtime.sendMessage({ target: "offscreen", command: "status" })))}\nRequests: ${JSON.stringify((await recorded()).map((r) => ({ method: r.method, path: r.path, headers: r.headers })))}`,
+    );
+  }
+  const paused = await sw.evaluate(() =>
+    chrome.runtime.sendMessage({ target: "offscreen", command: "pause" }),
+  );
+  expect(paused).toMatchObject({ ok: true, state: { state: "paused" } });
+  const resumed = await sw.evaluate(() =>
+    chrome.runtime.sendMessage({ target: "offscreen", command: "resume" }),
+  );
+  expect(resumed).toMatchObject({ ok: true, state: { state: "recording" } });
+  const stopped = await sw.evaluate(async () =>
+    chrome.runtime.sendMessage({ target: "offscreen", command: "stop" }),
+  );
+  expect(stopped, JSON.stringify(stopped)).toMatchObject({
+    ok: true,
+    state: { state: "complete", graded: false },
+  });
+  const finalized = (await recorded()).find((r) => r.path.includes("bunny-finalize-recording"));
+  if (!finalized) throw new Error("Missing finalization request");
+  expect((finalized.body as { sizeBytes: number }).sizeBytes).toBeGreaterThan(0);
+  const roots = await document.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const names: string[] = [];
+    for await (const name of (root as unknown as { keys(): AsyncIterable<string> }).keys())
+      names.push(name);
+    return names;
+  });
+  expect(roots.filter((name) => name.startsWith("lare-capture-"))).toHaveLength(0);
+  await document.close();
 });
 
 /** Focus a fixture Monaco instance and put the cursor at the very end of its model. */
