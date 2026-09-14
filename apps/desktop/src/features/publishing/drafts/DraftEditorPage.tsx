@@ -1,14 +1,14 @@
 import { formatDurationHuman } from "@lare/shared";
 import type { Post } from "@lare/supabase-types";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { ArrowLeft, Eye, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Eye, Send, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ProblemSection } from "@/components/ProblemSection";
 import { useToast } from "@/components/toast/ToastProvider";
 import { KindBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
 import { Input, Label, Select, Textarea, Toggle } from "@/components/ui/Field";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
@@ -71,6 +71,15 @@ export function DraftEditorPage() {
   return <DraftEditor key={draft.data.id} draft={draft.data} />;
 }
 
+/** The wizard's steps. Order is load-bearing: `draftStepError` validates by index. */
+const STEPS = [
+  { label: "Problems", hint: "What you solved in this session." },
+  { label: "Media", hint: "The recording, a summary video and photos for the post." },
+  { label: "Details", hint: "Title and write-up." },
+  { label: "Extras", hint: "Who sees it and what the post includes." },
+  { label: "Review & publish", hint: "Check it over, then publish." },
+] as const;
+
 function defaultTitle(draft: Draft): string {
   if (draft.title) return draft.title;
   const problems = draft.sessions?.session_problems ?? [];
@@ -123,10 +132,11 @@ function DraftEditor({ draft }: { draft: Draft }) {
     }
   });
   const [step, setStep] = useState(0);
+  // Furthest step reached, so finished steps stay one click away.
+  const [reached, setReached] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const leaving = useRef(false);
-  const steps = ["Problems", "Media", "Details", "Extras", "Review & publish"];
 
   const [title, setTitle] = useState(() => recovered.title ?? defaultTitle(draft));
   const [body, setBody] = useState(recovered.body ?? draft.body ?? "");
@@ -214,7 +224,9 @@ function DraftEditor({ draft }: { draft: Draft }) {
     if (!validate()) return;
     try {
       await saveDraft(edit);
-      setStep((s) => Math.min(4, s + 1));
+      const next = Math.min(STEPS.length - 1, step + 1);
+      setStep(next);
+      setReached((r) => Math.max(r, next));
     } catch (error) {
       setSaveError(errorMessage(error));
     }
@@ -291,147 +303,292 @@ function DraftEditor({ draft }: { draft: Draft }) {
     else void advance();
   };
 
+  const saveState = saveError ? "error" : saved ? "saved" : "saving";
+
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <Link
-          to="/drafts"
-          className="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
-        >
-          <ArrowLeft className="size-4" aria-hidden />
-          Drafts
-        </Link>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="danger"
-            icon={<Trash2 className="size-3.5" aria-hidden />}
+    <div className="mx-auto max-w-6xl">
+      <Link
+        to="/drafts"
+        className="inline-flex items-center gap-1 rounded-[var(--lare-r-1)] text-sm text-[var(--text-secondary)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
+      >
+        <ArrowLeft className="size-4" aria-hidden />
+        Drafts
+      </Link>
+
+      <div className="mt-4 grid gap-8 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        {/* ---- Step rail: where you are, what's left, and what this draft is ---- */}
+        <aside className="lg:sticky lg:top-0 lg:self-start">
+          <p className="truncate text-sm font-semibold text-[var(--text)]" title={title}>
+            {title || "Untitled draft"}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-secondary)]">
+            {session ? <KindBadge kind={session.kind} /> : null}
+            <span>{plural(problems.length, "problem")}</span>
+            {session && session.active_ms > 0 ? (
+              <span>· {formatDurationHuman(session.active_ms)}</span>
+            ) : null}
+          </p>
+          {session ? (
+            <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+              {formatDateTime(session.started_at)}
+            </p>
+          ) : null}
+
+          {/* Narrow windows: a compact progress bar instead of the full list. */}
+          <div className="mt-4 lg:hidden">
+            <p className="text-xs text-[var(--text-secondary)]">
+              Step {step + 1} of {STEPS.length}
+            </p>
+            <div className="mt-1.5 flex gap-1" aria-hidden>
+              {STEPS.map((s, index) => (
+                <span
+                  key={s.label}
+                  className={`h-1 flex-1 rounded-full ${index <= step ? "bg-[var(--accent)]" : "bg-[var(--border-strong)]"}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <nav aria-label="Draft steps" className="mt-6 hidden lg:block">
+            <ol className="space-y-1">
+              {STEPS.map((s, index) => {
+                const state = index === step ? "current" : index < reached ? "done" : "todo";
+                const reachable = index <= reached && !busy;
+                return (
+                  <li key={s.label}>
+                    <button
+                      type="button"
+                      aria-current={state === "current" ? "step" : undefined}
+                      disabled={!reachable}
+                      onClick={() => setStep(index)}
+                      className={`flex w-full items-start gap-3 rounded-[var(--lare-r-2)] px-2 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:cursor-default ${
+                        state === "current"
+                          ? "bg-[var(--surface-raised)]"
+                          : reachable
+                            ? "hover:bg-[color-mix(in_oklab,var(--surface-raised)_60%,transparent)]"
+                            : ""
+                      }`}
+                    >
+                      <span
+                        className={`mt-px grid size-5 shrink-0 place-items-center rounded-full border text-[11px] font-semibold tabular-nums ${
+                          state === "current"
+                            ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]"
+                            : state === "done"
+                              ? "border-[var(--border-strong)] text-[var(--text)]"
+                              : "border-[var(--border)] text-[var(--text-tertiary)]"
+                        }`}
+                      >
+                        {state === "done" ? <Check className="size-3" aria-hidden /> : index + 1}
+                      </span>
+                      <span className="min-w-0">
+                        <span
+                          className={`block text-sm ${state === "todo" ? "text-[var(--text-tertiary)]" : "text-[var(--text)]"}`}
+                        >
+                          {s.label}
+                        </span>
+                        {state === "current" ? (
+                          <span className="block text-xs text-[var(--text-secondary)]">
+                            {s.hint}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+
+          <p
+            role="status"
+            className={`mt-6 flex items-start gap-2 text-xs ${saveState === "error" ? "text-[var(--lare-danger)]" : "text-[var(--text-tertiary)]"}`}
+          >
+            <span
+              aria-hidden
+              className={`mt-1 size-1.5 shrink-0 rounded-full ${
+                saveState === "error"
+                  ? "bg-[var(--lare-danger)]"
+                  : saveState === "saved"
+                    ? "bg-[var(--lare-status-run)]"
+                    : "bg-[var(--lare-status-pause)]"
+              }`}
+            />
+            {saveState === "error"
+              ? `Cloud save failed: ${saveError}. Changes are kept on this device; use Save draft to retry.`
+              : saveState === "saved"
+                ? "Saved to cloud"
+                : "Saving…"}
+          </p>
+
+          <button
+            type="button"
             onClick={() => void doDelete()}
             disabled={busy}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-[var(--lare-r-1)] text-xs text-[var(--text-tertiary)] hover:text-[var(--lare-danger)] focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-50"
           >
+            <Trash2 className="size-3.5" aria-hidden />
             Delete draft
-          </Button>
-        </div>
-      </div>
+          </button>
+        </aside>
 
-      <header className="flex flex-wrap items-center gap-3 text-sm text-zinc-400">
-        {session ? <KindBadge kind={session.kind} /> : null}
-        {session ? <span>{formatDurationHuman(session.active_ms)} active</span> : null}
-        {session ? (
-          <>
-            <span aria-hidden>·</span>
-            <span>started {formatDateTime(session.started_at)}</span>
-          </>
-        ) : null}
-        <span aria-hidden>·</span>
-        <span>{plural(problems.length, "problem")}</span>
-      </header>
+        {/* ---- The current step ---- */}
+        <form onSubmit={onSubmit} className="min-w-0">
+          <header className="mb-5">
+            {/* The narrow layout already shows this above its progress bar. */}
+            <p className="mb-1 hidden text-xs font-medium text-[var(--text-secondary)] lg:block">
+              Step {step + 1} of {STEPS.length}
+            </p>
+            <h1 className="lare-title text-[var(--text)]">{STEPS[step]?.label}</h1>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">{STEPS[step]?.hint}</p>
+          </header>
 
-      <nav aria-label="Draft steps" className="flex flex-wrap gap-2">
-        {steps.map((label, index) => (
-          <Button
-            key={label}
-            size="sm"
-            variant={step === index ? "primary" : "ghost"}
-            aria-current={step === index ? "step" : undefined}
-            disabled={index > step || busy}
-            onClick={() => setStep(index)}
-          >
-            {index + 1}. {label}
-          </Button>
-        ))}
-      </nav>
-      <p role="status" className={saveError ? "text-sm text-rose-400" : "text-xs text-zinc-500"}>
-        {saveError
-          ? `Cloud save failed: ${saveError}. Your changes are kept on this device; retry Save draft.`
-          : saved
-            ? "Saved to cloud"
-            : "Saving changes... Local recovery is enabled."}
-      </p>
-      <form onSubmit={onSubmit} className="space-y-5">
-        <div className="space-y-4">
-          <Card className={step >= 2 ? "space-y-4" : "hidden"}>
-            <div hidden={step !== 2}>
-              <Label htmlFor="draft-title">Title</Label>
-              <Input
-                id="draft-title"
-                className="mt-1"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={140}
-                placeholder="Give this session a title"
-              />
-            </div>
-            <div hidden={step !== 2}>
-              <Label htmlFor="draft-body">Body</Label>
-              <Textarea
-                id="draft-body"
-                className="mt-1 min-h-40"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="What did you learn? What was the approach?"
-                maxLength={5000}
-              />
-            </div>
-            <div hidden={step !== 3}>
-              <Label htmlFor="draft-visibility">Visibility</Label>
-              <Select
-                id="draft-visibility"
-                className="mt-1"
-                value={visibility}
-                onChange={(e) => setVisibility(e.target.value as Post["visibility"])}
+          <div className="space-y-4">
+            {step === 0 ? (
+              problems.length === 0 ? (
+                <p className="rounded-[var(--lare-r-4)] border border-dashed border-[var(--border)] p-6 text-sm text-[var(--text-secondary)]">
+                  No problems were captured in this session. That's fine for a general post:
+                  continue to add media and a write-up.
+                </p>
+              ) : (
+                problems.map((p) => <ProblemSection key={p.id} problem={p} />)
+              )
+            ) : null}
+
+            {step === 1 ? (
+              <>
+                <DemoVideoPanel draft={draft} />
+                <PostMediaPanel
+                  postId={draft.id}
+                  userId={userId}
+                  coverMediaId={coverMediaId}
+                  onCoverChange={setCoverMediaId}
+                  disabled={busy}
+                />
+              </>
+            ) : null}
+
+            {step === 2 ? (
+              <Card className="space-y-4">
+                <div>
+                  <Label htmlFor="draft-title" hint={`${title.length}/140`}>
+                    Title
+                  </Label>
+                  <Input
+                    id="draft-title"
+                    className="mt-1"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    maxLength={140}
+                    placeholder="Give this session a title"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="draft-body">Write-up</Label>
+                  <Textarea
+                    id="draft-body"
+                    className="mt-1 min-h-48"
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="What did you learn? What was the approach?"
+                    maxLength={5000}
+                  />
+                </div>
+              </Card>
+            ) : null}
+
+            {step === 3 ? (
+              <>
+                <Card className="space-y-4">
+                  <div>
+                    <Label htmlFor="draft-visibility">Who can see it</Label>
+                    <Select
+                      id="draft-visibility"
+                      className="mt-1"
+                      value={visibility}
+                      onChange={(e) => setVisibility(e.target.value as Post["visibility"])}
+                    >
+                      <option value="public">
+                        Followers and everyone (if your account is public)
+                      </option>
+                      <option value="private">Only me</option>
+                    </Select>
+                  </div>
+                  {hasDemoVideo ? (
+                    <Toggle
+                      id="draft-show-summary-video"
+                      checked={showDemoVideo}
+                      onChange={setShowDemoVideo}
+                      label="Show the summary video on the post"
+                      description="Adds the debrief clip to the carousel, ahead of the full recording."
+                    />
+                  ) : null}
+                  {hasVideo ? (
+                    <Toggle
+                      id="draft-show-video"
+                      checked={showVideo}
+                      onChange={setShowVideo}
+                      label="Show the demo video on the post"
+                      description="Adds the recording as the last slide of the post's carousel."
+                    />
+                  ) : null}
+                </Card>
+                <PostExtrasPanel draft={draft} />
+              </>
+            ) : null}
+
+            {step === 4 ? (
+              <Card className="space-y-3">
+                <h2 className="lare-heading text-[var(--text)]">{title || "Untitled draft"}</h2>
+                <p className="whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
+                  {body || "No write-up."}
+                </p>
+                <dl className="grid gap-x-6 gap-y-2 border-t border-[var(--border)] pt-3 text-sm sm:grid-cols-2">
+                  {[
+                    ["Visibility", visibility === "private" ? "Only you" : "Public"],
+                    ["Problems", String(problems.length)],
+                    ["Recording", hasVideo ? (showVideo ? "Shown" : "Attached, hidden") : "None"],
+                    [
+                      "Summary video",
+                      hasDemoVideo ? (showDemoVideo ? "Shown" : "Attached, hidden") : "None",
+                    ],
+                  ].map(([term, value]) => (
+                    <div key={term} className="flex justify-between gap-3">
+                      <dt className="text-[var(--text-secondary)]">{term}</dt>
+                      <dd className="text-[var(--text)]">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </Card>
+            ) : null}
+          </div>
+
+          {/* ---- One action bar for every step ---- */}
+          <div className="lare-material-thin sticky bottom-0 -mx-5 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-5 py-3">
+            <Button
+              variant="ghost"
+              icon={<ArrowLeft className="size-4" aria-hidden />}
+              disabled={step === 0 || busy}
+              onClick={() => setStep((s) => s - 1)}
+            >
+              Back
+            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="ghost"
+                icon={<Eye className="size-4" aria-hidden />}
+                onClick={() => setPreviewing(true)}
               >
-                <option value="public">Followers and everyone (if your account is public)</option>
-                <option value="private">Only me</option>
-              </Select>
-            </div>
-            {hasDemoVideo && step === 3 ? (
-              <Toggle
-                id="draft-show-summary-video"
-                checked={showDemoVideo}
-                onChange={setShowDemoVideo}
-                label="Show the summary video on the post"
-                description="Adds the debrief clip to the carousel, ahead of the full recording."
-              />
-            ) : null}
-            {hasVideo && step === 3 ? (
-              <Toggle
-                id="draft-show-video"
-                checked={showVideo}
-                onChange={setShowVideo}
-                label="Show the demo video on the post"
-                description="Adds the recording as the last slide of the post's carousel."
-              />
-            ) : null}
-            {step === 4 && (
-              <div className="space-y-2">
-                <SectionTitle>Review before publishing</SectionTitle>
-                <h2 className="text-lg font-semibold">{title}</h2>
-                <p className="whitespace-pre-wrap text-sm text-zinc-400">
-                  {body || "No description"}
-                </p>
-                <p className="text-sm">
-                  {visibility === "private" ? "Only you can see this post" : "Public post"} ·{" "}
-                  {problems.length} problems · {hasVideo ? "Video attached" : "No main video"} ·{" "}
-                  {hasDemoVideo ? "Summary attached" : "No summary"}
-                </p>
-              </div>
-            )}
-            <div className="flex items-center justify-between gap-3 pt-1">
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => void doSave()} disabled={busy}>
-                  Save draft
+                Preview
+              </Button>
+              <Button variant="secondary" onClick={() => void doSave()} disabled={busy}>
+                Save draft
+              </Button>
+              {step < STEPS.length - 1 ? (
+                <Button type="submit" variant="primary" disabled={busy}>
+                  Continue to {STEPS[step + 1]?.label}
+                  <ArrowRight className="size-4" aria-hidden />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<Eye className="size-3.5" aria-hidden />}
-                  onClick={() => setPreviewing(true)}
-                >
-                  Preview
-                </Button>
-              </div>
-              {step === 4 && (
+              ) : (
                 <Button
                   type="submit"
                   variant="primary"
@@ -444,42 +601,9 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 </Button>
               )}
             </div>
-          </Card>
-
-          <section className={step === 0 ? "space-y-3" : "hidden"}>
-            <SectionTitle>Problems</SectionTitle>
-            {problems.length === 0 ? (
-              <p className="text-sm text-zinc-500">No problems were captured in this session.</p>
-            ) : (
-              problems.map((p) => <ProblemSection key={p.id} problem={p} />)
-            )}
-          </section>
-        </div>
-
-        <aside className="space-y-4">
-          {step === 1 && <DemoVideoPanel draft={draft} />}
-          {step === 3 && <PostExtrasPanel draft={draft} />}
-          {step === 1 && (
-            <PostMediaPanel
-              postId={draft.id}
-              userId={userId}
-              coverMediaId={coverMediaId}
-              onCoverChange={setCoverMediaId}
-              disabled={busy}
-            />
-          )}
-        </aside>
-        <div className="flex justify-between gap-3">
-          <Button disabled={step === 0 || busy} onClick={() => setStep((s) => s - 1)}>
-            Back
-          </Button>
-          {step < 4 && (
-            <Button type="submit" variant="primary" disabled={busy}>
-              Save & continue
-            </Button>
-          )}
-        </div>
-      </form>
+          </div>
+        </form>
+      </div>
 
       {previewing && (
         <PostPreview
