@@ -48,6 +48,10 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
     facecam: z.boolean().default(false),
     graded: z.boolean(),
     tabId: z.number().nullable().default(null),
+    /** From chrome.desktopCapture in the side panel: the screen the user chose to share. */
+    screenStreamId: z.string().min(1),
+    /** Whether the user also ticked "share system audio" in Chrome's dialog. */
+    systemAudio: z.boolean().default(false),
   }),
   z.object({ type: z.literal("PAUSE_SESSION") }),
   z.object({ type: z.literal("RESUME_SESSION") }),
@@ -95,8 +99,6 @@ export interface RuntimeSnapshot {
   appConnected: boolean;
   /** Why a graded interview cannot start right now; null when it can. */
   gradingBlocker: string | null;
-  /** Start was pressed but Chrome needs a click on the toolbar icon before it can capture. */
-  awaitingToolbarClick: boolean;
   /** The service worker's build; null from a worker older than this field. */
   buildId: string | null;
   recording: RecordingInfo | null;
@@ -109,7 +111,6 @@ export function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | nul
     auth: res.auth ?? null,
     appConnected: res.appConnected ?? false,
     gradingBlocker: res.gradingBlocker ?? null,
-    awaitingToolbarClick: res.awaitingToolbarClick ?? false,
     buildId: res.buildId ?? null,
     recording: res.recording ?? null,
     capture: res.capture ?? null,

@@ -57,7 +57,6 @@ let startAbort: AbortController | null = null;
 
 export default defineBackground(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-  chrome.action.onClicked.addListener((tab) => void onActionClicked(tab).catch(console.warn));
   chrome.tabs.onUpdated.addListener((id, change) => {
     if (change.groupId !== undefined) void repairGroup().catch(console.warn);
     // Chrome reports "loading" for far more than a reload: subframes loading, in-page URL changes,
@@ -255,9 +254,8 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
       return { ok: true, ...(await snapshot()) };
     }
     case "GET_STATE":
-      // The side panel opening is the moment a stale list would be noticed. While a Start waits
-      // for the toolbar click the panel polls to keep this worker alive; that needs no refetch.
-      if (sourceTabId === undefined && !pendingStart) void reconcileTracked().catch(console.warn);
+      // The side panel opening is the moment a stale list would be noticed.
+      if (sourceTabId === undefined) void reconcileTracked().catch(console.warn);
       return { ok: true, ...(await snapshot()) };
 
     case "SIGN_IN":
@@ -340,15 +338,6 @@ async function startInterview(
     throw new Error("A mock interview is already running or starting");
   if (!req.problem || req.tabId === null)
     throw new Error("Open a LeetCode problem to start a mock interview");
-  // Capture is the step Chrome gates, so check it before a session row, tab group or indicator
-  // exists. The id is thrown away; a fresh one is taken right before capture starts.
-  try {
-    await chrome.tabCapture.getMediaStreamId({ targetTabId: req.tabId });
-  } catch (e) {
-    if (!notInvoked(e)) throw e;
-    await armStart(req);
-    return { ok: true, ...(await snapshot()) };
-  }
   startAbort = new AbortController();
   const signal = startAbort.signal;
 
@@ -396,7 +385,8 @@ async function startInterview(
     if (tp) tp.synced = true;
     await withState(async (s) => ({ state: { ...s, interview: session }, result: undefined }));
     await ensureOffscreen();
-    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: req.tabId });
+    // The screen the user picked in Chrome's share dialog (see the side panel's startInterview).
+    const streamId = req.screenStreamId;
     if (signal.aborted) throw new Error("Start cancelled");
     await chrome.storage.local.set({
       [CAPTURE_KEY]: { sessionId, tabId: req.tabId, graded: req.graded, state: "starting" },
@@ -412,6 +402,7 @@ async function startInterview(
       sessionId,
       tabId: req.tabId,
       streamId,
+      systemAudio: req.systemAudio,
       userId,
       graded: req.graded,
       facecam: req.facecam,
@@ -467,67 +458,6 @@ async function showIndicator(tabId: number): Promise<boolean> {
     await new Promise((r) => setTimeout(r, 500));
   }
   return false;
-}
-
-// ---------------------------------------------------------------------------
-// Toolbar hand-off
-//
-// Chrome only lets an extension capture a tab it was invoked on: its toolbar icon or shortcut,
-// used on that tab. A click inside the side panel never counts, and the grant ends when the tab
-// reloads. So when Start is refused, the Start is parked and the toolbar icon stops opening the
-// panel for a moment; the user's click on it grants the tab and finishes the same Start.
-// ---------------------------------------------------------------------------
-type StartRequest = Extract<RuntimeRequest, { type: "START_INTERVIEW" }>;
-const ARMED_MS = 2 * 60_000;
-let pendingStart: { req: StartRequest; timer: ReturnType<typeof setTimeout> } | null = null;
-
-function notInvoked(e: unknown): boolean {
-  return /not been invoked|activeTab/i.test(e instanceof Error ? e.message : String(e));
-}
-
-async function armStart(req: StartRequest): Promise<void> {
-  if (pendingStart) clearTimeout(pendingStart.timer);
-  pendingStart = { req, timer: setTimeout(() => void disarmStart(), ARMED_MS) };
-  recording = null;
-  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
-  await chrome.action.setTitle({ title: "Lare: click to start recording this tab" });
-  await refreshBadge();
-  await broadcast();
-}
-
-async function disarmStart(): Promise<void> {
-  if (!pendingStart) return;
-  clearTimeout(pendingStart.timer);
-  pendingStart = null;
-  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-  await chrome.action.setTitle({ title: "Lare" });
-  await refreshBadge();
-  await broadcast();
-}
-
-/** Only fires while armed: otherwise the icon opens the side panel and Chrome sends no click. */
-async function onActionClicked(tab: chrome.tabs.Tab): Promise<void> {
-  const pending = pendingStart;
-  if (!pending) {
-    // A worker that died while armed leaves the panel behaviour off; behave like the panel.
-    if (tab.windowId !== undefined)
-      void chrome.sidePanel.open({ windowId: tab.windowId }).catch(console.warn);
-    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-    return;
-  }
-  if (tab.id !== pending.req.tabId) {
-    await setRecording(
-      "error",
-      "Switch back to the problem tab you pressed Start on, then click the Lare icon.",
-    );
-    return;
-  }
-  await disarmStart();
-  try {
-    await startInterview(pending.req);
-  } catch (e) {
-    await setRecording("error", e instanceof Error ? e.message : String(e));
-  }
 }
 
 async function pauseOrResume(type: "pause" | "resume"): Promise<RuntimeResponse> {
@@ -1004,7 +934,6 @@ async function setRecording(state: RecordingState, message?: string | null): Pro
 }
 
 async function cancelStart(): Promise<RuntimeResponse> {
-  await disarmStart();
   startAbort?.abort();
   if (!startAbort) await setRecording("idle");
   return { ok: true, ...(await snapshot()) };
@@ -1061,10 +990,9 @@ async function snapshot(): Promise<RuntimeSnapshot> {
     auth,
     appConnected,
     gradingBlocker: desktop.gradingBlocker(auth?.userId ?? null),
-    awaitingToolbarClick: pendingStart !== null,
     buildId: __BUILD_ID__,
     capture,
-    // A failed toolbar hand-off is newer than whatever the last capture left behind.
+    // A start that failed before capture existed is newer than whatever the last capture left.
     recording:
       recording?.state === "error"
         ? recording
@@ -1102,12 +1030,6 @@ async function broadcast(toast?: StateBroadcast["toast"]): Promise<void> {
 }
 
 async function refreshBadge(): Promise<void> {
-  // Pointing at the icon the user has to click next.
-  if (pendingStart) {
-    await chrome.action.setBadgeBackgroundColor({ color: brand.statusStop });
-    await chrome.action.setBadgeText({ text: "REC" });
-    return;
-  }
   const state = await loadState();
   const interview = state.interview;
 

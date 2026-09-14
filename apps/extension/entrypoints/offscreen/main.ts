@@ -41,6 +41,7 @@ async function start(req: {
   sessionId: string;
   tabId: number;
   streamId: string;
+  systemAudio?: boolean;
   userId: string;
   graded: boolean;
   facecam: boolean;
@@ -51,9 +52,13 @@ async function start(req: {
   gradingResult = false;
   state = { sessionId: req.sessionId, tabId: req.tabId, graded: req.graded, state: "starting" };
   try {
+    // The whole screen the user picked, at its real resolution: code has to stay readable.
+    const desktop = { chromeMediaSource: "desktop", chromeMediaSourceId: req.streamId };
     const tab = await navigator.mediaDevices.getUserMedia({
-      audio: { mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: req.streamId } },
-      video: { mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: req.streamId } },
+      audio: req.systemAudio ? { mandatory: desktop } : false,
+      video: {
+        mandatory: { ...desktop, maxWidth: 2560, maxHeight: 1440, maxFrameRate: 30 },
+      },
     } as unknown as MediaStreamConstraints);
     streams.push(tab);
     const devices = await navigator.mediaDevices.getUserMedia({
@@ -67,10 +72,9 @@ async function start(req: {
     const mic = audio.createMediaStreamSource(new MediaStream(devices.getAudioTracks()));
     mic.connect(mix);
     if (tab.getAudioTracks().length) {
+      // System audio still plays normally, so it is only mixed in, never sent to the speakers.
       const sound = audio.createMediaStreamSource(new MediaStream(tab.getAudioTracks()));
       sound.connect(mix);
-      // tabCapture suppresses normal playback; restore it without echoing the mic.
-      sound.connect(audio.destination);
     }
     if (req.graded) {
       pcm = new PcmStream(req.sessionId, req.userId, (message, failed, transcript) => {
@@ -130,6 +134,8 @@ async function start(req: {
     streams.push(output);
     capture = await startCapture({
       stream: output,
+      // Screen text blurs at MediaRecorder's default ~2.5 Mbps.
+      videoBitsPerSecond: 8_000_000,
       createUpload: ({ mimeType }) =>
         cloud("create", {
           mode: "instant",

@@ -8,7 +8,7 @@ same-account desktop handshake advertising `pcm16k-f32-v1`; old
 
 ## Capture
 
-Interviews use tabCapture in an offscreen document, microphone audio, optional
+Interviews capture the screen picked in Chrome's share dialog (desktopCapture) in an offscreen document, microphone audio, optional
 camera composition, and `@lare/capture` for MediaRecorder/OPFS/live TUS upload.
 The side panel asks for microphone/camera permission before the hidden document
 uses them. Open the toolbar on the problem tab first so Chrome grants tab capture.
@@ -42,7 +42,7 @@ recordings can be opened directly in the web draft editor.
 
 E2E includes real Chromium MediaRecorder, camera composition, pause/resume,
 OPFS cleanup and streaming upload against a local TUS server. That test
-substitutes only the tabCapture user-gesture token with Chrome fake devices;
+substitutes only the share dialog's desktop stream id with Chrome fake devices;
 native toolbar permission prompts and the complete local Whisper workflow still
 need manual QA. Safety tests cover stale desktop capabilities, account mismatch,
 PCM replay/acknowledgement and tab-group restoration.

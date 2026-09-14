@@ -30,7 +30,8 @@ export default defineConfig({
       "sidePanel",
       "tabGroups",
       "offscreen",
-      "tabCapture",
+      // Interviews record the whole screen through Chrome's share dialog.
+      "desktopCapture",
     ],
     side_panel: { default_path: "sidepanel.html" },
     host_permissions: [
@@ -56,13 +57,6 @@ export default defineConfig({
         32: "icon-32.png",
         48: "icon-48.png",
         128: "icon-128.png",
-      },
-    },
-    // The shortcut counts as invoking the extension on the tab, which tab capture requires.
-    commands: {
-      _execute_action: {
-        suggested_key: { default: "Alt+Shift+L" },
-        description: "Open Lare on this tab",
       },
     },
     web_accessible_resources: [

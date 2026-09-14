@@ -321,49 +321,35 @@ test("problems posted from another client drop off the panel and the badge", asy
   await problem.close();
 });
 
-test("a refused tab capture parks Start on the toolbar icon, and Cancel restores the panel", async () => {
+test("an interview never starts without a screen picked in Chrome's share dialog", async () => {
   await fetch(`${BASE}/__reset`);
   await resetExtensionState();
-  const problem = await openProblem();
   const panel = await openPanel();
-  const tabId = await sw.evaluate(
-    async () => (await chrome.tabs.query({ url: "http://localhost/problems/*" }))[0]?.id ?? null,
-  );
 
-  // Nobody clicked the toolbar icon on this tab, so Chrome refuses capture, exactly as it does
-  // after a click inside the side panel.
-  const res = await panel.evaluate(
-    (id) =>
-      chrome.runtime.sendMessage({
-        type: "START_INTERVIEW",
-        problem: {
-          slug: "two-sum",
-          frontendId: "1",
-          title: "Two Sum",
-          difficulty: "Easy",
-          url: "http://localhost:4173/problems/two-sum/",
-          language: null,
-        },
-        question: null,
-        facecam: false,
-        graded: false,
-        tabId: id,
-      }),
-    tabId,
+  // Cancelling the share dialog leaves no stream id; the request is not even accepted.
+  const res = await panel.evaluate(() =>
+    chrome.runtime.sendMessage({
+      type: "START_INTERVIEW",
+      problem: {
+        slug: "two-sum",
+        frontendId: "1",
+        title: "Two Sum",
+        difficulty: "Easy",
+        url: "http://localhost:4173/problems/two-sum/",
+        language: null,
+      },
+      question: null,
+      facecam: false,
+      graded: false,
+      tabId: 1,
+      screenStreamId: "",
+    }),
   );
-  expect(res).toMatchObject({ ok: true, awaitingToolbarClick: true });
-  await expect(panel.getByText("Click the Lare icon in your toolbar")).toBeVisible();
-  await expect.poll(badgeText).toBe("REC");
-  // Parked, not started: nothing was written for a session that may never happen.
+  expect(res).toBeUndefined();
   const writes = (await recorded()).filter((r) => r.path.startsWith("/supabase/rest/v1/sessions"));
   expect(writes).toHaveLength(0);
 
-  await panel.getByRole("button", { name: "Cancel" }).click();
-  await expect(panel.getByRole("button", { name: "Start mock interview" })).toBeVisible();
-  await expect.poll(badgeText).not.toBe("REC");
-
   await panel.close();
-  await problem.close();
 });
 
 test("a recording survives the tab loading frames or reloading, and keeps its consent dot", async () => {
@@ -464,7 +450,7 @@ test("offscreen code records real media chunks, uploads during recording and fin
   });
   const document = await context.newPage();
   // Exercise the real recorder/compositor/uploader with Chrome's fake physical devices.
-  // Only tabCapture's user-gesture stream token is substituted in this harness.
+  // Only the share dialog's desktop stream id is substituted in this harness.
   await document.addInitScript(() => {
     const get = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = (constraints) =>

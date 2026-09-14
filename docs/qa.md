@@ -86,12 +86,12 @@ going through Bunny.
 
 ### Interview capture (the extension owns this now)
 
-- **Toolbar hand-off**: Chrome only captures a tab the extension was invoked on (its icon or
-  Alt+Shift+L on that tab), and a click inside the side panel never counts. Reload the problem
-  tab, press **Start**: the panel asks for a click on the Lare icon and the badge reads `REC`.
-  Click the icon on that tab: recording starts, the side panel stays open. Click it on another
-  tab: the panel says to switch back. **Cancel**, or two minutes without a click, restores the
-  icon to opening the panel. Starting again on the same tab without reloading needs no click.
+- **Screen capture**: **Start** opens Chrome's share dialog. Pick Entire Screen (tick system
+  audio if wanted): the whole display records at up to 2560x1440 / 30 fps and 8 Mbps, and code in
+  the video stays readable. Cancel the dialog: nothing starts and nothing is written. Chrome's
+  own **Stop sharing** bar ends the interview like **End & save**.
+- **Run, and reloads, mid-interview**: press Run and Submit repeatedly, then reload the problem
+  tab. The recording carries on and the red dot comes back after the reload.
 - **First interview on a fresh profile**: Chrome cannot show a permission prompt in a side
   panel, so **Start** opens a small Lare tab that asks for the mic (and camera, if ticked),
   closes itself once allowed, and the interview starts. Deny it: the panel says what to change.
