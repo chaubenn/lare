@@ -48,14 +48,12 @@ export function UserProfilePage() {
     );
   }
 
-  const name = profile.display_name ?? `@${profile.handle}`;
+  const name = profile.display_name ?? profile.handle;
   // `profile_stats` is the authority on visibility; it applies the same rule as RLS.
   const visible = stats.data?.visible ?? isSelf;
 
   return (
     <ProfileView
-      title={name}
-      subtitle={`@${profile.handle}`}
       name={name}
       handle={profile.handle}
       avatarUrl={profile.avatar_url}

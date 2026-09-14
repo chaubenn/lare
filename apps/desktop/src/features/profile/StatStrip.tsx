@@ -5,13 +5,15 @@ export interface StatItem {
   onClick?: () => void;
 }
 
+/** A row of counts under the profile identity. Cells are separated by hairlines, not boxes. */
 export function StatStrip({ items }: { items: StatItem[] }) {
   return (
-    <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800 sm:grid-cols-5">
+    <dl className="grid grid-cols-3 divide-[var(--border)] sm:grid-cols-5 sm:divide-x">
       {items.map((item) => (
-        <div key={item.label} className="relative bg-zinc-950 px-3 py-2.5">
-          <dt className="text-[10px] uppercase tracking-wider text-zinc-500">{item.label}</dt>
-          <dd className="mt-0.5 text-base font-semibold tabular-nums text-zinc-100">
+        // Column-reversed so the number reads first while `dt` still precedes `dd` in the DOM.
+        <div key={item.label} className="relative flex flex-col-reverse px-4 py-3 sm:first:pl-0">
+          <dt className="mt-0.5 text-xs text-[var(--text-secondary)]">{item.label}</dt>
+          <dd className="text-lg font-semibold leading-tight tabular-nums text-[var(--text)]">
             {item.value}
           </dd>
           {/* Stretched over the cell rather than wrapping it: a `dl` may only contain `dt`,
@@ -21,7 +23,7 @@ export function StatStrip({ items }: { items: StatItem[] }) {
               type="button"
               onClick={item.onClick}
               aria-label={`${item.label}: ${item.value}`}
-              className="absolute inset-0 rounded-none transition-colors hover:bg-zinc-100/5 focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-zinc-500"
+              className="absolute inset-y-1 inset-x-1 rounded-[var(--lare-r-2)] transition-colors hover:bg-[color-mix(in_oklab,var(--text)_6%,transparent)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
             />
           ) : null}
         </div>
