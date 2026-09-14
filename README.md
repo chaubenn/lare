@@ -22,9 +22,19 @@ Share posts with followers, attach demo videos, and run AI-graded mock interview
 
 | | |
 | --- | --- |
-| **Chrome extension** | Captures problems, your Monaco edits and judge results on its own — nothing to start or stop. Triggers mock interviews. |
-| **Desktop app** (Tauri) | Reviews drafts, records screen/camera/mic with Cap's recording stack, transcribes, edits, and uploads to Bunny Stream. |
-| **Web** | Posts, profiles and your follower feed. |
+| **Chrome extension** | Captures problems, your Monaco edits and judge results on its own — nothing to start or stop. Records mock interviews from a side panel. |
+| **Desktop app** (Tauri) | Records your screen natively with Cap's recording stack, edits takes in the studio, and **transcribes interviews locally with whisper.cpp**. |
+| **Web** | The same app: feed, posts, profiles, drafts, sessions — plus recording in the browser. |
+
+**You can do everything on the web except be graded.** A mock interview is *graded* when the
+desktop app is running: the extension streams your microphone to it over loopback, whisper.cpp
+transcribes it on your machine while you talk, and the AI review is built from that transcript.
+Without the app, an interview is *ungraded* — video only, no transcript, no AI — and the extension
+says so before you start rather than degrading quietly. Local transcription is the reason the
+desktop app exists; it is not going to the cloud.
+
+Video uploads while it records, not after you stop, so stopping is roughly instant no matter how
+long you recorded.
 
 ## Install
 
@@ -53,11 +63,14 @@ run **Settings > Check for updates**.
 1. Download [Lare-Chrome-Extension.zip](https://github.com/chaubenn/lare/releases/latest/download/Lare-Chrome-Extension.zip) and unzip it.
 2. Open `chrome://extensions`, turn on **Developer mode** (top right).
 3. Click **Load unpacked** and pick the unzipped folder.
-4. Pin the Lare icon, open the desktop app and sign in, then open any LeetCode problem. The
-   footer in the desktop app shows **Extension: connected**.
+4. Pin the Lare icon and click it to open the side panel, then sign in and open any LeetCode
+   problem. Practice starts logging itself immediately.
 
-The extension talks to the desktop app over `127.0.0.1`, so the app must be running while you
-practise. Chrome Web Store listing is coming; until then the unpacked install is the supported path.
+The extension works on its own — sign-in, passive capture, drafts and ungraded interviews need
+nothing else running. It talks to the desktop app over `127.0.0.1` only to hand it interview
+audio for local transcription, so the app has to be open for a *graded* interview and the
+desktop footer shows **Extension: connected**. Chrome 116+. Chrome Web Store listing is coming;
+until then the unpacked install is the supported path.
 
 ## Development
 
