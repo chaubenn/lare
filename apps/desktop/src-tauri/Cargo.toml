@@ -1,6 +1,6 @@
 [package]
 name = "lare-desktop"
-version = "0.4.3"
+version = "1.0.0"
 description = "Lare desktop app: review drafts, publish posts, and (later) record demo videos and mock interviews."
 edition.workspace = true
 license.workspace = true
@@ -39,7 +39,8 @@ tracing-subscriber = { workspace = true }
 futures-util = "0.3"
 futures = { workspace = true }
 anyhow = { workspace = true }
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream", "json"] }
+uuid = { workspace = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream", "json", "query"] }
 
 lare-core = { path = "../../../crates/lare-core" }
 lare-recording = { path = "../../../crates/lare-recording" }

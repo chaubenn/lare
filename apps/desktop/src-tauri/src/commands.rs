@@ -28,6 +28,18 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
+#[tauri::command]
+pub fn configure_pcm(
+    service: State<'_, Arc<crate::pcm::PcmService>>,
+    rec: Rec<'_>,
+    auth: Option<crate::pcm::CloudAuth>,
+) -> Result<(), String> {
+    *service.auth.lock().map_err(err)? = auth;
+    let kind = rec.settings().whisper_model.unwrap_or(ModelKind::SmallEn);
+    *service.model.lock().map_err(err)? = Some(rec.models_dir().join(kind.file_name()));
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Devices, permissions, settings
 // ---------------------------------------------------------------------------
@@ -63,7 +75,9 @@ pub async fn request_permission(which: String) -> Result<PermissionStatus, Strin
     // The AVFoundation permission futures are not `Send`, so drive them on a blocking thread.
     tokio::task::spawn_blocking(move || match which.as_str() {
         "screen_recording" => Ok(lare_recording::permissions::request_screen_recording()),
-        "camera" => Ok(futures::executor::block_on(lare_recording::permissions::request_camera())),
+        "camera" => Ok(futures::executor::block_on(
+            lare_recording::permissions::request_camera(),
+        )),
         "microphone" => Ok(futures::executor::block_on(
             lare_recording::permissions::request_microphone(),
         )),
@@ -96,7 +110,21 @@ pub fn recorder_settings(rec: Rec<'_>) -> RecorderSettings {
 }
 
 #[tauri::command]
-pub fn set_recorder_settings(rec: Rec<'_>, settings: RecorderSettings) {
+pub fn set_recorder_settings(
+    rec: Rec<'_>,
+    pcm: State<'_, Arc<crate::pcm::PcmService>>,
+    settings: RecorderSettings,
+) {
+    if let Ok(mut model) = pcm.model.lock() {
+        *model = Some(
+            rec.models_dir().join(
+                settings
+                    .whisper_model
+                    .unwrap_or(ModelKind::SmallEn)
+                    .file_name(),
+            ),
+        );
+    }
     rec.set_settings(settings);
 }
 
@@ -112,6 +140,7 @@ pub async fn recorder_status(rec: Rec<'_>) -> Result<StatePayload, String> {
 #[tauri::command]
 pub async fn recording_start(rec: Rec<'_>, req: DemoStart) -> Result<StatePayload, String> {
     let recorder = rec.inner().clone();
+    let prepared = recorder.take_prepared_upload().await;
     recorder
         .start(
             crate::recorder::StartSpec {
@@ -121,6 +150,7 @@ pub async fn recording_start(rec: Rec<'_>, req: DemoStart) -> Result<StatePayloa
                 post_id: req.post_id.clone(),
                 facecam: req.facecam,
                 mic: req.mic,
+                upload: req.upload.or(prepared),
             },
             None,
         )
@@ -177,7 +207,10 @@ pub async fn clear_screen_sharing(rec: Rec<'_>) -> Result<(), String> {
             .map_err(|e| format!("could not restart replayd: {e}"))?;
         // A non-zero exit only means no daemon was running, i.e. nothing was holding a session;
         // the recording side has been released either way.
-        info!(code = status.code(), "restarted replayd to clear a stale screen-sharing session");
+        info!(
+            code = status.code(),
+            "restarted replayd to clear a stale screen-sharing session"
+        );
     }
     Ok(())
 }
@@ -270,8 +303,13 @@ pub async fn make_thumbnail(req: ThumbnailRequest) -> Result<PathBuf, String> {
             .unwrap_or_else(|| req.video_path.with_file_name("thumbnail.jpg"));
         let duration = lare_recording::thumbnail::duration_ms(&req.video_path).unwrap_or(0);
         let at = req.at_ms.unwrap_or(1000).min(duration.saturating_sub(200));
-        lare_recording::thumbnail::extract_jpeg(&req.video_path, &output, at, req.max_width.unwrap_or(640))
-            .map_err(|e| format!("{e:#}"))?;
+        lare_recording::thumbnail::extract_jpeg(
+            &req.video_path,
+            &output,
+            at,
+            req.max_width.unwrap_or(640),
+        )
+        .map_err(|e| format!("{e:#}"))?;
         Ok(output)
     })
     .await
@@ -438,7 +476,11 @@ impl Jobs {
 }
 
 #[tauri::command]
-pub async fn export_studio(app: AppHandle, jobs: State<'_, Jobs>, job: ExportJob) -> Result<ExportResult, String> {
+pub async fn export_studio(
+    app: AppHandle,
+    jobs: State<'_, Jobs>,
+    job: ExportJob,
+) -> Result<ExportResult, String> {
     let output = job
         .output
         .clone()
@@ -456,7 +498,10 @@ pub async fn export_studio(app: AppHandle, jobs: State<'_, Jobs>, job: ExportJob
             let cfg = ProjectConfiguration::load(&project_path).unwrap_or_default();
             let source = lare_recording::find_display_track(&project_path)
                 .and_then(|p| lare_recording::thumbnail::probe(&p).ok());
-            let clips: Vec<f64> = lare_recording::clip_tracks(&project_path).into_iter().map(|(_, d)| d).collect();
+            let clips: Vec<f64> = lare_recording::clip_tracks(&project_path)
+                .into_iter()
+                .map(|(_, d)| d)
+                .collect();
             (cfg, source, clips)
         }
     })
@@ -468,10 +513,16 @@ pub async fn export_studio(app: AppHandle, jobs: State<'_, Jobs>, job: ExportJob
         warn!(%e, "could not save project-config.json");
     }
 
-    let resolution_base = match (job.max_edge, source.and_then(|s| Some((s.width?, s.height?)))) {
+    let resolution_base = match (
+        job.max_edge,
+        source.and_then(|s| Some((s.width?, s.height?))),
+    ) {
         (Some(max), Some((w, h))) if w.max(h) > max => {
             let scale = max as f64 / w.max(h) as f64;
-            Some((((w as f64 * scale) as u32) & !1, ((h as f64 * scale) as u32) & !1))
+            Some((
+                ((w as f64 * scale) as u32) & !1,
+                ((h as f64 * scale) as u32) & !1,
+            ))
         }
         _ => None,
     };
@@ -555,25 +606,64 @@ pub struct UploadResult {
 }
 
 #[tauri::command]
-pub async fn upload_to_bunny(app: AppHandle, job: UploadJob) -> Result<UploadResult, String> {
+pub async fn prepare_bunny_upload(rec: Rec<'_>, tus: lare_bunny::TusCredentials) -> Result<String, String> {
+    rec.prepare_upload(tus).await
+}
+
+#[tauri::command]
+pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Result<UploadResult, String> {
     let client = lare_bunny::http_client();
+    if let Some(upload_url) = rec.join_live_upload(&job.path, &job.tus, job.resume_url.as_deref()).await? {
+        return Ok(UploadResult { upload_url, size_bytes: tokio::fs::metadata(&job.path).await.map_err(err)?.len() });
+    }
     let size_bytes = tokio::fs::metadata(&job.path).await.map_err(err)?.len();
     let job_id = job.job_id.clone();
     // Remember the upload URL next to the file so a restart can resume.
     let marker = job.path.with_extension("upload.json");
-    let resume_url = job.resume_url.clone().or_else(|| {
+    let saved_url = {
         std::fs::read_to_string(&marker)
             .ok()
             .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("uploadUrl").and_then(|u| u.as_str()).map(str::to_string))
-    });
-    info!(job = %job_id, path = %job.path.display(), size_bytes, resuming = resume_url.is_some(), "upload started");
-    let upload_url = lare_bunny::upload_file(
+            .filter(|v| v["headers"] == serde_json::to_value(&job.tus.headers).unwrap_or_default())
+            .and_then(|v| {
+                v.get("uploadUrl")
+                    .and_then(|u| u.as_str())
+                    .map(str::to_string)
+            })
+    };
+    // A recovered take is remuxed to output.mp4, which is NOT byte-identical to
+    // capture.mp4. The frontend may still hold the pre-capture URL after salvage.
+    // Never resume that object's offset against the replacement file. Prefer a
+    // matching per-file checkpoint on subsequent retries over the stale UI URL.
+    let capture_path = job.path.parent().map(|p| p.join("capture.mp4"));
+    let inherited_capture_url = capture_path.as_ref().filter(|p| *p != &job.path)
+        .and_then(|p| std::fs::read_to_string(p.with_extension("upload.json")).ok())
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v["uploadUrl"].as_str().map(str::to_string));
+    let resume_url = saved_url.or_else(|| job.resume_url.clone())
+        .filter(|url| Some(url) != inherited_capture_url.as_ref());
+    let resume_url = match resume_url {
+        Some(url) => url,
+        None => lare_bunny::create_deferred_upload(&client, &job.tus)
+            .await
+            .map_err(err)?,
+    };
+    tokio::fs::write(
+        &marker,
+        serde_json::json!({"uploadUrl":resume_url,"headers":job.tus.headers}).to_string(),
+    )
+    .await
+    .map_err(err)?;
+    info!(job = %job_id, path = %job.path.display(), size_bytes, "upload started");
+    // Studio renders and retries are closed files. Instant captures join their live tailer above.
+    let (_finished, completion) = tokio::sync::watch::channel(true);
+    let upload_url = lare_bunny::upload_growing_file(
         &client,
         &job.path,
         &job.tus,
-        resume_url.as_deref(),
+        &resume_url,
         lare_bunny::DEFAULT_CHUNK_SIZE,
+        completion,
         |p| {
             let _ = app.emit(
                 "upload:progress",
@@ -587,15 +677,22 @@ pub async fn upload_to_bunny(app: AppHandle, job: UploadJob) -> Result<UploadRes
     )
     .await
     .map_err(|e| format!("{e}"))?;
-    let _ = std::fs::remove_file(&marker);
-    Ok(UploadResult { upload_url, size_bytes })
+    // Keep the receipt URL until cloud finalization succeeds; a retry must not create another upload.
+    Ok(UploadResult {
+        upload_url,
+        size_bytes,
+    })
 }
 
 /// Persist an upload URL for later resume (called by the frontend right after `create-upload`).
 #[tauri::command]
 pub fn remember_upload(path: PathBuf, upload_url: String) -> Result<(), String> {
     let marker = path.with_extension("upload.json");
-    std::fs::write(marker, serde_json::json!({ "uploadUrl": upload_url }).to_string()).map_err(err)
+    std::fs::write(
+        marker,
+        serde_json::json!({ "uploadUrl": upload_url }).to_string(),
+    )
+    .map_err(err)
 }
 
 // ---------------------------------------------------------------------------
@@ -614,23 +711,32 @@ pub struct WhisperModelStatus {
 #[tauri::command]
 pub fn whisper_models(rec: Rec<'_>) -> Vec<WhisperModelStatus> {
     let dir = rec.models_dir();
-    [ModelKind::TinyEn, ModelKind::BaseEn, ModelKind::SmallEn, ModelKind::MediumEn]
-        .into_iter()
-        .map(|kind| WhisperModelStatus {
-            kind,
-            label: kind.label().to_string(),
-            approx_mb: kind.approx_mb(),
-            downloaded: std::fs::metadata(dir.join(kind.file_name()))
-                .map(|m| m.len() == kind.size())
-                .unwrap_or(false),
-        })
-        .collect()
+    [
+        ModelKind::TinyEn,
+        ModelKind::BaseEn,
+        ModelKind::SmallEn,
+        ModelKind::MediumEn,
+    ]
+    .into_iter()
+    .map(|kind| WhisperModelStatus {
+        kind,
+        label: kind.label().to_string(),
+        approx_mb: kind.approx_mb(),
+        downloaded: std::fs::metadata(dir.join(kind.file_name()))
+            .map(|m| m.len() == kind.size())
+            .unwrap_or(false),
+    })
+    .collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
 // `rename_all` only renames the variants; `rename_all_fields` is what turns `job_id` into the
 // `jobId` the frontend filters on. Without it no progress event ever matched a job.
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "stage")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "stage"
+)]
 pub enum TranscribeProgress {
     Download {
         job_id: String,
@@ -661,7 +767,12 @@ fn progress_event(job_id: &str, p: Progress) -> TranscribeProgress {
 
 /// Download a whisper model (no-op when present). Emits `transcribe:progress` download events.
 #[tauri::command]
-pub async fn ensure_whisper_model(app: AppHandle, rec: Rec<'_>, job_id: String, model: ModelKind) -> Result<PathBuf, String> {
+pub async fn ensure_whisper_model(
+    app: AppHandle,
+    rec: Rec<'_>,
+    job_id: String,
+    model: ModelKind,
+) -> Result<PathBuf, String> {
     let dir = rec.models_dir();
     lare_transcribe::ensure_model(&dir, model, |p| {
         let _ = app.emit("transcribe:progress", progress_event(&job_id, p));
@@ -688,8 +799,15 @@ pub struct TranscribeResult {
 }
 
 #[tauri::command]
-pub async fn transcribe_recording(app: AppHandle, rec: Rec<'_>, job: TranscribeJob) -> Result<TranscribeResult, String> {
-    let model = job.model.or(rec.settings().whisper_model).unwrap_or(ModelKind::SmallEn);
+pub async fn transcribe_recording(
+    app: AppHandle,
+    rec: Rec<'_>,
+    job: TranscribeJob,
+) -> Result<TranscribeResult, String> {
+    let model = job
+        .model
+        .or(rec.settings().whisper_model)
+        .unwrap_or(ModelKind::SmallEn);
     let model_path = lare_transcribe::ensure_model(&rec.models_dir(), model, {
         let app = app.clone();
         let job_id = job.job_id.clone();
@@ -706,15 +824,24 @@ pub async fn transcribe_recording(app: AppHandle, rec: Rec<'_>, job: TranscribeJ
     let job_id = job.job_id.clone();
     info!(job = %job_id, input = %input.display(), ?model, "transcription started");
     let segments = tokio::task::spawn_blocking(move || {
-        lare_transcribe::transcribe_file(&model_path, &input, &TranscribeOptions::default(), move |p| {
-            let _ = app.emit("transcribe:progress", progress_event(&job_id, p));
-        })
+        lare_transcribe::transcribe_file(
+            &model_path,
+            &input,
+            &TranscribeOptions::default(),
+            move |p| {
+                let _ = app.emit("transcribe:progress", progress_event(&job_id, p));
+            },
+        )
     })
     .await
     .map_err(err)?
     .map_err(|e| format!("{e:#}"))?;
     let vtt = lare_transcribe::to_webvtt(&segments);
-    Ok(TranscribeResult { model, segments, vtt })
+    Ok(TranscribeResult {
+        model,
+        segments,
+        vtt,
+    })
 }
 
 /// Read a small file (thumbnail/VTT) as bytes for uploading from the webview.
