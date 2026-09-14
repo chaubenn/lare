@@ -38,9 +38,7 @@ use serde_json::json;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing::{debug, error, info, warn};
 
-use crate::recording::{
-    RECORDING_UNAVAILABLE_MESSAGE, RecordingBackend, RecordingRequest, SharedRecordingBackend,
-};
+use crate::recording::{RecordingBackend, SharedRecordingBackend};
 
 /// Chrome extension id (pinned by the `key` in `apps/extension/wxt.config.ts`).
 pub const EXTENSION_ID: &str = "koplffaeeahehnfikinmldhhmmldghhl";
@@ -53,7 +51,10 @@ pub enum ServerEvent {
     /// `GET /auth/callback?code=...` -> Tauri event `auth:callback`.
     AuthCallback { code: String, next: Option<String> },
     /// `GET /auth/callback?error=...` -> Tauri event `auth:error`.
-    AuthError { error: String, description: Option<String> },
+    AuthError {
+        error: String,
+        description: Option<String>,
+    },
     /// A parsed frame from the extension -> Tauri event `ext:message` (raw JSON).
     ExtMessage(serde_json::Value),
     /// Connected-client state changed -> Tauri event `ext:connected`.
@@ -134,6 +135,8 @@ impl WsHub {
 /// Everything the HTTP/WS handlers need. Cheap to clone (all `Arc`s).
 #[derive(Clone)]
 pub struct ServerContext {
+    pub pcm: Arc<crate::pcm::PcmService>,
+    pcm_clients: Arc<Mutex<HashMap<String, u64>>>,
     pub hub: WsHub,
     /// Supabase user id of the signed-in desktop user (set by the frontend via `set_current_user`).
     pub current_user: Arc<Mutex<Option<String>>>,
@@ -146,8 +149,14 @@ pub struct ServerContext {
 }
 
 impl ServerContext {
-    pub fn new(hub: WsHub, current_user: Arc<Mutex<Option<String>>>, app_version: impl Into<String>) -> Self {
+    pub fn new(
+        hub: WsHub,
+        current_user: Arc<Mutex<Option<String>>>,
+        app_version: impl Into<String>,
+    ) -> Self {
         Self {
+            pcm: Arc::new(crate::pcm::PcmService::default()),
+            pcm_clients: Arc::new(Mutex::new(HashMap::new())),
             hub,
             current_user,
             recording: Arc::new(std::sync::RwLock::new(None)),
@@ -180,7 +189,8 @@ impl ServerContext {
             None => self.allow_any_extension_origin,
             Some(origin) => {
                 origin == EXTENSION_ORIGIN
-                    || (self.allow_any_extension_origin && origin.starts_with("chrome-extension://"))
+                    || (self.allow_any_extension_origin
+                        && origin.starts_with("chrome-extension://"))
             }
         }
     }
@@ -239,8 +249,10 @@ async fn health(State(ctx): State<ServerContext>) -> Response {
     });
     let mut res = axum::Json(body).into_response();
     // Lets the web app / extension popup probe whether the desktop app is running.
-    res.headers_mut()
-        .insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    res.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
     res
 }
 
@@ -270,7 +282,8 @@ async fn auth_callback(
     match q.code {
         Some(code) if !code.is_empty() => {
             debug!("oauth callback received a code");
-            ctx.hub.emit(ServerEvent::AuthCallback { code, next: q.next });
+            ctx.hub
+                .emit(ServerEvent::AuthCallback { code, next: q.next });
             Html(callback_page(
                 "Signed in to Lare — you can close this tab.",
                 "Switch back to the Lare app to continue.",
@@ -279,7 +292,10 @@ async fn auth_callback(
         }
         _ => (
             StatusCode::BAD_REQUEST,
-            Html(callback_page("Sign-in failed", "The callback did not include a code.")),
+            Html(callback_page(
+                "Sign-in failed",
+                "The callback did not include a code.",
+            )),
         )
             .into_response(),
     }
@@ -318,7 +334,8 @@ async fn ws_upgrade(
         warn!(origin, "rejected websocket upgrade from disallowed origin");
         return (StatusCode::FORBIDDEN, "origin not allowed").into_response();
     }
-    ws.on_upgrade(move |socket| handle_socket(socket, ctx))
+    ws.max_message_size(16000 * 4 * 30)
+        .on_upgrade(move |socket| handle_socket(socket, ctx))
 }
 
 fn error_frame(code: ErrorCode, message: impl Into<String>) -> AppToExt {
@@ -383,7 +400,9 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
             &mut socket,
             &error_frame(
                 ErrorCode::UnsupportedProtocol,
-                format!("desktop app speaks protocol v{PROTOCOL_VERSION}, extension sent v{protocol}"),
+                format!(
+                    "desktop app speaks protocol v{PROTOCOL_VERSION}, extension sent v{protocol}"
+                ),
             ),
         )
         .await;
@@ -402,7 +421,19 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
         user_id: current_user,
         recording_capable: ctx.recording_capable(),
     };
-    if send_frame(&mut socket, &ack).await.is_err() {
+    let mut ack = serde_json::to_value(ack).unwrap();
+    ack["recordingCapable"] = json!(false);
+    ack["capabilities"] =
+        if ctx.pcm.capable() && ext_user.is_some() && ext_user == ctx.current_user() {
+            json!(["pcm16k-f32-v1"])
+        } else {
+            json!([])
+        };
+    if socket
+        .send(Message::Text(ack.to_string().into()))
+        .await
+        .is_err()
+    {
         return;
     }
     info!(ext_version, "extension connected");
@@ -411,15 +442,15 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
     //    channel, the loop below reads frames.
     let (tx, mut rx) = mpsc::unbounded_channel::<AppToExt>();
     let client_id = ctx.hub.register(tx.clone());
+    let (pcm_tx, mut pcm_rx) = mpsc::channel::<serde_json::Value>(8);
+    let mut pcm_session: Option<String> = None;
     let (mut sink, mut stream) = socket.split();
     let writer = tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            let text = match serde_json::to_string(&msg) {
-                Ok(t) => t,
-                Err(err) => {
-                    error!(%err, "failed to serialise frame");
-                    continue;
-                }
+        loop {
+            let text = tokio::select! {
+                Some(msg) = rx.recv() => serde_json::to_string(&msg).unwrap(),
+                Some(msg) = pcm_rx.recv() => msg.to_string(),
+                else => break,
             };
             if sink.send(Message::Text(text.into())).await.is_err() {
                 break;
@@ -430,12 +461,104 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
 
     while let Some(frame) = stream.next().await {
         match frame {
-            Ok(Message::Text(text)) => handle_frame(&ctx, &tx, text.as_str()),
-            Ok(Message::Binary(_)) => {
-                let _ = tx.send(error_frame(
-                    ErrorCode::BadMessage,
-                    "binary frames are not supported",
-                ));
+            Ok(Message::Text(text)) => {
+                let value = serde_json::from_str::<serde_json::Value>(&text).unwrap_or_default();
+                if value["type"]
+                    .as_str()
+                    .is_some_and(|t| t.starts_with("pcm."))
+                {
+                    let result: anyhow::Result<Vec<serde_json::Value>> = async {
+                        let user = ext_user
+                            .as_deref()
+                            .ok_or_else(|| anyhow::anyhow!("Sign in before enabling grading"))?;
+                        anyhow::ensure!(
+                            ctx.current_user().as_deref() == Some(user),
+                            "Desktop account changed"
+                        );
+                        if value["type"] == "pcm.start" {
+                            anyhow::ensure!(
+                                pcm_session.is_none(),
+                                "Only one PCM session per socket"
+                            );
+                            let id = ctx.pcm.start(&value, user).await?;
+                            {
+                                let mut owners = ctx
+                                    .pcm_clients
+                                    .lock()
+                                    .map_err(|_| anyhow::anyhow!("PCM clients lock"))?;
+                                anyhow::ensure!(
+                                    !owners.contains_key(&id),
+                                    "PCM session already connected"
+                                );
+                                owners.insert(id.clone(), client_id);
+                            }
+                            pcm_session = Some(id.clone());
+                            let next = ctx.pcm.next_sample(&id).await?;
+                            Ok(vec![
+                                json!({"type":"pcm.ready","sessionId":id,"nextSample":next}),
+                            ])
+                        } else {
+                            let id = pcm_session
+                                .as_deref()
+                                .ok_or_else(|| anyhow::anyhow!("Send pcm.start first"))?;
+                            anyhow::ensure!(value["sessionId"] == id, "PCM session mismatch");
+                            match value["type"].as_str() {
+                                Some("pcm.end") => {
+                                    ctx.pcm
+                                        .push(
+                                            id,
+                                            user,
+                                            &[],
+                                            Some(value["totalSamples"].as_u64().ok_or_else(
+                                                || anyhow::anyhow!("Missing totalSamples"),
+                                            )?),
+                                            &ctx.hub,
+                                        )
+                                        .await
+                                }
+                                Some("pcm.pause" | "pcm.resume") => Ok(vec![]),
+                                _ => anyhow::bail!("Unknown PCM message"),
+                            }
+                        }
+                    }
+                    .await;
+                    match result {
+                        Ok(messages) => {
+                            for msg in messages {
+                                ctx.hub.emit(ServerEvent::ExtMessage(msg.clone()));
+                                let _ = pcm_tx.send(msg).await;
+                            }
+                        }
+                        Err(err) => {
+                            let _ = pcm_tx
+                                .send(json!({"type":"error","message":err.to_string()}))
+                                .await;
+                        }
+                    }
+                } else {
+                    handle_frame(&ctx, &tx, text.as_str());
+                }
+            }
+            Ok(Message::Binary(bytes)) => {
+                let result = match (pcm_session.as_deref(), ext_user.as_deref()) {
+                    (Some(id), Some(user)) if ctx.current_user().as_deref() == Some(user) => {
+                        ctx.pcm.push(id, user, &bytes, None, &ctx.hub).await
+                    }
+                    _ => Err(anyhow::anyhow!("Send authenticated pcm.start before audio")),
+                };
+                match result {
+                    Ok(messages) => {
+                        for msg in messages {
+                            ctx.hub.emit(ServerEvent::ExtMessage(msg.clone()));
+                            let _ = pcm_tx.send(msg).await;
+                        }
+                    }
+                    Err(err) => {
+                        let _ = pcm_tx
+                            .send(json!({"type":"error","message":err.to_string()}))
+                            .await;
+                    }
+                }
             }
             Ok(Message::Ping(_) | Message::Pong(_)) => {}
             Ok(Message::Close(_)) => break,
@@ -448,6 +571,12 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
 
     info!("extension disconnected");
     ctx.hub.unregister(client_id);
+    if let Some(id) = pcm_session {
+        if let Ok(mut owners) = ctx.pcm_clients.lock() {
+            owners.remove(&id);
+        }
+    }
+    drop(pcm_tx);
     drop(tx);
     let _ = tokio::time::timeout(Duration::from_secs(2), writer).await;
 }
@@ -457,7 +586,10 @@ fn handle_frame(ctx: &ServerContext, tx: &mpsc::UnboundedSender<AppToExt>, raw: 
     let value: serde_json::Value = match serde_json::from_str(raw) {
         Ok(v) => v,
         Err(err) => {
-            let _ = tx.send(error_frame(ErrorCode::BadMessage, format!("invalid JSON: {err}")));
+            let _ = tx.send(error_frame(
+                ErrorCode::BadMessage,
+                format!("invalid JSON: {err}"),
+            ));
             return;
         }
     };
@@ -484,7 +616,7 @@ fn handle_frame(ctx: &ServerContext, tx: &mpsc::UnboundedSender<AppToExt>, raw: 
                 protocol: PROTOCOL_VERSION,
                 app_version: ctx.app_version.clone(),
                 user_id: ctx.current_user(),
-                recording_capable: ctx.recording_capable(),
+                recording_capable: false,
             });
         }
         ExtToApp::SessionStart {
@@ -494,25 +626,18 @@ fn handle_frame(ctx: &ServerContext, tx: &mpsc::UnboundedSender<AppToExt>, raw: 
             facecam,
             mic,
             ..
-        } => match ctx.recording_backend() {
-            Some(backend) => backend.start(
-                &ctx.hub,
-                RecordingRequest {
-                    session_id,
-                    started_at,
-                    facecam,
-                    mic,
-                },
-            ),
-            None => {
-                let _ = tx.send(AppToExt::RecordingState {
-                    session_id: Some(session_id),
-                    state: RecordingState::Error,
-                    started_at: None,
-                    message: Some(RECORDING_UNAVAILABLE_MESSAGE.to_string()),
-                });
-            }
-        },
+        } => {
+            let _ = (started_at, facecam, mic);
+            let _ = tx.send(AppToExt::RecordingState {
+                session_id: Some(session_id),
+                state: RecordingState::Error,
+                started_at: None,
+                message: Some(
+                    "Interview capture belongs to the extension. Use pcm.start for local grading."
+                        .to_string(),
+                ),
+            });
+        }
         ExtToApp::SessionPause { session_id, at } => {
             if let Some(backend) = ctx.recording_backend() {
                 backend.pause(&ctx.hub, &session_id, at);
@@ -619,7 +744,8 @@ mod tests {
         let mut stream = TcpStream::connect(addr).await.unwrap();
         stream
             .write_all(
-                format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n").as_bytes(),
+                format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n")
+                    .as_bytes(),
             )
             .await
             .unwrap();
@@ -651,7 +777,10 @@ mod tests {
         assert_eq!(ack["appVersion"], "0.0.0-test");
         assert_eq!(ack["userId"], serde_json::Value::Null);
         assert_eq!(ack["recordingCapable"], false);
-        assert_eq!(next_event(&mut server.events).await, ServerEvent::ExtConnected(true));
+        assert_eq!(
+            next_event(&mut server.events).await,
+            ServerEvent::ExtConnected(true)
+        );
         assert_eq!(server.ctx.hub.client_count(), 1);
     }
 
@@ -680,8 +809,7 @@ mod tests {
         let server = start(true).await;
         let err = connect(server.addr, Some("https://evil.example"))
             .await
-            .err()
-            .expect("upgrade should fail");
+            .expect_err("upgrade should fail");
         match err {
             tungstenite::Error::Http(response) => assert_eq!(response.status().as_u16(), 403),
             other => panic!("expected an HTTP 403, got {other:?}"),
@@ -691,7 +819,9 @@ mod tests {
     #[tokio::test]
     async fn missing_origin_is_rejected_in_release_mode() {
         let server = start(false).await;
-        let err = connect(server.addr, None).await.err().expect("upgrade should fail");
+        let err = connect(server.addr, None)
+            .await
+            .expect_err("upgrade should fail");
         match err {
             tungstenite::Error::Http(response) => assert_eq!(response.status().as_u16(), 403),
             other => panic!("expected an HTTP 403, got {other:?}"),
@@ -702,16 +832,39 @@ mod tests {
     async fn ping_gets_pong() {
         let server = start(true).await;
         let (mut client, _ack) = handshake(server.addr).await;
-        send_json(&mut client, json!({ "type": "ping", "at": 1700000000123u64 })).await;
+        send_json(
+            &mut client,
+            json!({ "type": "ping", "at": 1700000000123u64 }),
+        )
+        .await;
         let pong = recv_json(&mut client).await;
         assert_eq!(pong, json!({ "type": "pong", "at": 1700000000123u64 }));
+    }
+
+    #[tokio::test]
+    async fn pcm_without_authenticated_desktop_fails_explicitly() {
+        let server = start(true).await;
+        let (mut client, ack) = handshake(server.addr).await;
+        assert_eq!(ack["capabilities"], json!([]));
+        send_json(&mut client, json!({"type":"pcm.start", "sessionId":"s1", "userId":"u1", "sampleRate":16000, "channels":1, "format":"f32le", "resumeFrom":0})).await;
+        assert_eq!(recv_json(&mut client).await["type"], "error");
+        client
+            .send(tungstenite::Message::Binary(vec![0; 16].into()))
+            .await
+            .unwrap();
+        assert_eq!(recv_json(&mut client).await["type"], "error");
+        send_json(&mut client, json!({"type":"ping", "at":1})).await;
+        assert_eq!(recv_json(&mut client).await["type"], "pong");
     }
 
     #[tokio::test]
     async fn interview_session_start_without_recorder_reports_recording_error() {
         let mut server = start(true).await;
         let (mut client, _ack) = handshake(server.addr).await;
-        assert_eq!(next_event(&mut server.events).await, ServerEvent::ExtConnected(true));
+        assert_eq!(
+            next_event(&mut server.events).await,
+            ServerEvent::ExtConnected(true)
+        );
 
         let start = json!({
             "type": "session.start",
@@ -733,10 +886,18 @@ mod tests {
         assert_eq!(state["sessionId"], "s1");
         assert_eq!(state["state"], "error");
         assert_eq!(state["startedAt"], serde_json::Value::Null);
-        assert_eq!(state["message"], RECORDING_UNAVAILABLE_MESSAGE);
+        assert!(
+            state["message"]
+                .as_str()
+                .unwrap()
+                .contains("capture belongs to the extension")
+        );
 
         // The frame is also forwarded to the app layer verbatim.
-        assert_eq!(next_event(&mut server.events).await, ServerEvent::ExtMessage(start));
+        assert_eq!(
+            next_event(&mut server.events).await,
+            ServerEvent::ExtMessage(start)
+        );
     }
 
     #[tokio::test]
@@ -792,12 +953,16 @@ mod tests {
     #[tokio::test]
     async fn auth_callback_emits_code_and_error_events() {
         let mut server = start(true).await;
-        let (status, body) = http_get(server.addr, "/auth/callback?code=abc123&next=%2Fdrafts").await;
+        let (status, body) =
+            http_get(server.addr, "/auth/callback?code=abc123&next=%2Fdrafts").await;
         assert_eq!(status, 200);
         assert!(body.contains("Signed in to Lare"));
         assert_eq!(
             next_event(&mut server.events).await,
-            ServerEvent::AuthCallback { code: "abc123".into(), next: Some("/drafts".into()) }
+            ServerEvent::AuthCallback {
+                code: "abc123".into(),
+                next: Some("/drafts".into())
+            }
         );
 
         let (status, body) = http_get(
@@ -820,7 +985,10 @@ mod tests {
     async fn unparseable_frames_get_bad_message_errors() {
         let server = start(true).await;
         let (mut client, _ack) = handshake(server.addr).await;
-        client.send(tungstenite::Message::text("not json")).await.unwrap();
+        client
+            .send(tungstenite::Message::text("not json"))
+            .await
+            .unwrap();
         let err = recv_json(&mut client).await;
         assert_eq!(err["type"], "error");
         assert_eq!(err["code"], "bad_message");
@@ -847,8 +1015,13 @@ mod tests {
         assert_eq!(err["type"], "error");
         assert_eq!(err["code"], "unsupported_protocol");
         // Server closes: the next item is a Close frame or the end of the stream.
-        let next = tokio::time::timeout(Duration::from_secs(5), client.next()).await.unwrap();
-        assert!(matches!(next, None | Some(Ok(tungstenite::Message::Close(_))) | Some(Err(_))));
+        let next = tokio::time::timeout(Duration::from_secs(5), client.next())
+            .await
+            .unwrap();
+        assert!(matches!(
+            next,
+            None | Some(Ok(tungstenite::Message::Close(_))) | Some(Err(_))
+        ));
         assert_eq!(server.ctx.hub.client_count(), 0);
     }
 
