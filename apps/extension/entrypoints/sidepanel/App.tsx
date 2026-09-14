@@ -143,15 +143,17 @@ export function App() {
     <div className="sidepanel">
       <header className="header">
         <Emblem className="logo" />
-        <div>
+        <div className="brand">
           <div className="title">Lare</div>
           <div className="subtitle">Hevy for LeetCode</div>
         </div>
         <span
-          className={`app-dot ${snap?.appConnected ? "on" : ""}`}
-          role="img"
-          aria-label={snap?.appConnected ? "Desktop app connected" : "Desktop app not detected"}
-        />
+          className={`app-status ${snap?.appConnected ? "on" : ""}`}
+          title={snap?.appConnected ? "Desktop app connected" : "Desktop app not detected"}
+        >
+          <span className="app-dot" aria-hidden />
+          {snap?.appConnected ? "Desktop" : "No desktop"}
+        </span>
       </header>
 
       {error && <div className="error">{error}</div>}
@@ -222,7 +224,7 @@ export function App() {
         </section>
       ) : (
         <>
-          <section className="card user">
+          <section className="account">
             {auth.avatarUrl ? (
               <img src={auth.avatarUrl} alt="" className="avatar" />
             ) : (
@@ -232,7 +234,7 @@ export function App() {
               <div className="name">
                 {auth.displayName ?? auth.handle ?? auth.email ?? "Signed in"}
               </div>
-              <div className="muted">
+              <div className="handle">
                 {auth.handle ? `@${auth.handle}` : "Set a handle in the app"}
               </div>
             </div>
@@ -247,39 +249,61 @@ export function App() {
           </section>
 
           <section className="card">
-            <div className="card-title">
+            <h2 className="card-title">
               Tracking submissions
-              <span className="badge running">on</span>
-            </div>
-            <p className="muted">
+              <span className="badge on">On</span>
+            </h2>
+            <p className="note">
               Problems and submissions are saved to your cloud inbox. No desktop app needed.
             </p>
+            {tracked.length > 0 && (
+              <div className="list-bar">
+                <span>
+                  {selectedIds.length > 0
+                    ? `${selectedIds.length} of ${tracked.length} selected`
+                    : `${tracked.length} tracked`}
+                </span>
+                {!confirmClear && (
+                  <button
+                    type="button"
+                    className="link"
+                    disabled={busy}
+                    onClick={() => setConfirmClear(true)}
+                  >
+                    {selectedIds.length > 0 ? `Clear ${selectedIds.length} selected` : "Clear all"}
+                  </button>
+                )}
+              </div>
+            )}
             <ul className="problems">
               {tracked.map((p) => (
                 <li key={p.sessionProblemId}>
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${p.title || p.slug}`}
-                    disabled={!p.synced}
-                    checked={selectedIds.includes(p.sessionProblemId)}
-                    onChange={(e) =>
-                      setSelected(
-                        e.target.checked
-                          ? [...selectedIds, p.sessionProblemId]
-                          : selectedIds.filter((id) => id !== p.sessionProblemId),
-                      )
-                    }
-                  />
-                  <span>{p.title || p.slug}</span>
-                  <span className="muted">
-                    {p.submissionCount === 0
-                      ? "opened"
-                      : `${p.acceptedCount}/${p.submissionCount} accepted`}
-                  </span>
+                  <label className="problem">
+                    <input
+                      type="checkbox"
+                      className="check"
+                      aria-label={`Select ${p.title || p.slug}`}
+                      disabled={!p.synced}
+                      checked={selectedIds.includes(p.sessionProblemId)}
+                      onChange={(e) =>
+                        setSelected(
+                          e.target.checked
+                            ? [...selectedIds, p.sessionProblemId]
+                            : selectedIds.filter((id) => id !== p.sessionProblemId),
+                        )
+                      }
+                    />
+                    <span className="problem-title">{p.title || p.slug}</span>
+                    <span className="problem-meta">
+                      {p.submissionCount === 0
+                        ? "opened"
+                        : `${p.acceptedCount}/${p.submissionCount} accepted`}
+                    </span>
+                  </label>
                 </li>
               ))}
               {tracked.length === 0 && (
-                <li className="muted">Nothing tracked yet — open a LeetCode problem.</li>
+                <li className="problems-empty">Nothing tracked yet — open a LeetCode problem.</li>
               )}
             </ul>
             <button
@@ -298,16 +322,6 @@ export function App() {
             >
               Create draft from selected problems
             </button>
-            {tracked.length > 0 && !confirmClear && (
-              <button
-                type="button"
-                className="link"
-                disabled={busy}
-                onClick={() => setConfirmClear(true)}
-              >
-                {selectedIds.length > 0 ? `Clear ${selectedIds.length} selected` : "Clear all"}
-              </button>
-            )}
             {confirmClear && (
               <div className="confirm-sheet" role="dialog" aria-label="Clear tracked problems">
                 <p>
@@ -342,19 +356,23 @@ export function App() {
           <section className="card">
             {interview ? (
               <>
-                <div className="card-title">
+                <h2 className="card-title">
                   Mock interview
                   <span className={`badge ${status}`}>{status}</span>
-                </div>
+                </h2>
                 <div className="timer" role="timer">
                   {formatDuration(activeMs(interview.events, Date.now()))}
                 </div>
-                <p className="muted">
+                <p className="note">
                   {snap.capture?.graded
                     ? "Graded: local Whisper and AI review"
                     : "Ungraded: video only, no transcript or AI review"}
                 </p>
-                {snap.capture?.message && <p role="status">{snap.capture.message}</p>}
+                {snap.capture?.message && (
+                  <p className="muted" role="status">
+                    {snap.capture.message}
+                  </p>
+                )}
                 {!!snap.capture?.recordedBytes && (
                   <p className="muted">
                     {((snap.capture.uploadedBytes ?? 0) / 1048576).toFixed(1)} /{" "}
@@ -362,16 +380,18 @@ export function App() {
                   </p>
                 )}
                 {snap.capture?.transcript && (
-                  <section aria-label="Live transcript">{snap.capture.transcript}</section>
+                  <section className="transcript" aria-label="Live transcript">
+                    {snap.capture.transcript}
+                  </section>
                 )}
                 {recording?.state === "recording" && (
                   <p className="muted">Recording. A red dot shows on the problem page.</p>
                 )}
                 <ul className="problems">
                   {interview.problems.map((p) => (
-                    <li key={p.sessionProblemId}>
-                      <span>{p.problem.title}</span>
-                      <span className="muted">
+                    <li key={p.sessionProblemId} className="problem plain">
+                      <span className="problem-title">{p.problem.title}</span>
+                      <span className="problem-meta">
                         {p.submissions.filter((sub) => sub.accepted).length}/{p.submissions.length}{" "}
                         accepted
                       </span>
@@ -433,45 +453,45 @@ export function App() {
               </>
             ) : (
               <>
-                <div className="card-title">Mock interview</div>
-                <p className="muted">
+                <h2 className="card-title">Mock interview</h2>
+                <p className="note">
                   Record this problem tab and microphone in Chrome. Camera is optional.
                 </p>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={graded}
-                    onChange={(e) => setGraded(e.target.checked)}
-                  />{" "}
-                  Transcript &amp; AI review
-                </label>
-                <p className="muted">
-                  {graded
-                    ? "Transcribed by local Whisper in the desktop app, then AI reviewed."
-                    : "Ungraded: video only. Disables both transcript and AI review; desktop is not required."}
-                </p>
+                <div className="options">
+                  <div className="option">
+                    <label className="option-row">
+                      Transcript &amp; AI review
+                      <input
+                        type="checkbox"
+                        className="switch"
+                        checked={graded}
+                        onChange={(e) => setGraded(e.target.checked)}
+                      />
+                    </label>
+                    <p className="option-hint">
+                      {graded
+                        ? "Transcribed by local Whisper in the desktop app, then AI reviewed."
+                        : "Ungraded: video only. Disables both transcript and AI review; desktop is not required."}
+                    </p>
+                  </div>
+                  <div className="option">
+                    <label className="option-row">
+                      Include camera
+                      <input
+                        type="checkbox"
+                        className="switch"
+                        checked={facecam}
+                        onChange={(e) => setFacecam(e.target.checked)}
+                      />
+                    </label>
+                  </div>
+                </div>
                 {graded && gradingBlocker && (
                   <p className="error" role="status">
                     Can't grade yet: {gradingBlocker} Or untick Transcript &amp; AI review to record
                     without it.
                   </p>
                 )}
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={facecam}
-                    onChange={(e) => setFacecam(e.target.checked)}
-                  />{" "}
-                  Include camera
-                </label>
-                <button
-                  type="button"
-                  className="link"
-                  disabled={busy}
-                  onClick={() => void run(() => sendRuntime({ type: "PROBE_APP" }))}
-                >
-                  Check desktop grading connection
-                </button>
                 <button
                   type="button"
                   className="btn btn-primary"
@@ -479,6 +499,14 @@ export function App() {
                   onClick={() => void startInterview()}
                 >
                   Start mock interview
+                </button>
+                <button
+                  type="button"
+                  className="link link-quiet"
+                  disabled={busy}
+                  onClick={() => void run(() => sendRuntime({ type: "PROBE_APP" }))}
+                >
+                  Check desktop grading connection
                 </button>
               </>
             )}

@@ -44,11 +44,20 @@ export default defineConfig({
     },
     action: {
       default_title: "Lare",
+      // Exact renders for 1x, 1.5x and 2x toolbars, so Chrome never resamples the star.
       default_icon: {
         16: "icon-16.png",
+        24: "icon-24.png",
         32: "icon-32.png",
         48: "icon-48.png",
         128: "icon-128.png",
+      },
+    },
+    // The shortcut counts as invoking the extension on the tab, which tab capture requires.
+    commands: {
+      _execute_action: {
+        suggested_key: { default: "Alt+Shift+L" },
+        description: "Open Lare on this tab",
       },
     },
     web_accessible_resources: [
