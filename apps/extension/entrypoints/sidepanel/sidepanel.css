@@ -2,7 +2,7 @@
 @import "@lare/ui/motion.css";
 @import "@lare/ui/type.css";
 
-/* Shared by the side panel, the recorder tab and the permission tab. */
+/* Shared by the side panel and the permission tab. */
 :root {
   color-scheme: dark;
 
@@ -476,6 +476,32 @@ label.problem:hover {
   box-shadow:
     0 0 0 2px var(--lare-ink),
     0 0 0 4px var(--lare-focus);
+}
+
+/* Start is parked until the user clicks the toolbar icon. */
+.handoff {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in oklab, var(--lare-status-stop) 45%, var(--lare-line));
+  border-radius: var(--lare-r-3);
+  background: color-mix(in oklab, var(--lare-status-stop) 8%, var(--lare-ink-2));
+}
+.handoff-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  background-color: var(--lare-bone);
+}
+.handoff-title {
+  font-weight: 600;
+  line-height: 1.3;
+}
+.handoff .muted {
+  margin-top: 2px;
 }
 
 /* ---- Live interview ---------------------------------------------------- */

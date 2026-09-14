@@ -129,10 +129,21 @@ export function App() {
   // server — this list is just a local, at-a-glance echo of it.
   const tracked = snap?.state.tracking.problems ?? [];
   const recording = snap?.recording ?? null;
+  // Failures after the toolbar hand-off happen in the background, not in a panel request.
+  const shownError =
+    error ?? (!interview && recording?.state === "error" ? (recording.message ?? null) : null);
+  const awaiting = !!snap?.awaitingToolbarClick;
   const graded = gradedChoice ?? !!snap?.appConnected;
   const gradingBlocker = snap?.gradingBlocker ?? null;
   // Ids posted or cleared elsewhere must not stay selected.
   const selectedIds = selected.filter((id) => tracked.some((p) => p.sessionProblemId === id));
+
+  // Waiting on the toolbar click can outlast the worker's 30 s idle limit; keep it awake.
+  useEffect(() => {
+    if (!awaiting) return;
+    const id = setInterval(() => void refresh(), 15_000);
+    return () => clearInterval(id);
+  }, [awaiting, refresh]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is the trigger
   useEffect(() => {
@@ -156,7 +167,7 @@ export function App() {
         </span>
       </header>
 
-      {error && <div className="error">{error}</div>}
+      {shownError && <div className="error">{shownError}</div>}
 
       {!snap ? (
         <div className="muted">Loading…</div>
@@ -492,14 +503,35 @@ export function App() {
                     without it.
                   </p>
                 )}
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={busy || (graded && !!gradingBlocker)}
-                  onClick={() => void startInterview()}
-                >
-                  Start mock interview
-                </button>
+                {snap.awaitingToolbarClick ? (
+                  <div className="handoff" role="status">
+                    <Emblem className="handoff-icon" />
+                    <div className="grow">
+                      <div className="handoff-title">Click the Lare icon in your toolbar</div>
+                      <p className="muted">
+                        Chrome only lets Lare record a tab after you click its icon on that tab.
+                        Recording starts as soon as you do. It's under the puzzle piece if unpinned,
+                        or press Alt+Shift+L.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => void run(() => sendRuntime({ type: "CANCEL_START" }))}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busy || (graded && !!gradingBlocker)}
+                    onClick={() => void startInterview()}
+                  >
+                    Start mock interview
+                  </button>
+                )}
                 <button
                   type="button"
                   className="link link-quiet"
@@ -567,15 +599,6 @@ export function App() {
           )}
 
           <section className="links">
-            <button
-              type="button"
-              className="link"
-              onClick={() =>
-                void chrome.tabs.create({ url: chrome.runtime.getURL("recorder.html") })
-              }
-            >
-              Record summary / demo
-            </button>
             <button
               type="button"
               className="link"

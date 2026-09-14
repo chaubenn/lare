@@ -77,11 +77,6 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("CANCEL_START") }),
   z.object({ type: z.literal("RETRY_SYNC") }),
   z.object({ type: z.literal("DISCARD_RECORDING") }),
-  z.object({
-    type: z.literal("CREATE_VIDEO_DRAFT"),
-    videoId: z.string().uuid(),
-    title: z.string().min(1).max(200),
-  }),
   z.object({ type: z.literal("PUBLISH_PROBLEMS"), ids: z.array(z.string().uuid()).min(1) }),
   /** Remove tracked problems from the inbox without posting them (all of them when omitted). */
   z.object({ type: z.literal("CLEAR_TRACKED"), ids: z.array(z.string().uuid()).optional() }),
@@ -100,6 +95,8 @@ export interface RuntimeSnapshot {
   appConnected: boolean;
   /** Why a graded interview cannot start right now; null when it can. */
   gradingBlocker: string | null;
+  /** Start was pressed but Chrome needs a click on the toolbar icon before it can capture. */
+  awaitingToolbarClick: boolean;
   recording: RecordingInfo | null;
 }
 
@@ -110,6 +107,7 @@ export function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | nul
     auth: res.auth ?? null,
     appConnected: res.appConnected ?? false,
     gradingBlocker: res.gradingBlocker ?? null,
+    awaitingToolbarClick: res.awaitingToolbarClick ?? false,
     recording: res.recording ?? null,
     capture: res.capture ?? null,
   };

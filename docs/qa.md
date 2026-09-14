@@ -86,6 +86,12 @@ going through Bunny.
 
 ### Interview capture (the extension owns this now)
 
+- **Toolbar hand-off**: Chrome only captures a tab the extension was invoked on (its icon or
+  Alt+Shift+L on that tab), and a click inside the side panel never counts. Reload the problem
+  tab, press **Start**: the panel asks for a click on the Lare icon and the badge reads `REC`.
+  Click the icon on that tab: recording starts, the side panel stays open. Click it on another
+  tab: the panel says to switch back. **Cancel**, or two minutes without a click, restores the
+  icon to opening the panel. Starting again on the same tab without reloading needs no click.
 - **First interview on a fresh profile**: Chrome cannot show a permission prompt in a side
   panel, so **Start** opens a small Lare tab that asks for the mic (and camera, if ticked),
   closes itself once allowed, and the interview starts. Deny it: the panel says what to change.
@@ -122,8 +128,8 @@ going through Bunny.
   which should be nearly everything.
 - Incognito (with the extension allowed): `tabGroups` may be unavailable. Degrade to the on-page
   dot; do not fail the recording.
-- **Summary/demo video from the extension**: the dedicated recorder page, Chrome's screen picker,
-  keep the page open until the upload is acknowledged. Its before-unload warning should fire.
+- There is no summary/demo recorder in the extension; that is draft work in the desktop app and
+  the web.
 
 ## Desktop
 

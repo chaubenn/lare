@@ -319,6 +319,51 @@ test("problems posted from another client drop off the panel and the badge", asy
   await problem.close();
 });
 
+test("a refused tab capture parks Start on the toolbar icon, and Cancel restores the panel", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  const problem = await openProblem();
+  const panel = await openPanel();
+  const tabId = await sw.evaluate(
+    async () => (await chrome.tabs.query({ url: "http://localhost/problems/*" }))[0]?.id ?? null,
+  );
+
+  // Nobody clicked the toolbar icon on this tab, so Chrome refuses capture, exactly as it does
+  // after a click inside the side panel.
+  const res = await panel.evaluate(
+    (id) =>
+      chrome.runtime.sendMessage({
+        type: "START_INTERVIEW",
+        problem: {
+          slug: "two-sum",
+          frontendId: "1",
+          title: "Two Sum",
+          difficulty: "Easy",
+          url: "http://localhost:4173/problems/two-sum/",
+          language: null,
+        },
+        question: null,
+        facecam: false,
+        graded: false,
+        tabId: id,
+      }),
+    tabId,
+  );
+  expect(res).toMatchObject({ ok: true, awaitingToolbarClick: true });
+  await expect(panel.getByText("Click the Lare icon in your toolbar")).toBeVisible();
+  await expect.poll(badgeText).toBe("REC");
+  // Parked, not started: nothing was written for a session that may never happen.
+  const writes = (await recorded()).filter((r) => r.path.startsWith("/supabase/rest/v1/sessions"));
+  expect(writes).toHaveLength(0);
+
+  await panel.getByRole("button", { name: "Cancel" }).click();
+  await expect(panel.getByRole("button", { name: "Start mock interview" })).toBeVisible();
+  await expect.poll(badgeText).not.toBe("REC");
+
+  await panel.close();
+  await problem.close();
+});
+
 test("the permission tab asks for the microphone, reports back and closes itself", async () => {
   const panel = await context.newPage();
   await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
