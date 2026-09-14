@@ -1,4 +1,4 @@
-# Lare extension 1.0.0
+# Lare extension 0.4.4
 
 Chrome 116+. The toolbar opens a side panel, not a popup. OAuth/email sign-in,
 passive problem/submission capture, inbox draft creation and ungraded interviews

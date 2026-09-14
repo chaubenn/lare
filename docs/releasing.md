@@ -30,7 +30,7 @@ download, and loading the packaged Chrome extension. It is **not** a shipping pa
 PR to `main`, no full CI matrix, nothing marked latest.
 
 ```
-git tag dev-v1.0.0-1 && git push origin dev-v1.0.0-1
+git tag dev-v0.4.4-1 && git push origin dev-v0.4.4-1
 ```
 
 Tag `dev-vX.Y.Z-N` on a `dev` commit: `X.Y.Z` is the current app version, `N` counts the
@@ -50,8 +50,8 @@ wall clock (they run in parallel), the same as a real release. The extension zip
 a couple of minutes. Nothing about the fast path makes the compiler faster — what is
 saved is the ~40 minute gate, not the build.
 
-Because the app version stays `X.Y.Z`, a machine that installed `dev-v1.0.0-3` reports the
-same version as the eventual `v1.0.0` and will not self-update onto it. QA machines
+Because the app version stays `X.Y.Z`, a machine that installed `dev-v0.4.4-3` reports the
+same version as the eventual `v0.4.4` and will not self-update onto it. QA machines
 reinstall over the top when the real release ships.
 
 Triggering is tag-only, on purpose: `workflow_dispatch` requires the workflow file to

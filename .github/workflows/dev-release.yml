@@ -7,7 +7,7 @@ name: Dev release
 # extension. It is not a shipping path — the release is published as a **prerelease**, so
 # `releases/latest` never resolves to it and no installed app can self-update onto it.
 #
-# Trigger: push a tag `dev-vX.Y.Z-N` (e.g. `dev-v1.0.0-1`). The `v*` pattern in
+# Trigger: push a tag `dev-vX.Y.Z-N` (e.g. `dev-v0.4.4-1`). The `v*` pattern in
 # release.yml does not match `dev-v*`, so the real release workflow stays out of it, and
 # ci-dev.yml only runs on branch pushes — tagging costs nothing but the build itself.
 #
