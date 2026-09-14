@@ -132,6 +132,26 @@ jobs:
         env:
           RUST_TARGET_TRIPLE: ${{ matrix.target }}
         run: node scripts/setup-native-deps.mjs
+      - name: Stable macOS signing identity (when configured)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        # macOS keys camera/mic/screen permissions to the code signature. Unsigned builds get a new
+        # one every time, so each update revokes them. Only exported when set: an empty
+        # APPLE_CERTIFICATE makes the bundler fail at "security import". See docs/releasing.md.
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::APPLE_CERTIFICATE unset: macOS permissions reset on every update"
+            exit 0
+          fi
+          {
+            echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+            echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+          } >> "$GITHUB_ENV"
       - name: Build, sign updater bundles and attach installers
         uses: tauri-apps/tauri-action@v0
         env:
@@ -139,10 +159,7 @@ jobs:
           # Updater signing (minisign). The matching public key is in tauri.conf.json.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Apple signing/notarisation is off. To enable, add APPLE_CERTIFICATE,
-          # APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD and
-          # APPLE_TEAM_ID here from secrets. Do NOT reference them while the secrets are unset:
-          # an empty APPLE_CERTIFICATE makes the bundler fail at "security import".
+          # Notarisation stays off; it additionally needs APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID.
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
