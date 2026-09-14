@@ -4,13 +4,13 @@
 #
 #   scripts/sync-cap.sh [<commit-or-ref>]
 #
-# The copied crates live under crates/cap/ (same directory names as upstream so the
+# The copied crates live under crates/vendor/cap/ (same directory names as upstream so the
 # relative `path = "../x"` dependencies keep working). Local modifications are listed
-# in crates/cap/CHANGES.md and re-applied by this script (see `apply_local_changes`).
+# in crates/vendor/cap/CHANGES.md and re-applied by this script (see `apply_local_changes`).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEST="$ROOT/crates/cap"
+DEST="$ROOT/crates/vendor/cap"
 REF="${1:-$(cat "$DEST/UPSTREAM_COMMIT" 2>/dev/null || echo main)}"
 SRC="${CAP_SRC:-$(mktemp -d)/cap}"
 

@@ -2,8 +2,8 @@
 
 ## Problem
 
-Lare's Windows screen capture (`crates/cap/recording/src/sources/screen_capture/windows.rs`,
-`crates/cap/scap-direct3d`) uses only Windows.Graphics.Capture (WGC). WGC sits on the same
+Lare's Windows screen capture (`crates/vendor/cap/recording/src/sources/screen_capture/windows.rs`,
+`crates/vendor/cap/scap-direct3d`) uses only Windows.Graphics.Capture (WGC). WGC sits on the same
 system infrastructure as Game DVR. When Game DVR is disabled (`HKLM:\SOFTWARE\Policies\Microsoft\
 Windows\GameDVR\AllowGameDVR=0`, or the per-user `HKCU:\System\GameConfigStore\GameDVR_Enabled=0`),
 `GraphicsCaptureItem` creation fails with `ERROR_SERVICE_DISABLED` (`0x80070422`), and every
@@ -67,7 +67,7 @@ way the existing `Scaled` variant is handled — no changes needed in the encode
 this match arm, since both backends ultimately hand over an `ID3D11Texture2D` of the same pixel
 format (`R8G8B8A8Unorm`, matching `Direct3DCapture::PIXEL_FORMAT`).
 
-## New crate: `crates/cap/scap-dxgi`
+## New crate: `crates/vendor/cap/scap-dxgi`
 
 Mirrors `scap-direct3d`'s public shape so the two backends are symmetric at the call site:
 

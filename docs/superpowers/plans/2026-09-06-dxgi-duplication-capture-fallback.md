@@ -6,9 +6,9 @@
 DXGI Desktop Duplication when Windows Graphics Capture (WGC) fails, and fix the bug that hides
 the real error behind a generic "oneshot canceled" message.
 
-**Architecture:** A new crate `crates/cap/scap-dxgi` implements screen capture via
+**Architecture:** A new crate `crates/vendor/cap/scap-dxgi` implements screen capture via
 `IDXGIOutputDuplication`, mirroring `scap-direct3d`'s public shape (`Settings`, `Frame`,
-`Capturer::new/start/stop`). `crates/cap/recording/src/sources/screen_capture/windows.rs`'s
+`Capturer::new/start/stop`). `crates/vendor/cap/recording/src/sources/screen_capture/windows.rs`'s
 `create_d3d_capturer` tries WGC first and falls back to this new crate on failure; both capturer
 types are wrapped in a small `ActiveCapturer` enum so the rest of the capture thread doesn't care
 which backend is live.
@@ -36,8 +36,8 @@ which backend is live.
 ## Task 1: Fix the swallowed-error bug on capture-thread startup failure
 
 **Files:**
-- Modify: `crates/cap/recording/src/sources/screen_capture/windows.rs:744-753`
-- Test: `crates/cap/recording/src/sources/screen_capture/windows.rs` (existing
+- Modify: `crates/vendor/cap/recording/src/sources/screen_capture/windows.rs:744-753`
+- Test: `crates/vendor/cap/recording/src/sources/screen_capture/windows.rs` (existing
   `first_screen_frame_tests` module, line 1549 onward)
 
 **Interfaces:**
@@ -122,7 +122,7 @@ Expected: no errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cap/recording/src/sources/screen_capture/windows.rs
+git add crates/vendor/cap/recording/src/sources/screen_capture/windows.rs
 git commit -m "fix(recording): surface the real error when D3D capturer creation fails on startup
 
 Previously the capture thread returned early without signaling
@@ -137,20 +137,20 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ## Task 2: Scaffold the `scap-dxgi` crate
 
 **Files:**
-- Create: `crates/cap/scap-dxgi/Cargo.toml`
-- Create: `crates/cap/scap-dxgi/src/lib.rs`
-- Create: `crates/cap/scap-dxgi/src/output.rs`
+- Create: `crates/vendor/cap/scap-dxgi/Cargo.toml`
+- Create: `crates/vendor/cap/scap-dxgi/src/lib.rs`
+- Create: `crates/vendor/cap/scap-dxgi/src/output.rs`
 
 **Interfaces:**
 - Consumes: `scap_direct3d::PixelFormat` (from Task-independent existing crate), `scap_targets::Display`.
 - Produces: `pub fn find_output_for_monitor(d3d_device: &ID3D11Device, target_monitor: HMONITOR) -> windows::core::Result<(IDXGIOutput1, windows::Win32::Foundation::RECT)>` — later tasks build on this (callers derive `HMONITOR` from a `Display` via `display.raw_handle().inner()`, matching Task 4's usage).
 
-`crates/cap/*` is a glob workspace member (root `Cargo.toml:9`), so no workspace-member edit is
+`crates/vendor/cap/*` is a glob workspace member (root `Cargo.toml:9`), so no workspace-member edit is
 needed — creating the directory with a `Cargo.toml` is enough.
 
 - [ ] **Step 1: Create the crate manifest**
 
-`crates/cap/scap-dxgi/Cargo.toml`:
+`crates/vendor/cap/scap-dxgi/Cargo.toml`:
 
 ```toml
 [package]
@@ -182,7 +182,7 @@ workspace = true
 
 - [ ] **Step 2: Create the crate root with error type and settings**
 
-`crates/cap/scap-dxgi/src/lib.rs`:
+`crates/vendor/cap/scap-dxgi/src/lib.rs`:
 
 ```rust
 #![cfg(windows)]
@@ -218,7 +218,7 @@ pub enum NewCapturerError {
 
 - [ ] **Step 3: Implement monitor-to-output resolution**
 
-`crates/cap/scap-dxgi/src/output.rs`:
+`crates/vendor/cap/scap-dxgi/src/output.rs`:
 
 ```rust
 use windows::Win32::Graphics::Direct3D11::ID3D11Device;
@@ -264,11 +264,11 @@ pub fn find_output_for_monitor(
 
 Temporarily add empty stub files so `lib.rs`'s `mod` declarations resolve:
 
-`crates/cap/scap-dxgi/src/cursor.rs`:
+`crates/vendor/cap/scap-dxgi/src/cursor.rs`:
 ```rust
 ```
 
-`crates/cap/scap-dxgi/src/capturer.rs`:
+`crates/vendor/cap/scap-dxgi/src/capturer.rs`:
 ```rust
 pub struct Capturer;
 pub struct Frame;
@@ -282,7 +282,7 @@ both are placeholders *only* within this scaffolding task's compile check, not l
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cap/scap-dxgi
+git add crates/vendor/cap/scap-dxgi
 git commit -m "feat(scap-dxgi): scaffold the DXGI Desktop Duplication capture crate
 
 Adds the crate manifest, error type, Settings, and HMONITOR -> IDXGIOutput1
@@ -296,7 +296,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ## Task 3: Cursor shape compositing (pure, unit-tested)
 
 **Files:**
-- Modify: `crates/cap/scap-dxgi/src/cursor.rs` (replaces Task 2's empty stub)
+- Modify: `crates/vendor/cap/scap-dxgi/src/cursor.rs` (replaces Task 2's empty stub)
 
 **Interfaces:**
 - Consumes: nothing outside this file — pure functions over byte buffers.
@@ -313,7 +313,7 @@ bounds before calling these.
 
 - [ ] **Step 1: Write the failing tests**
 
-`crates/cap/scap-dxgi/src/cursor.rs`:
+`crates/vendor/cap/scap-dxgi/src/cursor.rs`:
 
 ```rust
 #[cfg(test)]
@@ -404,7 +404,7 @@ other two) — the module currently only has the empty stub from Task 2.
 
 - [ ] **Step 3: Implement the compositing functions**
 
-Prepend this to `crates/cap/scap-dxgi/src/cursor.rs` (above the `#[cfg(test)]` block already
+Prepend this to `crates/vendor/cap/scap-dxgi/src/cursor.rs` (above the `#[cfg(test)]` block already
 written in Step 1):
 
 ```rust
@@ -568,7 +568,7 @@ Expected: PASS (8 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cap/scap-dxgi/src/cursor.rs
+git add crates/vendor/cap/scap-dxgi/src/cursor.rs
 git commit -m "feat(scap-dxgi): implement cursor shape compositing
 
 Monochrome (AND/XOR), color (straight alpha), and masked-color cursor
@@ -583,8 +583,8 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ## Task 4: The DXGI Duplication capturer
 
 **Files:**
-- Modify: `crates/cap/scap-dxgi/src/capturer.rs` (replaces Task 2's stub)
-- Modify: `crates/cap/scap-dxgi/src/lib.rs` (settings already added in Task 2; no change needed
+- Modify: `crates/vendor/cap/scap-dxgi/src/capturer.rs` (replaces Task 2's stub)
+- Modify: `crates/vendor/cap/scap-dxgi/src/lib.rs` (settings already added in Task 2; no change needed
   here beyond what Task 2 wrote)
 
 **Interfaces:**
@@ -599,7 +599,7 @@ matches `scap-direct3d`, which also has none). It's verified manually in Task 6.
 
 - [ ] **Step 1: Write the capturer**
 
-`crates/cap/scap-dxgi/src/capturer.rs`:
+`crates/vendor/cap/scap-dxgi/src/capturer.rs`:
 
 ```rust
 use crate::cursor::{CursorShape, CursorShapeKind};
@@ -1094,7 +1094,7 @@ line up.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/cap/scap-dxgi/src/capturer.rs
+git add crates/vendor/cap/scap-dxgi/src/capturer.rs
 git commit -m "feat(scap-dxgi): implement the DXGI Desktop Duplication capturer
 
 AcquireNextFrame loop with ACCESS_LOST recovery, cursor compositing via
@@ -1109,8 +1109,8 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ## Task 5: Wire the fallback into `windows.rs`
 
 **Files:**
-- Modify: `crates/cap/recording/Cargo.toml:100` (add the new dependency next to `scap-direct3d`)
-- Modify: `crates/cap/recording/src/sources/screen_capture/windows.rs`
+- Modify: `crates/vendor/cap/recording/Cargo.toml:100` (add the new dependency next to `scap-direct3d`)
+- Modify: `crates/vendor/cap/recording/src/sources/screen_capture/windows.rs`
 
 **Interfaces:**
 - Consumes: `scap_dxgi::{Capturer as DxgiCapturer, Settings as DxgiSettings, Frame as DxgiFrame}` (Task 4).
@@ -1119,7 +1119,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Add the dependency**
 
-In `crates/cap/recording/Cargo.toml`, after line 100 (`scap-direct3d = { path = "../scap-direct3d" }`):
+In `crates/vendor/cap/recording/Cargo.toml`, after line 100 (`scap-direct3d = { path = "../scap-direct3d" }`):
 
 ```toml
 scap-dxgi = { path = "../scap-dxgi" }
@@ -1434,7 +1434,7 @@ WGC's 100ns-unit `SystemRelativeTime`).
 Also note `cadence_gate.admit(0)` above passes a placeholder QPC timestamp of `0` rather than a
 real capture-time tick count, since (per the previous paragraph) this simplified path doesn't
 thread one through — check `FrameCadenceGate::admit`'s doc comment/implementation in
-`crates/cap/recording/src/sources/screen_capture/cadence.rs` before relying on this: if it
+`crates/vendor/cap/recording/src/sources/screen_capture/cadence.rs` before relying on this: if it
 computes intervals from consecutive absolute timestamps (likely, given the WGC path passes
 `capture_time.Duration`), passing a constant `0` every call will make it behave as though frames
 arrive simultaneously every time, effectively admitting every frame (no decimation) rather than
@@ -1471,7 +1471,7 @@ transitively, still builds).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add crates/cap/recording/Cargo.toml crates/cap/recording/src/sources/screen_capture/windows.rs
+git add crates/vendor/cap/recording/Cargo.toml crates/vendor/cap/recording/src/sources/screen_capture/windows.rs
 git commit -m "feat(recording): fall back to DXGI Desktop Duplication when WGC fails
 
 Windows Graphics Capture depends on Game DVR; when that's disabled

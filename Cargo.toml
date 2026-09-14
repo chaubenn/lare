@@ -5,15 +5,13 @@ members = [
   "crates/lare-bunny",
   "crates/lare-recording",
   "crates/lare-transcribe",
-  "crates/lare-transcribe",
-  "crates/cap/*",
+  "crates/vendor/cap/*",
   "apps/desktop/src-tauri",
 ]
 exclude = [
-  "crates/cap/vendor",
-  "crates/cap/licenses",
+  "crates/vendor/cap/vendor",
+  "crates/vendor/cap/licenses",
 ]
-# Added in later phases: "crates/lare-transcribe".
 
 [workspace.package]
 edition = "2024"
@@ -23,7 +21,7 @@ rust-version = "1.88"
 
 # ---------------------------------------------------------------------------
 # Workspace dependencies. The block below mirrors Cap's root Cargo.toml (the
-# vendored crates in crates/cap use `workspace = true`), plus Lare's own.
+# vendored crates in crates/vendor/cap use `workspace = true`), plus Lare's own.
 # ---------------------------------------------------------------------------
 [workspace.dependencies]
 anyhow = { version = "1.0.86" }
@@ -54,7 +52,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures = "0.3.31"
 aho-corasick = "1.1.4"
-cidre = { path = "crates/cap/vendor/cidre", features = [
+cidre = { path = "crates/vendor/cap/vendor/cidre", features = [
   "macos_12_7",
   "cv",
   "cf",
@@ -113,6 +111,6 @@ opt-level = 3
 
 [patch.crates-io]
 # Cap fork of cidre @ bf84b67079a8, vendored with a build.rs that does not need Xcode.
-cidre = { path = "crates/cap/vendor/cidre" }
+cidre = { path = "crates/vendor/cap/vendor/cidre" }
 # https://github.com/gfx-rs/wgpu/pull/7550 (Cap carries a patched wgpu-hal 25.0.2)
-wgpu-hal = { path = "crates/cap/vendor/wgpu-hal" }
+wgpu-hal = { path = "crates/vendor/cap/vendor/wgpu-hal" }
