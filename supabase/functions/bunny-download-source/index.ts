@@ -19,7 +19,7 @@ export const downloadSource = handler(async (req) => {
   if (!video || video.library_id !== libraryId()) throw new HttpError("Video not found", 404);
   const bunny = await getVideo(video.bunny_video_id);
   if (!bunny) throw new HttpError("Source unavailable", 409);
-  const source = await sourceUrl(bunny, env("BUNNY_CDN_HOST"), env("BUNNY_CDN_TOKEN_KEY"));
+  const source = await sourceUrl(bunny, env("BUNNY_CDN_HOST"), env("SITE_URL"));
   return json(source, 200, { "Cache-Control": "no-store" });
 });
 

@@ -46,8 +46,35 @@ Lare records people's screens, voices and faces. These are the rules the product
   or `web`) so quality complaints can be diagnosed. It is metadata about the capture path, not
   about the user.
 - Videos go to Bunny Stream (EU company; library replicated to Sydney) under a per-video token:
-  playback requires a signed embed URL minted by `bunny-playback-token` after the same visibility
-  check as the post itself. Thumbnails are stored in Supabase Storage with the same rules.
+  **the player** requires a signed embed URL minted by `bunny-playback-token` after the same
+  visibility check as the post itself. Thumbnails are stored in Supabase Storage with the same
+  rules.
+
+### The limit of that protection
+
+The signed embed gates the *player*. It does not gate the video file behind it, and this is
+worth being plain about because Lare records people's faces and voices.
+
+Bunny Stream's embed player and its CDN token authentication are mutually exclusive — enabling
+token authentication returns 403 for the playlist and segment requests the player itself makes,
+so playback stops working for everything. Using the embed player therefore means the underlying
+MP4 is guarded only by the library's referrer rule, which refuses requests with no `Referer`
+and serves every request that has one. Anyone holding a video's Bunny GUID can fetch the file
+directly.
+
+What that does and does not mean:
+
+- The GUID is a UUIDv4 and is only released after the same visibility check as the post, so
+  videos cannot be discovered, enumerated or guessed. A stranger cannot reach a private post.
+- But **anyone who was allowed to watch a video can keep a permanent direct link to it**, and
+  that link keeps working after the post is made private, after it is unshared, and after the
+  five-minute playback token expires. Only deleting the video (`video-delete`, which removes it
+  from Bunny) actually revokes access.
+
+Treat "this person was allowed to watch it once" as "this person may keep a copy". That is true
+of any un-DRM'd video on the web — a viewer can always record their own screen — but here it is
+one request rather than an effort, so it should be stated rather than implied. Closing it fully
+needs Bunny's DRM, which is a paid enterprise feature, and is not part of v1.
 - Problem descriptions are stored for the owner's draft view and shown on public pages as an
   excerpt with a link to LeetCode.
 

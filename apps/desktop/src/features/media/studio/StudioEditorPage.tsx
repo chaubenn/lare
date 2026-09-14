@@ -113,8 +113,11 @@ export function StudioEditorPage() {
   const { userId } = useUser();
   const download = useMutation({
     mutationFn: async () => {
-      const source = await invokeFunction<{ url: string }>("bunny-download-source", { videoId });
-      const recording = await recorder.importCloudSource(source.url);
+      const source = await invokeFunction<{ url: string; referer: string }>(
+        "bunny-download-source",
+        { videoId },
+      );
+      const recording = await recorder.importCloudSource(source.url, source.referer);
       await patchRecordingMeta(recording.recordingId, {
         videoId,
         uploaded: true,

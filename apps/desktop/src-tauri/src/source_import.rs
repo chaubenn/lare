@@ -1,4 +1,9 @@
-//! Import only signed Bunny MP4 copies into a fresh, private local studio project.
+//! Import a Bunny MP4 rendition of the user's own video into a fresh, private studio project.
+//!
+//! The URL carries no token. Bunny Stream's embed player and CDN token authentication are
+//! mutually exclusive for this library, so direct files are gated on the `Referer` header
+//! instead — `bunny-download-source` authorizes ownership server-side and tells us which
+//! referrer to send. See that function and docs/cloud-studio.md.
 use std::sync::Arc;
 use futures_util::StreamExt;
 use tauri::State;
@@ -9,6 +14,7 @@ use crate::recorder::{CompletedPayload, Purpose, Recorder};
 pub async fn import_cloud_source(
     rec: State<'_, Arc<Recorder>>,
     url: String,
+    referer: String,
 ) -> Result<CompletedPayload, String> {
     let url = reqwest::Url::parse(&url).map_err(|_| "Invalid source URL")?;
     let host = url.host_str().unwrap_or("");
@@ -16,11 +22,16 @@ pub async fn import_cloud_source(
     if url.scheme() != "https" || !host.ends_with(".b-cdn.net")
         || host.trim_end_matches(".b-cdn.net").contains('.')
         || url.port().is_some() || !url.username().is_empty() || url.password().is_some()
+        || url.query().is_some()
         || parts.len() != 3 || uuid::Uuid::parse_str(parts[1]).is_err()
         || !["play_240p.mp4", "play_360p.mp4", "play_480p.mp4", "play_720p.mp4", "play_1080p.mp4"].contains(&parts[2])
-        || !url.query_pairs().any(|(k,v)| k == "token" && v.starts_with("HS256-"))
     {
-        return Err("Only signed Bunny MP4 sources are supported".into());
+        return Err("Only Bunny MP4 renditions are supported".into());
+    }
+    // Never let a caller-supplied referrer redirect the request's identity somewhere else.
+    let referer_url = reqwest::Url::parse(&referer).map_err(|_| "Invalid source referrer")?;
+    if referer_url.scheme() != "https" || referer_url.host_str().is_none() {
+        return Err("Invalid source referrer".into());
     }
     let id = uuid::Uuid::new_v4().to_string();
     let project = rec.recordings_dir().join(&id);
@@ -31,7 +42,8 @@ pub async fn import_cloud_source(
             .redirect(reqwest::redirect::Policy::none())
             .timeout(std::time::Duration::from_secs(3600))
             .build().map_err(|_| "Could not initialize download")?;
-        let response = client.get(url).send().await.map_err(|_| "Source download failed; retry to renew the link")?;
+        let response = client.get(url).header(reqwest::header::REFERER, referer)
+            .send().await.map_err(|_| "Source download failed; retry to renew the link")?;
         if response.status() != reqwest::StatusCode::OK { return Err("Source unavailable; retry to renew the link".to_string()); }
         const MAX_BYTES: u64 = 4 * 1024 * 1024 * 1024;
         if response.content_length().is_some_and(|n| n > MAX_BYTES) { return Err("Source exceeds the 4 GiB import limit".into()); }

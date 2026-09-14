@@ -229,7 +229,8 @@ function notInTauri(): never {
 }
 
 export const recorder = {
-  importCloudSource: (url: string) => invoke<CompletedRecording>("import_cloud_source", { url }),
+  importCloudSource: (url: string, referer: string) =>
+    invoke<CompletedRecording>("import_cloud_source", { url, referer }),
   listDevices: () => (inTauri ? invoke<Devices>("list_devices") : notInTauri()),
   checkPermissions: () => (inTauri ? invoke<Permissions>("check_permissions") : notInTauri()),
   requestPermission: (which: "screen_recording" | "camera" | "microphone") =>
