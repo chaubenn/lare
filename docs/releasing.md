@@ -28,22 +28,14 @@ Most fixes do not need a CI build at all. Where the wait actually goes (v0.4.4 r
 Intel Mac 34 min, Windows 27 min, Apple Silicon 17 min, extension under 1 min. The `dev ->
 main` PR CI is about 9 minutes warm.
 
-- **Extension.** `pnpm --filter @lare/extension build` produces exactly what the release zip
-  contains, in `apps/extension/.output/chrome-mv3`. Load it unpacked at `chrome://extensions`
-  (remove the dev build first; they share an id). No release needed, ever.
-- **Desktop, production-like.** On the Mac, build the real bundle locally:
-
-  ```sh
-  pnpm setup:native
-  CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
-    pnpm --filter @lare/desktop tauri build --bundles app
-  open target/release/bundle/macos/Lare.app
-  ```
-
-  That is the same hardened-runtime `.app` the dmg contains, so TCC prompts, System Settings
-  entries and relaunch behaviour are the real thing. Incremental rebuilds take minutes, not
-  the 17 a cold CI runner needs. Set `APPLE_SIGNING_IDENTITY` to the certificate from
-  [Signing keys](#signing-keys) or every rebuild asks for permissions again.
+- **`pnpm bundle`** builds this checkout into `out/`: `out/extension` (exactly what the release
+  zip contains; load it unpacked, after removing the dev build, which shares its id) and the
+  desktop app (`out/Lare.app` or `out/Lare/Lare.exe`). No release needed.
+- On the Mac that is a real hardened-runtime `.app`, so TCC prompts, System Settings entries
+  and relaunch behaviour are the real thing, and incremental rebuilds take minutes, not the 17 a
+  cold CI runner needs. Set `APPLE_SIGNING_IDENTITY` to the certificate from
+  [Signing keys](#signing-keys) (or name a keychain certificate "Lare Development") or every
+  rebuild asks for permissions again. `--release` builds optimised.
 - **Fresh-download install, updater, the other OS.** Only these need a dev release.
 
 ## Dev releases
