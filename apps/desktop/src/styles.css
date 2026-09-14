@@ -24,6 +24,14 @@ body,
   height: 100%;
 }
 
+/* On <html>, `overflow: clip` reaches the viewport as `hidden`, which scripts and focus can still
+   scroll. Clipping and positioning #root instead gives stray absolutes a containing block that
+   genuinely cannot scroll, so the shell never slides out of the window. */
+#root {
+  position: relative;
+  overflow: clip;
+}
+
 html,
 body {
   /* Only <main> should ever scroll — the shell (sidebar, footer, jobs tray) stays fixed.

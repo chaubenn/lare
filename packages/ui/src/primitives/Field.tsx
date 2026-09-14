@@ -64,8 +64,10 @@ export function Toggle({
   return (
     <label
       htmlFor={id}
+      // `relative` keeps the sr-only input's box inside the label. Without it the input is placed
+      // against the viewport, and focusing it (any click on the switch) scrolls the whole window.
       className={cn(
-        "flex items-start justify-between gap-4 rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)] p-3",
+        "relative flex items-start justify-between gap-4 rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)] p-3",
         disabled && "opacity-50",
       )}
     >
