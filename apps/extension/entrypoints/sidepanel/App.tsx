@@ -167,6 +167,21 @@ export function App() {
         </span>
       </header>
 
+      {snap && snap.buildId !== __BUILD_ID__ && (
+        <div className="stale" role="alert">
+          <span>
+            Lare was rebuilt, but Chrome is still running the old version in the background.
+          </span>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => chrome.runtime.reload()}
+          >
+            Reload Lare
+          </button>
+        </div>
+      )}
+
       {shownError && <div className="error">{shownError}</div>}
 
       {!snap ? (

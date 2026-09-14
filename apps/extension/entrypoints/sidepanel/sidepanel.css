@@ -548,6 +548,17 @@ label.problem:hover {
   color: var(--lare-paper);
   font-size: var(--text-sm);
 }
+.stale {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: 1px solid var(--lare-line-strong);
+  border-radius: var(--lare-r-2);
+  background: var(--lare-ink-2);
+  font-size: var(--text-sm);
+  color: var(--lare-soft);
+}
 .divider {
   display: flex;
   align-items: center;

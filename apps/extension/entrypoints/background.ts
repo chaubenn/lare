@@ -1043,6 +1043,7 @@ async function snapshot(): Promise<RuntimeSnapshot> {
     appConnected,
     gradingBlocker: desktop.gradingBlocker(auth?.userId ?? null),
     awaitingToolbarClick: pendingStart !== null,
+    buildId: __BUILD_ID__,
     capture,
     // A failed toolbar hand-off is newer than whatever the last capture left behind.
     recording:

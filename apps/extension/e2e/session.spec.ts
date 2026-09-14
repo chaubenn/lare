@@ -95,6 +95,8 @@ async function openPanel() {
   const panel = await context.newPage();
   await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
   await expect(panel.getByText("Tracking submissions")).toBeVisible();
+  // Worker and panel come from the same build, so no stale-worker banner.
+  await expect(panel.getByRole("button", { name: "Reload Lare" })).toHaveCount(0);
   return panel;
 }
 

@@ -97,6 +97,8 @@ export interface RuntimeSnapshot {
   gradingBlocker: string | null;
   /** Start was pressed but Chrome needs a click on the toolbar icon before it can capture. */
   awaitingToolbarClick: boolean;
+  /** The service worker's build; null from a worker older than this field. */
+  buildId: string | null;
   recording: RecordingInfo | null;
 }
 
@@ -108,6 +110,7 @@ export function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | nul
     appConnected: res.appConnected ?? false,
     gradingBlocker: res.gradingBlocker ?? null,
     awaitingToolbarClick: res.awaitingToolbarClick ?? false,
+    buildId: res.buildId ?? null,
     recording: res.recording ?? null,
     capture: res.capture ?? null,
   };
