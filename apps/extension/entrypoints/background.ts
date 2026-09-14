@@ -372,6 +372,8 @@ async function startInterview(
     throw new Error("A mock interview is already running or starting");
   if (!req.problem || req.tabId === null)
     throw new Error("Open a LeetCode problem to start a mock interview");
+  // Fail before a session row, tab group or indicator exists: capture is the step Chrome gates.
+  await tabStreamId(req.tabId);
   startAbort = new AbortController();
   const signal = startAbort.signal;
 
@@ -419,7 +421,7 @@ async function startInterview(
     if (tp) tp.synced = true;
     await withState(async (s) => ({ state: { ...s, interview: session }, result: undefined }));
     await ensureOffscreen();
-    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: req.tabId });
+    const streamId = await tabStreamId(req.tabId);
     if (signal.aborted) throw new Error("Start cancelled");
     await chrome.storage.local.set({
       [CAPTURE_KEY]: { sessionId, tabId: req.tabId, graded: req.graded, state: "starting" },
@@ -474,6 +476,24 @@ async function startInterview(
     text: "Mock interview started. Recording.",
   });
   return { ok: true, ...(await snapshot()) };
+}
+
+/**
+ * Chrome only lets an extension capture a tab it was invoked on — the toolbar icon or the
+ * shortcut, pressed on that tab — and forgets it when the tab reloads. Clicks inside the side
+ * panel do not count, so explain the one thing that fixes it instead of Chrome's wording.
+ */
+async function tabStreamId(tabId: number): Promise<string> {
+  try {
+    return await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (/not been invoked|activeTab/i.test(message))
+      throw new Error(
+        "Chrome needs one click on the Lare toolbar icon while this problem tab is open (or Alt+Shift+L), then press Start again. It resets whenever the tab reloads.",
+      );
+    throw e;
+  }
 }
 
 async function pauseOrResume(type: "pause" | "resume"): Promise<RuntimeResponse> {
