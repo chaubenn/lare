@@ -4,8 +4,8 @@ import "@fontsource/ibm-plex-mono/500.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { CameraWindow } from "./features/recording/CameraWindow";
-import { RecorderPillWindow } from "./features/recording/RecorderPillWindow";
+import { CameraWindow } from "./features/media/CameraWindow";
+import { RecorderPillWindow } from "./features/media/RecorderPillWindow";
 import { windowKind } from "./lib/tauri";
 import "./styles.css";
 

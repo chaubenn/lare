@@ -1,6 +1,6 @@
 import { buildSessionOverview, type OverviewProblem } from "@lare/shared";
 import type { Post, Video } from "@lare/supabase-types";
-import type { FeedImage } from "@/features/posts/media";
+import type { FeedImage } from "@/features/publishing/posts/media";
 import { PostCarousel } from "./PostCarousel";
 import { SessionOverviewSlide } from "./SessionOverviewSlide";
 import { VideoSlide } from "./VideoSlide";

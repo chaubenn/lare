@@ -5,8 +5,8 @@ import { useEffect } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { useUser } from "@/features/auth/AuthProvider";
 import { PostSlides, type SlidePost, type SlideVideo } from "@/features/feed/PostSlides";
-import { usePostMedia } from "@/features/posts/media";
-import { useVideo } from "@/features/recording/hooks";
+import { useVideo } from "@/features/media/hooks";
+import { usePostMedia } from "@/features/publishing/posts/media";
 
 /**
  * How the post will look once it is published, drawn from what is in the editor right now

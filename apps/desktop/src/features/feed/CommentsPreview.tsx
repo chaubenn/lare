@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
-import type { PostComment } from "@/features/posts/social";
+import type { PostComment } from "@/features/publishing/posts/social";
 
 /**
  * Instagram-style inline preview: the first few comments render right under the post, no

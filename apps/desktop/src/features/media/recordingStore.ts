@@ -5,6 +5,7 @@
  */
 
 import { load, type Store } from "@tauri-apps/plugin-store";
+import type { CreateUploadResponse } from "@/lib/recorder";
 import { inTauri } from "@/lib/tauri";
 import type { VideoSlot } from "./pipeline";
 
@@ -18,6 +19,9 @@ export interface RecordingMeta {
   slot: VideoSlot;
   /** `videos.id` once the upload pipeline created a row. */
   videoId: string | null;
+  upload?: CreateUploadResponse;
+  uploadPath?: string;
+  uploadUrl?: string;
   uploaded: boolean;
   transcribed: boolean;
   /** Rendered MP4 for studio projects (path), if exported. */
@@ -80,6 +84,7 @@ export async function patchRecordingMeta(
   try {
     const s = await store();
     await s.set(recordingId, next);
+    await s.save();
   } catch {
     // Best effort: the pipeline still works without persistence.
   }

@@ -9,11 +9,11 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import { Toggle } from "@/components/ui/Field";
 import { VideoEmbed } from "@/components/VideoEmbed";
 import { useUser } from "@/features/auth/AuthProvider";
-import { usePermissions, useRecorderStatus, useVideo } from "@/features/recording/hooks";
-import { isActive, useJobs } from "@/features/recording/jobs";
-import type { VideoSlot } from "@/features/recording/pipeline";
-import { patchRecordingMeta } from "@/features/recording/recordingStore";
-import { recorder } from "@/lib/recorder";
+import { usePermissions, useRecorderStatus, useRecordings, useVideo } from "@/features/media/hooks";
+import { isActive, useJobs } from "@/features/media/jobs";
+import { publishInstantDemo, type VideoSlot } from "@/features/media/pipeline";
+import { patchRecordingMeta } from "@/features/media/recordingStore";
+import { type CreateUploadResponse, recorder } from "@/lib/recorder";
 import { errorMessage, invokeFunction } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 import type { Draft } from "./queries";
@@ -49,8 +49,26 @@ function useSlotRecording(draft: Draft) {
     slot: VideoSlot,
     options: { facecam: boolean; mic: boolean },
   ) => {
-    const state = await recorder.start({ mode, postId: draft.id, ...options });
-    if (state.recordingId) await patchRecordingMeta(state.recordingId, { slot });
+    const upload = await invokeFunction<CreateUploadResponse>("bunny-create-upload", {
+      mode,
+      title: slot === "demo" ? "Summary video" : "Demo video",
+      captureSource: "desktop",
+      mimeType: "video/mp4",
+    });
+    try {
+      const uploadUrl = await recorder.prepareUpload(upload.tus);
+      const state = await recorder.start({ mode, postId: draft.id, ...options });
+      if (state.recordingId)
+        await patchRecordingMeta(state.recordingId, {
+          slot,
+          upload,
+          uploadUrl,
+          videoId: upload.videoId,
+        });
+    } catch (error) {
+      await invokeFunction("video-delete", { videoId: upload.videoId }).catch(() => undefined);
+      throw error;
+    }
     toast({
       title: mode === "instant" ? "Recording — one take" : "Recording — studio",
       description:
@@ -70,10 +88,65 @@ function useSlotRecording(draft: Draft) {
  */
 export function DemoVideoPanel({ draft }: { draft: Draft }) {
   const isInterview = draft.sessions?.kind === "interview";
+  const recordings = useRecordings();
+  const { userId } = useUser();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const working = useJobs().some((job) => isActive(job) && job.postId === draft.id);
+  const retry = useMutation({
+    mutationFn: (recording: NonNullable<typeof recordings.data>[number]) =>
+      publishInstantDemo({
+        recording,
+        userId,
+        postId: draft.id,
+        slot: recording.slot,
+        title: draft.title ?? "Demo video",
+        queryClient,
+      }),
+    onError: (error) =>
+      toast({
+        title: "Upload failed; source kept",
+        description: errorMessage(error),
+        variant: "error",
+      }),
+  });
+  const pending = recordings.data?.filter((r) => r.postId === draft.id && !r.uploaded) ?? [];
   return (
     <>
       <MainVideoPanel draft={draft} />
       {isInterview ? <SummaryVideoPanel draft={draft} /> : null}
+      {pending.length > 0 && (
+        <Card>
+          <SectionTitle>Unfinished takes on this device</SectionTitle>
+          <div className="space-y-3">
+            {pending.map((recording) => (
+              <div key={recording.recordingId} className="space-y-1 text-sm">
+                <p>
+                  {recording.slot === "demo" ? "Summary" : "Demo"} -{" "}
+                  {new Date(recording.startedAt).toLocaleString()}
+                </p>
+                {recording.error && <p className="text-xs text-rose-400">{recording.error}</p>}
+                {recording.mode === "instant" ? (
+                  <Button
+                    size="sm"
+                    disabled={retry.isPending || working}
+                    onClick={() => retry.mutate(recording)}
+                  >
+                    Retry upload
+                  </Button>
+                ) : (
+                  <Link
+                    to={`/studio/local/${recording.recordingId}?post=${draft.id}&slot=${recording.slot}`}
+                    className="text-emerald-400 hover:underline"
+                  >
+                    Continue editing
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </>
   );
 }
@@ -91,8 +164,6 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
       (j.postId === draft.id || (j.sessionId && j.sessionId === draft.session_id)) &&
       (!isInterview || j.kind === "interview"),
   );
-
-  const recordingId = draft.sessions?.recording_id ?? null;
 
   const removeVideo = useMutation({
     mutationFn: async () => {
@@ -123,8 +194,8 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
             {video.data.duration_ms ? ` · ${Math.round(video.data.duration_ms / 1000)}s` : ""}
           </p>
           <div className="flex flex-wrap gap-2">
-            {recordingId ? (
-              <Link to={`/studio/${recordingId}?post=${draft.id}`}>
+            {draft.video_id ? (
+              <Link to={`/studio/${draft.video_id}?post=${draft.id}`}>
                 <Button size="sm" icon={<Scissors className="size-3.5" aria-hidden />}>
                   {isInterview ? "Cut highlights" : "Re-edit"}
                 </Button>
@@ -150,12 +221,8 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
       ) : isInterview ? (
         <div className="space-y-2 text-sm text-zinc-400">
           <p>
-            The interview recording is processed automatically when the session ends. If it did not
-            finish, resume it from{" "}
-            <Link to="/recordings" className="text-emerald-400 hover:underline">
-              Recordings
-            </Link>
-            .
+            The extension uploads the interview while recording. Keep its recording page open until
+            upload finishes.
           </p>
         </div>
       ) : (
@@ -207,6 +274,11 @@ function SummaryVideoPanel({ draft }: { draft: Draft }) {
       {draft.demo_video_id && video.data ? (
         <div className="space-y-3">
           <VideoEmbed video={video.data} title="Summary video" />
+          <Link to={`/studio/${draft.demo_video_id}?post=${draft.id}&slot=demo`}>
+            <Button size="sm" icon={<Scissors className="size-3.5" aria-hidden />}>
+              Trim summary
+            </Button>
+          </Link>
           <p className="text-xs text-zinc-500">
             Plays before the full recording
             {video.data.duration_ms ? ` · ${Math.round(video.data.duration_ms / 1000)}s` : ""}

@@ -4,8 +4,8 @@ import type { QueryData } from "@supabase/supabase-js";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
 import type { FollowState } from "@/features/friends/queries";
-import { decoratePosts, type PostDecoration } from "@/features/posts/media";
-import { fetchTopComments, type PostComment } from "@/features/posts/social";
+import { decoratePosts, type PostDecoration } from "@/features/publishing/posts/media";
+import { fetchTopComments, type PostComment } from "@/features/publishing/posts/social";
 import { parseFollowList, parseProfileStats } from "@/lib/json";
 import { supabase } from "@/lib/supabase";
 

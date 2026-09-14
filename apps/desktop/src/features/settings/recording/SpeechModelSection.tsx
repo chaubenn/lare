@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
-import { useWhisperModels, whisperModelsKey } from "@/features/recording/hooks";
+import { useWhisperModels, whisperModelsKey } from "@/features/media/hooks";
 import { formatBytes, newJobId, recorder, type WhisperModel } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { useTauriEvent } from "@/lib/tauri";

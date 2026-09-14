@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Input, Label } from "@/components/ui/Field";
-import type { Job } from "@/features/recording/jobs";
+import type { Job } from "@/features/media/jobs";
 import type { StudioProjectInfo } from "@/lib/recorder";
 
 export function StudioRenderPanel({ job }: { job: Job }) {

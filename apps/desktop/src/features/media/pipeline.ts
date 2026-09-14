@@ -23,7 +23,8 @@ import {
 } from "@/lib/recorder";
 import { errorMessage, invokeFunction, supabase } from "@/lib/supabase";
 import { createJob, type Job, type JobStage, updateJob } from "./jobs";
-import { patchRecordingMeta } from "./recordingStore";
+import { getRecordingMeta, patchRecordingMeta } from "./recordingStore";
+import { canUseRawVideo } from "./studio/unedited";
 
 type VideoKind = Database["public"]["Enums"]["video_kind"];
 
@@ -80,13 +81,33 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
 
   stage(job, "create", "Registering the video");
   const info = await recorder.mediaInfo(filePath);
-  const created = await invokeFunction<CreateUploadResponse>("bunny-create-upload", {
-    mode: opts.mode,
-    title: opts.title,
-    sessionId: opts.sessionId ?? null,
-  });
+  const meta = rid ? await getRecordingMeta(rid) : null;
+  const reusableUpload =
+    meta?.upload &&
+    (!meta.uploadPath || meta.uploadPath === filePath) &&
+    !meta.uploaded &&
+    Number(meta.upload.tus.headers.AuthorizationExpire) * 1000 > Date.now() + 60_000
+      ? meta.upload
+      : null;
+  const created =
+    reusableUpload ??
+    (await invokeFunction<CreateUploadResponse>("bunny-create-upload", {
+      mode: opts.mode,
+      title: opts.title,
+      sessionId: opts.sessionId ?? null,
+      captureSource: "desktop",
+      mimeType: "video/mp4",
+    }));
   updateJob(job.id, { videoId: created.videoId });
-  if (rid) await patchRecordingMeta(rid, { videoId: created.videoId, error: null });
+  if (rid)
+    await patchRecordingMeta(rid, {
+      videoId: created.videoId,
+      upload: created,
+      uploadUrl: reusableUpload ? meta?.uploadUrl : undefined,
+      uploadPath: filePath,
+      uploaded: false,
+      error: null,
+    });
 
   throwIf(
     (
@@ -127,23 +148,37 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
   });
   let sizeBytes: number;
   try {
-    const result = await recorder.upload({ jobId: job.id, path: filePath, tus: created.tus });
+    const result = await recorder.upload({
+      jobId: job.id,
+      path: filePath,
+      tus: created.tus,
+      resumeUrl: reusableUpload ? meta?.uploadUrl : undefined,
+    });
     sizeBytes = result.sizeBytes;
   } finally {
     unlisten();
   }
   const thumbnailPath = await thumbPromise;
 
+  // A TUS offset is not a cloud receipt. Never discard the source on a failed finalization.
+  for (let attempt = 0; ; attempt++) {
+    const { error } = await supabase.functions.invoke("bunny-finalize-recording", {
+      body: { videoId: created.videoId, sizeBytes, durationMs: info.durationMs ?? 0 },
+    });
+    if (!error) break;
+    if ((error as { context?: Response }).context?.status !== 409 || attempt >= 4) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+  }
+
   throwIf(
     (
       await supabase
         .from("videos")
-        .update({ status: "uploaded", size_bytes: sizeBytes, thumbnail_path: thumbnailPath })
+        .update({ size_bytes: sizeBytes, thumbnail_path: thumbnailPath })
         .eq("id", created.videoId)
     ).error,
     "videos update",
   );
-  if (rid) await patchRecordingMeta(rid, { uploaded: true, error: null });
 
   if (opts.vtt) {
     stage(job, "captions", "Attaching captions");
@@ -171,7 +206,18 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
     );
   }
 
-  stage(job, "done", "Uploaded — Bunny is encoding (this is slower than Loom)");
+  // Keep edited project tracks, but not their disposable render. Instant takes have no project to preserve.
+  if (rid) {
+    await patchRecordingMeta(rid, { uploaded: true, error: null });
+    try {
+      if (opts.mode === "instant") await recorder.delete(rid);
+      else if (filePath === (await getRecordingMeta(rid))?.exportPath)
+        await recorder.deleteFile(filePath);
+    } catch (error) {
+      console.warn("Cloud receipt confirmed, but local cleanup failed", error);
+    }
+  }
+  stage(job, "done", "Upload confirmed; playback becomes available as Bunny encodes");
   return created.videoId;
 }
 
@@ -197,6 +243,25 @@ export interface ExportOptions {
 /** Render a studio project with `edit`; returns the MP4 path. */
 export async function renderStudio(opts: ExportOptions): Promise<string> {
   const { job } = opts;
+  const info = await recorder.studioProjectInfo(opts.projectPath);
+  const edit = opts.edit ?? DEFAULT_EDIT;
+  if (
+    info.displayPath &&
+    canUseRawVideo(edit, !!info.cameraPath, !!info.micPath, info.clips.length)
+  ) {
+    stage(job, "export", "Unedited video: using source without rendering");
+    return info.displayPath;
+  }
+  // A new render can change bytes at the same path. It must never resume an older TUS object.
+  if (opts.recordingId) {
+    const meta = await getRecordingMeta(opts.recordingId);
+    if (meta?.uploadPath)
+      await patchRecordingMeta(opts.recordingId, {
+        upload: undefined,
+        uploadPath: undefined,
+        uploadUrl: undefined,
+      });
+  }
   stage(job, "export", "Rendering", 0);
   const unlisten = await onProgress("export:progress", job.id, (p) => {
     const percent = p.total > 0 ? Math.round((p.frame / p.total) * 100) : null;

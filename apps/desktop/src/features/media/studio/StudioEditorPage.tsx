@@ -6,7 +6,7 @@
  */
 
 import { formatDurationHuman } from "@lare/shared";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { ArrowLeft, Film, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -16,16 +16,22 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, PageHeader } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
+import { VideoEmbed } from "@/components/VideoEmbed";
 import { useUser } from "@/features/auth/AuthProvider";
-import { useInterviewReview } from "@/features/posts/queries";
-import { createJob, isActive, updateJob, useJobs } from "@/features/recording/jobs";
+import { useVideo } from "@/features/media/hooks";
+import { createJob, isActive, updateJob, useJobs } from "@/features/media/jobs";
 import {
   exportAndPublish,
   postForSession,
   renderStudio,
   type VideoSlot,
-} from "@/features/recording/pipeline";
-import { getRecordingMeta } from "@/features/recording/recordingStore";
+} from "@/features/media/pipeline";
+import {
+  getAllRecordingMeta,
+  getRecordingMeta,
+  patchRecordingMeta,
+} from "@/features/media/recordingStore";
+import { useInterviewReview } from "@/features/publishing/posts/queries";
 import {
   type CompletedRecording,
   DEFAULT_EDIT,
@@ -35,7 +41,7 @@ import {
   type StudioProjectInfo,
   type TimeRange,
 } from "@/lib/recorder";
-import { errorMessage, supabase } from "@/lib/supabase";
+import { errorMessage, invokeFunction, supabase } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 import { StudioClips } from "./Clips";
 import { StudioControls, StudioToolbar } from "./Controls";
@@ -46,17 +52,19 @@ import { StudioTimeline } from "./Timeline";
 
 export { highlightRanges, mergeRanges } from "./ranges";
 
-function useRecording(recordingId: string) {
+function useRecording(recordingId: string, videoId: string) {
   return useQuery({
-    queryKey: ["recorder", "recording", recordingId],
+    queryKey: ["recorder", "recording", recordingId, videoId],
     enabled: inTauri,
     queryFn: async (): Promise<{
       recording: CompletedRecording;
       info: StudioProjectInfo;
       slot: VideoSlot;
     } | null> => {
-      const list = await recorder.list();
-      const recording = list.find((r) => r.recordingId === recordingId);
+      const [list, metadata] = await Promise.all([recorder.list(), getAllRecordingMeta()]);
+      const recording = list.find((r) =>
+        videoId ? metadata[r.recordingId]?.videoId === videoId : r.recordingId === recordingId,
+      );
       if (!recording) return null;
       const [info, meta] = await Promise.all([
         recorder.studioProjectInfo(recording.projectPath),
@@ -98,9 +106,23 @@ function useAttachTarget(recording: CompletedRecording | undefined, postParam: s
 }
 
 export function StudioEditorPage() {
-  const { recordingId = "" } = useParams();
+  const { recordingId = "", videoId = "" } = useParams();
   const [search] = useSearchParams();
-  const loaded = useRecording(recordingId);
+  const loaded = useRecording(recordingId, videoId);
+  const video = useVideo(videoId || null);
+  const { userId } = useUser();
+  const download = useMutation({
+    mutationFn: async () => {
+      const source = await invokeFunction<{ url: string }>("bunny-download-source", { videoId });
+      const recording = await recorder.importCloudSource(source.url);
+      await patchRecordingMeta(recording.recordingId, {
+        videoId,
+        uploaded: true,
+        slot: search.get("slot") === "demo" ? "demo" : "main",
+      });
+      await loaded.refetch();
+    },
+  });
 
   if (!inTauri) {
     return <EmptyState title="Studio is only available in the desktop app" />;
@@ -110,23 +132,41 @@ export function StudioEditorPage() {
     return <ErrorState error={loaded.error} onRetry={() => void loaded.refetch()} />;
   if (!loaded.data) {
     return (
-      <EmptyState
-        title="Recording not found"
-        description="It may have been deleted from disk."
-        action={
-          <Link to="/recordings" className="text-sm text-emerald-400 hover:underline">
-            Back to recordings
-          </Link>
-        }
-      />
+      <div className="space-y-4">
+        {video.data && <VideoEmbed video={video.data} />}
+        {video.data?.user_id === userId && (
+          <Button disabled={download.isPending} onClick={() => download.mutate()}>
+            {download.isPending ? "Downloading and importing..." : "Download MP4 copy to edit"}
+          </Button>
+        )}
+        {download.isError && (
+          <ErrorState error={download.error} onRetry={() => download.mutate()} />
+        )}
+        <EmptyState
+          title={videoId ? "Source download required" : "Recording not found"}
+          description={
+            videoId
+              ? "Download an encoded MP4 copy to edit locally. This is not the original: quality may be lower, and camera/audio layers cannot be separated. The cloud video is unchanged until you publish an edit."
+              : "It may have been deleted from disk."
+          }
+          action={
+            <Link
+              to={search.get("post") ? `/drafts/${search.get("post")}` : "/drafts"}
+              className="text-sm text-emerald-400 hover:underline"
+            >
+              Back to drafts
+            </Link>
+          }
+        />
+      </div>
     );
   }
   return (
     <StudioEditor
-      key={recordingId}
+      key={videoId || recordingId}
       recording={loaded.data.recording}
       info={loaded.data.info}
-      slot={loaded.data.slot}
+      slot={search.get("slot") === "demo" ? "demo" : loaded.data.slot}
       postParam={search.get("post")}
     />
   );
@@ -383,11 +423,11 @@ function StudioEditor({
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <Link
-          to="/recordings"
+          to={postParam ? `/drafts/${postParam}` : "/drafts"}
           className="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
         >
           <ArrowLeft className="size-4" aria-hidden />
-          Recordings
+          Drafts
         </Link>
         <div className="flex items-center gap-2 text-xs text-zinc-500">
           <Badge>{recording.purpose === "interview" ? "Mock interview" : "Demo"}</Badge>

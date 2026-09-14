@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Label, Select } from "@/components/ui/Field";
-import { settingsKey, useRecorderSettings } from "@/features/recording/hooks";
+import { settingsKey, useRecorderSettings } from "@/features/media/hooks";
 import { type RecorderSettings, recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 

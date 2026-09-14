@@ -1,6 +1,6 @@
 {
   "name": "@lare/desktop",
-  "version": "0.4.3",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "lint": "biome check ."
   },
   "dependencies": {

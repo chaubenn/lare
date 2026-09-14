@@ -35,11 +35,11 @@ export function useInterviewReview(sessionId: string | null | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("interview_reviews")
-        .select("*")
+        .select("*, sessions!inner(graded)")
         .eq("session_id", sessionId ?? "")
         .maybeSingle();
       if (error) throw error;
-      return data ? parseAiReview(data) : null;
+      return data?.sessions.graded ? parseAiReview(data) : null;
     },
   });
 }

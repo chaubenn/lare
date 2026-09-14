@@ -12,7 +12,7 @@ import { type Draft, type PostExtras, useSetPostExtras } from "./queries";
 export function PostExtrasPanel({ draft }: { draft: Draft }) {
   const { toast } = useToast();
   const extras = useSetPostExtras(draft.id);
-  const isInterview = draft.sessions?.kind === "interview";
+  const isInterview = draft.sessions?.kind === "interview" && draft.sessions.graded;
 
   const set = (patch: Partial<PostExtras>) =>
     extras.mutate(patch, {

@@ -49,7 +49,7 @@ function PostView({ post }: { post: PostDetail }) {
   const { userId } = useUser();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const review = useInterviewReview(post.session_id);
+  const review = useInterviewReview(post.sessions?.graded ? post.session_id : null);
   const media = usePostMedia(post.id);
   const [editing, setEditing] = useState(false);
   const mediaRows = media.data ?? [];
@@ -231,6 +231,14 @@ function PostView({ post }: { post: PostDetail }) {
         <section>
           <SectionTitle>Summary video</SectionTitle>
           <VideoEmbed video={post.demo_videos} />
+          {isMine && (
+            <Link
+              to={`/studio/${post.demo_videos.id}?post=${post.id}&slot=demo`}
+              className="text-sm text-emerald-400 hover:underline"
+            >
+              Trim summary
+            </Link>
+          )}
           {!post.show_demo_video && isMine ? (
             <p className="mt-2 text-xs text-zinc-500">
               Hidden from the post — turn it back on with "Edit post".
@@ -247,6 +255,14 @@ function PostView({ post }: { post: PostDetail }) {
           {post.videos ? (
             <>
               <VideoEmbed video={post.videos} />
+              {isMine && (
+                <Link
+                  to={`/studio/${post.videos.id}?post=${post.id}`}
+                  className="text-sm text-emerald-400 hover:underline"
+                >
+                  Open in studio
+                </Link>
+              )}
               {!post.show_video && isMine ? (
                 <p className="mt-2 text-xs text-zinc-500">
                   Hidden from the post — turn it back on with "Edit post".

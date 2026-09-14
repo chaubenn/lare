@@ -2,7 +2,7 @@ import { formatDurationHuman } from "@lare/shared";
 import type { Post } from "@lare/supabase-types";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { ArrowLeft, Eye, Send, Trash2 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ProblemSection } from "@/components/ProblemSection";
 import { useToast } from "@/components/toast/ToastProvider";
@@ -12,8 +12,10 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import { Input, Label, Select, Textarea, Toggle } from "@/components/ui/Field";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
-import { PostMediaPanel } from "@/features/posts/PostMediaPanel";
-import { PostPreview, usePreviewSlides } from "@/features/posts/PostPreview";
+import { useRecorderStatus } from "@/features/media/hooks";
+import { isActive, useJobs } from "@/features/media/jobs";
+import { PostMediaPanel } from "@/features/publishing/posts/PostMediaPanel";
+import { PostPreview, usePreviewSlides } from "@/features/publishing/posts/PostPreview";
 import { copyText } from "@/lib/clipboard";
 import { postWebUrl } from "@/lib/env";
 import { formatDateTime, plural } from "@/lib/format";
@@ -22,7 +24,15 @@ import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 import { DemoVideoPanel } from "./DemoVideoPanel";
 import { PostExtrasPanel } from "./PostExtrasPanel";
-import { type Draft, useDeleteDraft, useDraft, usePublishDraft, useSaveDraft } from "./queries";
+import {
+  type Draft,
+  type PublishInput,
+  useDeleteDraft,
+  useDraft,
+  usePublishDraft,
+  useSaveDraft,
+} from "./queries";
+import { draftStepError } from "./validation";
 
 export function DraftEditorPage() {
   const { id = "" } = useParams();
@@ -91,13 +101,45 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const publish = usePublishDraft();
   const save = useSaveDraft();
   const remove = useDeleteDraft();
+  const recording = useRecorderStatus();
+  const jobs = useJobs();
 
-  const [title, setTitle] = useState(() => defaultTitle(draft));
-  const [body, setBody] = useState(draft.body ?? "");
-  const [visibility, setVisibility] = useState<Post["visibility"]>(draft.visibility);
-  const [showVideo, setShowVideo] = useState(draft.show_video);
-  const [showDemoVideo, setShowDemoVideo] = useState(draft.show_demo_video);
-  const [coverMediaId, setCoverMediaId] = useState<string | null>(draft.cover_media_id);
+  const recoveryKey = `lare:draft:${userId}:${draft.id}`;
+  const [recovered] = useState<Partial<PublishInput>>(() => {
+    try {
+      const value: unknown = JSON.parse(localStorage.getItem(recoveryKey) ?? "{}");
+      if (!value || typeof value !== "object") return {};
+      const draft = value as Partial<PublishInput>;
+      return typeof draft.title === "string" &&
+        typeof draft.body === "string" &&
+        ["public", "private"].includes(draft.visibility ?? "") &&
+        typeof draft.showVideo === "boolean" &&
+        typeof draft.showDemoVideo === "boolean" &&
+        (draft.coverMediaId === null || typeof draft.coverMediaId === "string")
+        ? draft
+        : {};
+    } catch {
+      return {};
+    }
+  });
+  const [step, setStep] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const leaving = useRef(false);
+  const steps = ["Problems", "Media", "Details", "Extras", "Review & publish"];
+
+  const [title, setTitle] = useState(() => recovered.title ?? defaultTitle(draft));
+  const [body, setBody] = useState(recovered.body ?? draft.body ?? "");
+  const [visibility, setVisibility] = useState<Post["visibility"]>(
+    recovered.visibility ?? draft.visibility,
+  );
+  const [showVideo, setShowVideo] = useState(recovered.showVideo ?? draft.show_video);
+  const [showDemoVideo, setShowDemoVideo] = useState(
+    recovered.showDemoVideo ?? draft.show_demo_video,
+  );
+  const [coverMediaId, setCoverMediaId] = useState<string | null>(
+    recovered.coverMediaId !== undefined ? recovered.coverMediaId : draft.cover_media_id,
+  );
   const [previewing, setPreviewing] = useState(false);
 
   const session = draft.sessions;
@@ -115,6 +157,68 @@ function DraftEditor({ draft }: { draft: Draft }) {
     showDemoVideo,
     coverMediaId,
   };
+  const snapshot = JSON.stringify(edit);
+  const latestSnapshot = useRef(snapshot);
+  latestSnapshot.current = snapshot;
+  const saveDraft = save.mutateAsync;
+  useEffect(() => {
+    if (leaving.current) return;
+    setSaved(false);
+    try {
+      localStorage.setItem(recoveryKey, snapshot);
+    } catch {
+      setSaveError("Local recovery is unavailable. Keep this page open until cloud save succeeds.");
+    }
+    const timer = window.setTimeout(() => {
+      if (leaving.current) return;
+      void saveDraft(JSON.parse(snapshot) as PublishInput)
+        .then(() => {
+          if (latestSnapshot.current === snapshot) {
+            setSaveError(null);
+            setSaved(true);
+          }
+          try {
+            if (localStorage.getItem(recoveryKey) === snapshot)
+              localStorage.removeItem(recoveryKey);
+          } catch {
+            /* Cloud save succeeded. */
+          }
+        })
+        .catch((error: unknown) => {
+          setSaveError(errorMessage(error));
+          setSaved(false);
+        });
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [snapshot, recoveryKey, saveDraft]);
+
+  const validate = () => {
+    const error = draftStepError(step, {
+      title,
+      body,
+      visibility,
+      recording: recording.postId === draft.id && !["idle", "error"].includes(recording.state),
+      uploading: jobs.some(
+        (job) =>
+          isActive(job) &&
+          (job.postId === draft.id || (!!draft.session_id && job.sessionId === draft.session_id)),
+      ),
+    });
+    if (error) {
+      toast({ title: error, variant: "error" });
+      return false;
+    }
+    return true;
+  };
+  const advance = async () => {
+    if (!validate()) return;
+    try {
+      await saveDraft(edit);
+      setStep((s) => Math.min(4, s + 1));
+    } catch (error) {
+      setSaveError(errorMessage(error));
+    }
+  };
   const slides = usePreviewSlides({
     postId: draft.id,
     videoId: draft.video_id,
@@ -128,9 +232,16 @@ function DraftEditor({ draft }: { draft: Draft }) {
   });
 
   const doPublish = async () => {
-    if (busy) return;
+    if (busy || step !== 4 || !validate()) return;
     try {
+      leaving.current = true;
+      await saveDraft(edit);
       const { id, slug } = await publish.mutateAsync(edit);
+      try {
+        localStorage.removeItem(recoveryKey);
+      } catch {
+        /* Publication already succeeded. */
+      }
       const copied = await copyText(postWebUrl(slug));
       toast({
         title: copied ? "Published — link copied" : "Published",
@@ -139,6 +250,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
       });
       void navigate(`/posts/${id}`, { replace: true });
     } catch (err) {
+      leaving.current = false;
       toast({ title: "Couldn't publish", description: errorMessage(err), variant: "error" });
     }
   };
@@ -155,10 +267,18 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const doDelete = async () => {
     if (!(await confirmDelete())) return;
     try {
+      leaving.current = true;
+      await saveDraft(edit);
       await remove.mutateAsync(draft.id);
+      try {
+        localStorage.removeItem(recoveryKey);
+      } catch {
+        /* Deletion already succeeded. */
+      }
       toast({ title: "Draft deleted" });
       void navigate("/drafts", { replace: true });
     } catch (err) {
+      leaving.current = false;
       toast({ title: "Couldn't delete", description: errorMessage(err), variant: "error" });
     }
   };
@@ -167,7 +287,8 @@ function DraftEditor({ draft }: { draft: Draft }) {
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    void doPublish();
+    if (step === 4) void doPublish();
+    else void advance();
   };
 
   return (
@@ -206,10 +327,31 @@ function DraftEditor({ draft }: { draft: Draft }) {
         <span>{plural(problems.length, "problem")}</span>
       </header>
 
-      <form onSubmit={onSubmit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <nav aria-label="Draft steps" className="flex flex-wrap gap-2">
+        {steps.map((label, index) => (
+          <Button
+            key={label}
+            size="sm"
+            variant={step === index ? "primary" : "ghost"}
+            aria-current={step === index ? "step" : undefined}
+            disabled={index > step || busy}
+            onClick={() => setStep(index)}
+          >
+            {index + 1}. {label}
+          </Button>
+        ))}
+      </nav>
+      <p role="status" className={saveError ? "text-sm text-rose-400" : "text-xs text-zinc-500"}>
+        {saveError
+          ? `Cloud save failed: ${saveError}. Your changes are kept on this device; retry Save draft.`
+          : saved
+            ? "Saved to cloud"
+            : "Saving changes... Local recovery is enabled."}
+      </p>
+      <form onSubmit={onSubmit} className="space-y-5">
         <div className="space-y-4">
-          <Card className="space-y-4">
-            <div>
+          <Card className={step >= 2 ? "space-y-4" : "hidden"}>
+            <div hidden={step !== 2}>
               <Label htmlFor="draft-title">Title</Label>
               <Input
                 id="draft-title"
@@ -220,7 +362,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 placeholder="Give this session a title"
               />
             </div>
-            <div>
+            <div hidden={step !== 2}>
               <Label htmlFor="draft-body">Body</Label>
               <Textarea
                 id="draft-body"
@@ -231,7 +373,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 maxLength={5000}
               />
             </div>
-            <div>
+            <div hidden={step !== 3}>
               <Label htmlFor="draft-visibility">Visibility</Label>
               <Select
                 id="draft-visibility"
@@ -243,7 +385,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 <option value="private">Only me</option>
               </Select>
             </div>
-            {hasDemoVideo ? (
+            {hasDemoVideo && step === 3 ? (
               <Toggle
                 id="draft-show-summary-video"
                 checked={showDemoVideo}
@@ -252,7 +394,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 description="Adds the debrief clip to the carousel, ahead of the full recording."
               />
             ) : null}
-            {hasVideo ? (
+            {hasVideo && step === 3 ? (
               <Toggle
                 id="draft-show-video"
                 checked={showVideo}
@@ -261,6 +403,20 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 description="Adds the recording as the last slide of the post's carousel."
               />
             ) : null}
+            {step === 4 && (
+              <div className="space-y-2">
+                <SectionTitle>Review before publishing</SectionTitle>
+                <h2 className="text-lg font-semibold">{title}</h2>
+                <p className="whitespace-pre-wrap text-sm text-zinc-400">
+                  {body || "No description"}
+                </p>
+                <p className="text-sm">
+                  {visibility === "private" ? "Only you can see this post" : "Public post"} ·{" "}
+                  {problems.length} problems · {hasVideo ? "Video attached" : "No main video"} ·{" "}
+                  {hasDemoVideo ? "Summary attached" : "No summary"}
+                </p>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3 pt-1">
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={() => void doSave()} disabled={busy}>
@@ -275,20 +431,22 @@ function DraftEditor({ draft }: { draft: Draft }) {
                   Preview
                 </Button>
               </div>
-              <Button
-                type="submit"
-                variant="primary"
-                icon={<Send className="size-4" aria-hidden />}
-                loading={publish.isPending}
-                disabled={busy}
-                title="⌘/Ctrl + Enter"
-              >
-                Publish
-              </Button>
+              {step === 4 && (
+                <Button
+                  type="submit"
+                  variant="primary"
+                  icon={<Send className="size-4" aria-hidden />}
+                  loading={publish.isPending}
+                  disabled={busy}
+                  title="⌘/Ctrl + Enter"
+                >
+                  Publish
+                </Button>
+              )}
             </div>
           </Card>
 
-          <section className="space-y-3">
+          <section className={step === 0 ? "space-y-3" : "hidden"}>
             <SectionTitle>Problems</SectionTitle>
             {problems.length === 0 ? (
               <p className="text-sm text-zinc-500">No problems were captured in this session.</p>
@@ -299,16 +457,28 @@ function DraftEditor({ draft }: { draft: Draft }) {
         </div>
 
         <aside className="space-y-4">
-          <DemoVideoPanel draft={draft} />
-          <PostExtrasPanel draft={draft} />
-          <PostMediaPanel
-            postId={draft.id}
-            userId={userId}
-            coverMediaId={coverMediaId}
-            onCoverChange={setCoverMediaId}
-            disabled={busy}
-          />
+          {step === 1 && <DemoVideoPanel draft={draft} />}
+          {step === 3 && <PostExtrasPanel draft={draft} />}
+          {step === 1 && (
+            <PostMediaPanel
+              postId={draft.id}
+              userId={userId}
+              coverMediaId={coverMediaId}
+              onCoverChange={setCoverMediaId}
+              disabled={busy}
+            />
+          )}
         </aside>
+        <div className="flex justify-between gap-3">
+          <Button disabled={step === 0 || busy} onClick={() => setStep((s) => s - 1)}>
+            Back
+          </Button>
+          {step < 4 && (
+            <Button type="submit" variant="primary" disabled={busy}>
+              Save & continue
+            </Button>
+          )}
+        </div>
       </form>
 
       {previewing && (

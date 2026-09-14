@@ -72,6 +72,9 @@ function SessionItem({ session }: { session: SessionRow }) {
       </Link>
       <div className="hidden sm:block">
         <KindBadge kind={session.kind} />
+        {session.kind === "interview" && (
+          <p className="mt-1 text-xs text-zinc-500">{session.graded ? "Graded" : "Video only"}</p>
+        )}
       </div>
       <p
         className="hidden whitespace-nowrap font-mono text-xs tabular-nums text-zinc-500 sm:block"

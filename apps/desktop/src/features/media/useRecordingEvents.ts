@@ -19,6 +19,7 @@ export function useRecordingEvents(): void {
   const { toast } = useToast();
 
   useTauriEvent("recording:completed", (recording) => {
+    void queryClient.invalidateQueries({ queryKey: ["recorder", "recordings"] });
     if (recording.purpose === "interview") {
       toast({
         title: "Mock interview recorded",
@@ -35,7 +36,7 @@ export function useRecordingEvents(): void {
         .catch((e: unknown) => {
           toast({
             title: "Interview processing failed",
-            description: `${errorMessage(e)} — retry from Recordings.`,
+            description: `${errorMessage(e)}. The local source has been kept.`,
             variant: "error",
           });
         });
@@ -66,14 +67,14 @@ export function useRecordingEvents(): void {
         .catch((e: unknown) => {
           toast({
             title: "Upload failed",
-            description: `${errorMessage(e)} — retry from Recordings.`,
+            description: `${errorMessage(e)}. Retry from the draft's Media step.`,
             variant: "error",
           });
         });
       return;
     }
     // Studio: hand over to the editor.
-    void navigate(`/studio/${recording.recordingId}`);
+    void navigate(`/studio/local/${recording.recordingId}`);
   });
 
   useTauriEvent("recording:state", (state) => {

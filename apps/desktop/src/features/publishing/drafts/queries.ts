@@ -3,7 +3,7 @@ import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useUser } from "@/features/auth/AuthProvider";
-import { postMediaKey, requestOgSnapshot } from "@/features/posts/media";
+import { postMediaKey, requestOgSnapshot } from "@/features/publishing/posts/media";
 import { supabase } from "@/lib/supabase";
 
 /** Post + the whole session it summarises (problems and their submissions). */
@@ -243,8 +243,15 @@ export function usePublishDraft() {
 export function useSaveDraft() {
   const queryClient = useQueryClient();
   return useMutation({
+    scope: { id: "desktop-draft-save" },
     mutationFn: async (edit: PublishInput) => {
-      const { error } = await supabase.from("posts").update(postPatch(edit)).eq("id", edit.id);
+      const { error } = await supabase
+        .from("posts")
+        .update(postPatch(edit))
+        .eq("id", edit.id)
+        .eq("status", "draft")
+        .select("id")
+        .single();
       if (error) throw error;
     },
     onSuccess: (_data, vars) => {
