@@ -385,37 +385,10 @@ async function startInterview(
   startAbort = new AbortController();
   const signal = startAbort.signal;
 
-  const now = Date.now();
   const sessionId = crypto.randomUUID();
-  const tp: TrackedProblem | null = req.problem
-    ? {
-        sessionProblemId: crypto.randomUUID(),
-        problem: req.problem,
-        openedAt: now,
-        closedAt: null,
-        editCount: 0,
-        submissions: [],
-        synced: false,
-      }
-    : null;
-
-  const session: ActiveSession = {
-    sessionId,
-    kind: "interview",
-    scope: "problem",
-    startedAt: now,
-    events: tp
-      ? [
-          { t: now, type: "start" },
-          { t: now, type: "problem_open", slug: tp.problem.slug },
-        ]
-      : [{ t: now, type: "start" }],
-    problems: tp ? [tp] : [],
-    currentSlug: tp?.problem.slug ?? null,
-    tabId: req.tabId,
-    facecam: req.facecam,
-    synced: false,
-  };
+  const problem = req.problem;
+  // Built once the screen is shared: time spent in Chrome's share dialog is not interview time.
+  let session: ActiveSession | null = null;
 
   await setRecording("starting");
   try {
@@ -429,11 +402,37 @@ async function startInterview(
     await captureCommand("pick");
     await compactCaptureWindow();
     if (signal.aborted) throw new Error("Start cancelled");
-    await syncSessionStart(session, userId, req.graded);
-    if (tp) await syncProblemOpen(sessionId, tp, req.question);
-    session.synced = true;
-    if (tp) tp.synced = true;
-    await withState(async (s) => ({ state: { ...s, interview: session }, result: undefined }));
+    const now = Date.now();
+    const tp: TrackedProblem = {
+      sessionProblemId: crypto.randomUUID(),
+      problem,
+      openedAt: now,
+      closedAt: null,
+      editCount: 0,
+      submissions: [],
+      synced: false,
+    };
+    const started: ActiveSession = {
+      sessionId,
+      kind: "interview",
+      scope: "problem",
+      startedAt: now,
+      events: [
+        { t: now, type: "start" },
+        { t: now, type: "problem_open", slug: problem.slug },
+      ],
+      problems: [tp],
+      currentSlug: problem.slug,
+      tabId: req.tabId,
+      facecam: req.facecam,
+      synced: false,
+    };
+    session = started;
+    await syncSessionStart(started, userId, req.graded);
+    await syncProblemOpen(sessionId, tp, req.question);
+    started.synced = true;
+    tp.synced = true;
+    await withState(async (s) => ({ state: { ...s, interview: started }, result: undefined }));
     if (signal.aborted) throw new Error("Start cancelled");
     await chrome.storage.local.set({
       [CAPTURE_KEY]: { sessionId, tabId: req.tabId, graded: req.graded, state: "starting" },
@@ -478,7 +477,7 @@ async function startInterview(
       result: undefined,
     }));
     // Only a start that got as far as creating the row has one to close.
-    if (session.synced)
+    if (session?.synced)
       await getSupabase()
         .from("sessions")
         .update({ status: "ended", ended_at: new Date().toISOString(), graded: false })
