@@ -113,6 +113,8 @@ PY
   done
   # cap-editor declares sentry but never uses it; drop the heavy dependency.
   sed -i.bak '/^sentry/d' "$DEST/editor/Cargo.toml" && rm -f "$DEST/editor/Cargo.toml.bak"
+  # 26 MB model nothing loads; only selfie_segmentation.onnx is include_bytes!'d.
+  rm -f "$DEST/camera-effects/assets/modnet.onnx"
 }
 apply_local_changes
 
@@ -125,6 +127,7 @@ Re-sync with \`scripts/sync-cap.sh <ref>\`; the edits below are re-applied autom
 - \`workspace-hack\` replaced by a slim feature-unification crate (no axum/clap/schemars/tauri-utils/reqwest fork).
 - Upstream \`examples/\`, \`tests/\`, \`benches/\` directories and their manifest tables removed.
 - \`editor/Cargo.toml\`: unused \`sentry\` dependency removed.
+- \`camera-effects/assets/modnet.onnx\` removed (26 MB, never loaded).
 - \`vendor/wgpu-hal\` copied verbatim (patched via root \`[patch.crates-io]\`).
 - \`vendor/cidre\` (Cap fork @ $CIDRE_REV) with \`build.rs\` replaced by \`scripts/patches/cidre-build.rs\`:
   the pomace Objective-C shims are compiled with the \`cc\` crate (\`-fobjc-arc -fmodules -fno-common\`)

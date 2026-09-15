@@ -9,7 +9,7 @@ has been through the full CI matrix. `dev` is the shared integration branch.
 feature work ──▶ dev ──(PR)──▶ main ──(tag)──▶ release
                  │  │           │
                  │  └─(dev tag)─┴──▶ dev release (prerelease, QA only)
-            fast CI (~3 min)   full CI (~40 min)
+            fast CI (~3 min)   full CI (~10 min)
 ```
 
 - Push to `dev` freely. `ci-dev.yml` runs biome, `tsc`, the `@lare/shared` unit tests and
@@ -17,38 +17,52 @@ feature work ──▶ dev ──(PR)──▶ main ──(tag)──▶ release
 - `git pull` from `dev` to QA each other's work locally before it is a release candidate.
 - When `dev` is good, open a PR to `main`. `ci.yml` runs everything: the Rust matrix on
   macOS and Windows, the Playwright extension e2e, and production builds of the web app
-  and the extension. This is the ~40 minute gate, and it is paid once per release rather
+  and the extension. This is the ~10 minute (warm) gate, and it is paid once per release rather
   than once per commit.
 - Never push straight to `main`. The full matrix is the only thing standing between a
   commit and a signed build on someone's machine.
 
+## QA without a release
+
+Most fixes do not need a CI build at all. Where the wait actually goes (v0.4.4 release run):
+Intel Mac 34 min, Windows 27 min, Apple Silicon 17 min, extension under 1 min. The `dev ->
+main` PR CI is about 9 minutes warm.
+
+- **`pnpm bundle`** builds this checkout into `out/`: `out/extension` (exactly what the release
+  zip contains; load it unpacked, after removing the dev build, which shares its id) and the
+  desktop app (`out/Lare.app` or `out/Lare/Lare.exe`). No release needed.
+- On the Mac that is a real hardened-runtime `.app`, so TCC prompts, System Settings entries
+  and relaunch behaviour are the real thing, and incremental rebuilds take minutes, not the 17 a
+  cold CI runner needs. Set `APPLE_SIGNING_IDENTITY` to the certificate from
+  [Signing keys](#signing-keys) (or name a keychain certificate "Lare Development") or every
+  rebuild asks for permissions again. `--release` builds optimised.
+- **Fresh-download install, updater, the other OS.** Only these need a dev release.
+
 ## Dev releases
 
-A dev release is a QA build cut straight from `dev`. It exists for the two things that
-cannot be tested from a local `pnpm dev`: installing the desktop app from a fresh
-download, and loading the packaged Chrome extension. It is **not** a shipping path — no
-PR to `main`, no full CI matrix, nothing marked latest.
+A dev release is a QA build cut straight from `dev`, for installing the desktop app from a
+fresh download on a machine you do not build on. It is **not** a shipping path — no PR to
+`main`, no full CI matrix, nothing marked latest.
 
 ```
-git tag dev-v0.4.4-1 && git push origin dev-v0.4.4-1
+git tag dev-v0.4.4-1-mac && git push origin dev-v0.4.4-1-mac
 ```
 
-Tag `dev-vX.Y.Z-N` on a `dev` commit: `X.Y.Z` is the current app version, `N` counts the
-QA builds cut against it. `dev-release.yml` then builds the same three installers and the
-extension zip that `release.yml` does, and publishes them as a GitHub **pre-release**.
+Tag `dev-vX.Y.Z-N[-targets]` on a `dev` commit: `X.Y.Z` is the current app version, `N`
+counts the QA builds cut against it, and the targets say what to build — any of `mac`
+(Apple Silicon), `intel`, `win` and `ext` joined by `-`, or `all`. No targets means
+`mac-win-ext`. Name only what the fix touches: `-mac` is roughly 15 minutes, `-ext` about one.
 
 What it deliberately skips:
 
 - **The `dev -> main` PR gate.** No Rust matrix beyond the build itself, no Playwright
   e2e, no lint or unit tests. Those protect `main`; a QA build does not need them.
-- **`latest.json`.** The dev release carries only the four downloads. Installed apps poll
+- **LTO.** Release profile overrides turn it off and raise codegen units. The app behaves
+  the same; it is just larger and marginally slower.
+- **The Intel Mac**, unless asked for. It is by far the slowest runner.
+- **`latest.json`.** The dev release carries only the downloads. Installed apps poll
   `releases/latest/download/latest.json`, and GitHub never resolves `latest` to a
   pre-release, so a dev build cannot reach anyone who did not download it by hand.
-
-The build itself is not free: compiling three Rust targets takes roughly 30–40 minutes
-wall clock (they run in parallel), the same as a real release. The extension zip lands in
-a couple of minutes. Nothing about the fast path makes the compiler faster — what is
-saved is the ~40 minute gate, not the build.
 
 Because the app version stays `X.Y.Z`, a machine that installed `dev-v0.4.4-3` reports the
 same version as the eventual `v0.4.4` and will not self-update onto it. QA machines
@@ -135,11 +149,34 @@ half is the `TAURI_SIGNING_PRIVATE_KEY` repository secret, with its password in
 stops accepting updates** — there is no recovery other than getting users to reinstall by
 hand. Keep an offline backup.
 
-Apple notarisation is optional and off. To turn it on, add `APPLE_CERTIFICATE`,
-`APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` and
-`APPLE_TEAM_ID` as secrets and reference them in the `desktop` job. Do not reference them
-while they are unset: an empty `APPLE_CERTIFICATE` makes the bundler fail at
-`security import`.
+### macOS code signing (why permissions reset on update)
+
+macOS stores camera, microphone and screen-recording grants against the app's code
+signature. Without a signing identity every build is ad-hoc signed with a different
+signature, so **every update revokes all three**. Both release workflows sign with a stable
+identity as soon as these secrets exist, and warn when they do not:
+
+- `APPLE_CERTIFICATE` — base64 of a `.p12` holding a code-signing certificate and its key
+- `APPLE_CERTIFICATE_PASSWORD` — the `.p12` password
+- `APPLE_SIGNING_IDENTITY` — the certificate's common name
+
+An Apple **Developer ID Application** certificate is the proper answer (it also enables
+notarisation, which additionally needs `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`).
+Until there is one, a self-signed certificate keeps permissions across updates — the grant
+follows the certificate, not the build — though Gatekeeper still needs right-click > Open:
+
+```sh
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=Lare Signing" \
+  -addext "extendedKeyUsage=codeSigning" -addext "keyUsage=digitalSignature" \
+  -keyout lare.key -out lare.crt
+openssl pkcs12 -export -legacy -inkey lare.key -in lare.crt -out lare.p12 -passout pass:CHOOSE
+base64 -i lare.p12 | pbcopy   # APPLE_CERTIFICATE; APPLE_SIGNING_IDENTITY is "Lare Signing"
+```
+
+Keep the `.p12` with the updater key backup: a new certificate is a new signature, and
+every Mac asks for permissions once more. Verify with a `-mac` dev release before relying
+on it: install, grant, install the next dev release over it, and check nothing is asked
+again.
 
 ## When a release goes wrong
 

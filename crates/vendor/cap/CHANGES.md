@@ -6,6 +6,7 @@ Re-sync with `scripts/sync-cap.sh <ref>`; the edits below are re-applied automat
 - `workspace-hack` replaced by a slim feature-unification crate (no axum/clap/schemars/tauri-utils/reqwest fork).
 - Upstream `examples/`, `tests/`, `benches/` directories and their manifest tables removed.
 - `editor/Cargo.toml`: unused `sentry` dependency removed.
+- `camera-effects/assets/modnet.onnx` removed (26 MB, never loaded).
 - `vendor/wgpu-hal` copied verbatim (patched via root `[patch.crates-io]`).
 - `vendor/cidre` (Cap fork @ bf84b67079a8) with `build.rs` replaced by `scripts/patches/cidre-build.rs`:
   the pomace Objective-C shims are compiled with the `cc` crate (`-fobjc-arc -fmodules -fno-common`)

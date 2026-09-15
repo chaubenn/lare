@@ -49,6 +49,8 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
     graded: z.boolean(),
     tabId: z.number().nullable().default(null),
   }),
+  /** Load the content scripts into a LeetCode tab that has none (opened before an update). */
+  z.object({ type: z.literal("INJECT_PAGE"), tabId: z.number() }),
   z.object({ type: z.literal("PAUSE_SESSION") }),
   z.object({ type: z.literal("RESUME_SESSION") }),
   z.object({ type: z.literal("END_SESSION") }),
@@ -77,12 +79,9 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("CANCEL_START") }),
   z.object({ type: z.literal("RETRY_SYNC") }),
   z.object({ type: z.literal("DISCARD_RECORDING") }),
-  z.object({
-    type: z.literal("CREATE_VIDEO_DRAFT"),
-    videoId: z.string().uuid(),
-    title: z.string().min(1).max(200),
-  }),
   z.object({ type: z.literal("PUBLISH_PROBLEMS"), ids: z.array(z.string().uuid()).min(1) }),
+  /** Remove tracked problems from the inbox without posting them (all of them when omitted). */
+  z.object({ type: z.literal("CLEAR_TRACKED"), ids: z.array(z.string().uuid()).optional() }),
 ]);
 export type RuntimeRequest = z.infer<typeof RuntimeRequestSchema>;
 
@@ -96,6 +95,10 @@ export interface RuntimeSnapshot {
   state: z.infer<typeof ExtensionStateSchema>;
   auth: AuthInfo;
   appConnected: boolean;
+  /** Why a graded interview cannot start right now; null when it can. */
+  gradingBlocker: string | null;
+  /** The service worker's build; null from a worker older than this field. */
+  buildId: string | null;
   recording: RecordingInfo | null;
 }
 
@@ -105,6 +108,8 @@ export function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | nul
     state: res.state,
     auth: res.auth ?? null,
     appConnected: res.appConnected ?? false,
+    gradingBlocker: res.gradingBlocker ?? null,
+    buildId: res.buildId ?? null,
     recording: res.recording ?? null,
     capture: res.capture ?? null,
   };

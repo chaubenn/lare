@@ -7,12 +7,20 @@ name: Dev release
 # extension. It is not a shipping path — the release is published as a **prerelease**, so
 # `releases/latest` never resolves to it and no installed app can self-update onto it.
 #
-# Trigger: push a tag `dev-vX.Y.Z-N` (e.g. `dev-v0.4.4-1`). The `v*` pattern in
-# release.yml does not match `dev-v*`, so the real release workflow stays out of it, and
-# ci-dev.yml only runs on branch pushes — tagging costs nothing but the build itself.
+# Trigger: push a tag `dev-vX.Y.Z-N[-targets]`. The `v*` pattern in release.yml does not
+# match `dev-v*`, and ci-dev.yml only runs on branch pushes.
 #
-# Unlike release.yml this skips the version/tag agreement check (a dev tag deliberately
-# carries a `-N` suffix the app version does not) and writes no `latest.json`.
+# Build only what the fix touches — a full desktop build is most of the wait:
+#
+#   dev-v0.4.4-1            Apple Silicon + Windows + extension (the default)
+#   dev-v0.4.4-2-mac        Apple Silicon only (~15 min)
+#   dev-v0.4.4-3-win        Windows only
+#   dev-v0.4.4-4-ext        extension only (~1 min)
+#   dev-v0.4.4-5-mac-ext    any combination of mac, intel, win, ext
+#   dev-v0.4.4-6-all        everything, Intel Mac included (the slowest runner by far)
+#
+# Unlike release.yml this skips the version/tag agreement check, writes no `latest.json`,
+# and compiles without LTO: a QA build needs to behave like the release, not be as small.
 on:
   push:
     tags: ["dev-v*"]
@@ -23,6 +31,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # Thin LTO with a single codegen unit is most of a release compile. Not worth it for QA.
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
   # Same public client configuration as release.yml: a dev release is a build of `dev`,
   # not a separate backend. QA runs against the real Supabase project and site.
   VITE_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
@@ -38,8 +49,34 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.release_id }}
       tag: ${{ github.ref_name }}
+      matrix: ${{ steps.targets.outputs.matrix }}
+      extension: ${{ steps.targets.outputs.extension }}
+      assets: ${{ steps.targets.outputs.assets }}
     steps:
       - uses: actions/checkout@v4
+      - name: Pick targets from the tag
+        id: targets
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Everything after `dev-vX.Y.Z-N` names the targets; nothing means the default set.
+          suffix=$(echo "$TAG" | sed -E 's/^dev-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-?//')
+          [ -n "$suffix" ] || suffix="mac-win-ext"
+          [ "$suffix" = "all" ] && suffix="mac-intel-win-ext"
+          has() { echo "-$suffix-" | grep -q -- "-$1-"; }
+          for word in $(echo "$suffix" | tr '-' ' '); do
+            case "$word" in mac|intel|win|ext) ;; *) echo "::error::unknown target '$word' in $TAG"; exit 1 ;; esac
+          done
+          include="[]"
+          assets=""
+          add() { include=$(echo "$include" | jq -c --argjson row "$1" '. + [$row]'); assets="$assets $2"; }
+          has mac && add '{"name":"macOS arm64","os":"macos-14","target":"aarch64-apple-darwin","asset":"Lare-macOS-AppleSilicon.dmg","glob":"target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"}' Lare-macOS-AppleSilicon.dmg
+          has intel && add '{"name":"macOS x64","os":"macos-15-intel","target":"x86_64-apple-darwin","asset":"Lare-macOS-Intel.dmg","glob":"target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"}' Lare-macOS-Intel.dmg
+          has win && add '{"name":"Windows x64","os":"windows-2022","target":"x86_64-pc-windows-msvc","asset":"Lare-Windows-x64-Setup.exe","glob":"target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"}' Lare-Windows-x64-Setup.exe
+          if has ext; then echo "extension=true" >> "$GITHUB_OUTPUT"; assets="$assets Lare-Chrome-Extension.zip"; else echo "extension=false" >> "$GITHUB_OUTPUT"; fi
+          echo "matrix={\"include\":$include}" >> "$GITHUB_OUTPUT"
+          echo "assets=${assets# }" >> "$GITHUB_OUTPUT"
+          echo "Building:${assets}"
       - name: Create draft release
         id: create
         env:
@@ -59,6 +96,8 @@ jobs:
           | macOS (Intel) | `Lare-macOS-Intel.dmg` |
           | Windows 10/11 (x64) | `Lare-Windows-x64-Setup.exe` |
           | Chrome extension | `Lare-Chrome-Extension.zip` |
+
+          Only the targets named in the tag are attached.
 
           Builds are not notarised. macOS: right-click the app > Open the first time (or
           `xattr -dr com.apple.quarantine /Applications/Lare.app`). Windows: choose "More info"
@@ -82,27 +121,12 @@ jobs:
   desktop:
     name: Desktop (${{ matrix.name }})
     needs: create-release
+    if: needs.create-release.outputs.matrix != '{"include":[]}'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: macOS arm64
-            os: macos-14
-            target: aarch64-apple-darwin
-            asset: Lare-macOS-AppleSilicon.dmg
-            glob: "target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"
-          - name: macOS x64
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-            asset: Lare-macOS-Intel.dmg
-            glob: "target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"
-          - name: Windows x64
-            os: windows-2022
-            target: x86_64-pc-windows-msvc
-            asset: Lare-Windows-x64-Setup.exe
-            glob: "target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"
+      matrix: ${{ fromJSON(needs.create-release.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -116,9 +140,8 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          # Shares the release workflow's cache key: dev builds and release builds compile
-          # the same dependency graph, so the first dev release after a release is warm.
-          key: release-${{ matrix.target }}
+          # Not the release key: the profile overrides above produce different artifacts.
+          key: dev-release-${{ matrix.target }}
       - run: pnpm install --frozen-lockfile
       - name: cmake (macOS)
         if: runner.os == 'macOS'
@@ -127,6 +150,24 @@ jobs:
         env:
           RUST_TARGET_TRIPLE: ${{ matrix.target }}
         run: node scripts/setup-native-deps.mjs
+      - name: Stable macOS signing identity (when configured)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        # Same as release.yml: without it every QA build resets macOS permissions.
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::APPLE_CERTIFICATE unset: macOS permissions reset on every install"
+            exit 0
+          fi
+          {
+            echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+            echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+          } >> "$GITHUB_ENV"
       - name: Build installers
         uses: tauri-apps/tauri-action@v0
         env:
@@ -157,6 +198,7 @@ jobs:
   extension:
     name: Chrome extension
     needs: create-release
+    if: needs.create-release.outputs.extension == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -186,6 +228,8 @@ jobs:
   publish:
     name: Publish prerelease
     needs: [create-release, desktop, extension]
+    # Either build job may be skipped by the tag; publish unless something actually failed.
+    if: ${{ !cancelled() && needs.create-release.result == 'success' && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -193,15 +237,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.create-release.outputs.tag }}
+          REQUIRED: ${{ needs.create-release.outputs.assets }}
         run: |
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | tee assets.txt
-          for required in Lare-macOS-AppleSilicon.dmg Lare-macOS-Intel.dmg Lare-Windows-x64-Setup.exe Lare-Chrome-Extension.zip; do
+          for required in $REQUIRED; do
             grep -qx "$required" assets.txt || { echo "::error::missing asset $required"; exit 1; }
           done
           # --prerelease, and never --latest: this is what keeps the in-app updater, which
           # reads releases/latest/download/latest.json, from ever seeing a dev build.
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
-      - name: Trim to the four QA downloads
+      - name: Trim to the QA downloads
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.create-release.outputs.tag }}

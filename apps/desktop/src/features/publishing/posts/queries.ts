@@ -56,6 +56,23 @@ export interface PostEdit {
 }
 
 /** Edit an already published post. RLS restricts the update to its owner. */
+/** Removes the post only; the session it came from stays in the account. */
+export function useDeletePost() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("posts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: postKey(id) });
+      for (const key of ["feed", "user-posts", "profile-stats", "sessions", "drafts"]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+}
+
 export function useUpdatePost() {
   const queryClient = useQueryClient();
   return useMutation({

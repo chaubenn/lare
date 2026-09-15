@@ -90,12 +90,3 @@ export async function patchRecordingMeta(
   }
   return next;
 }
-
-export async function forgetRecording(recordingId: string): Promise<void> {
-  try {
-    const s = await store();
-    await s.delete(recordingId);
-  } catch {
-    // ignore
-  }
-}

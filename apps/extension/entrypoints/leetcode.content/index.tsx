@@ -3,7 +3,9 @@ import { PageController } from "@/src/pageController";
 import { RecordingDot } from "./RecordingDot";
 import "./recording.css";
 
-const MATCHES = ["https://leetcode.com/problems/*", "https://leetcode.com/contest/*/problems/*"];
+// All of leetcode.com, not just problem URLs: LeetCode navigates in-page, so a script that only
+// loads on /problems/* never arrives when a problem is opened from the list or the home page.
+const MATCHES = ["https://leetcode.com/*"];
 const fixtureOrigin = import.meta.env.WXT_DEV_FIXTURE_ORIGIN;
 if (import.meta.env.MODE !== "production" && fixtureOrigin) MATCHES.push(`${fixtureOrigin}/*`);
 

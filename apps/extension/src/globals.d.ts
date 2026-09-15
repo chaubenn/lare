@@ -1,4 +1,5 @@
 declare const __EXT_VERSION__: string;
+declare const __BUILD_ID__: string;
 
 interface ImportMetaEnv {
   readonly WXT_SUPABASE_URL: string;

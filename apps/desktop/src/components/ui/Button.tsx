@@ -1,1 +1,1 @@
-export { Button, type ButtonProps } from "@lare/ui/primitives";
+export { Button, type ButtonProps, buttonClass } from "@lare/ui/primitives";

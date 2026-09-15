@@ -81,6 +81,16 @@ pnpm dev:extension    # wxt, then load apps/extension/.output as unpacked
 pnpm dev:desktop      # Tauri
 ```
 
+To try this checkout like an installed build, build both into `out/`:
+
+```bash
+pnpm bundle           # out/Lare.app (macOS) or out/Lare/Lare.exe (Windows), plus out/extension
+pnpm bundle --open    # ...and launch the app
+pnpm bundle ext       # just the extension; `app` for just the app, --release for an optimised build
+```
+
+Load `out/extension` at `chrome://extensions` (Developer mode → Load unpacked).
+
 ```bash
 pnpm lint             # biome
 pnpm typecheck

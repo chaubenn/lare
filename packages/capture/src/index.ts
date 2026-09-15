@@ -21,6 +21,8 @@ export interface CaptureOptions {
     durationMs: number;
   }) => Promise<void>;
   mimeType?: string;
+  /** Video bitrate for MediaRecorder. Its default suits a webcam, not screen text. */
+  videoBitsPerSecond?: number;
   timesliceMs?: number;
   /** Limits pending disk writes and memory fallback. Exceeding this stops capture, never drops silently. */
   maxMemoryBytes?: number;
@@ -63,7 +65,10 @@ export async function startCapture(options: CaptureOptions): Promise<CaptureSess
     throw new Error("Capture timeslice and memory limit must be positive integers");
   }
   const mimeType = options.mimeType ?? preferredMimeType();
-  const recorder = new MediaRecorder(options.stream, { mimeType });
+  const recorder = new MediaRecorder(options.stream, {
+    mimeType,
+    ...(options.videoBitsPerSecond ? { videoBitsPerSecond: options.videoBitsPerSecond } : {}),
+  });
   const credentials = await options.createUpload({ mimeType });
   credentials.tus.metadata.filetype = mimeType;
   const tus = await DeferredTusUpload.create(credentials.tus);

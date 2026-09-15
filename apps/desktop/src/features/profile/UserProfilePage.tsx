@@ -13,6 +13,7 @@ import {
   useProfileStats,
   usePublicProfile,
   useSolvedActivity,
+  useSolvedSkills,
   useUserPosts,
 } from "./queries";
 
@@ -26,6 +27,7 @@ export function UserProfilePage() {
 
   const stats = useProfileStats(handle);
   const activity = useSolvedActivity(handle);
+  const skills = useSolvedSkills(handle);
   const followState = useFollowState(profile?.id);
   const posts = useUserPosts(profile?.id);
   const postList = posts.data ?? [];
@@ -48,14 +50,12 @@ export function UserProfilePage() {
     );
   }
 
-  const name = profile.display_name ?? `@${profile.handle}`;
+  const name = profile.display_name ?? profile.handle;
   // `profile_stats` is the authority on visibility; it applies the same rule as RLS.
   const visible = stats.data?.visible ?? isSelf;
 
   return (
     <ProfileView
-      title={name}
-      subtitle={`@${profile.handle}`}
       name={name}
       handle={profile.handle}
       avatarUrl={profile.avatar_url}
@@ -84,6 +84,7 @@ export function UserProfilePage() {
       stats={stats.data}
       showExtendedStats={visible}
       activity={activity.data}
+      skills={skills.data}
       posts={postList}
       postsPending={posts.isPending}
       postsError={posts.isError ? posts.error : undefined}

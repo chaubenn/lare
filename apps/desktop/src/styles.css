@@ -1,4 +1,3 @@
-/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
 @import "tailwindcss";
 @import "@lare/ui/tokens.css";
 @import "@lare/ui/tailwind-bridge.css";
@@ -10,7 +9,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  /* @fontsource-variable/outfit registers "Outfit Variable"; plain "Outfit" never matched. */
+  --font-sans: "Outfit Variable", "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -22,6 +22,14 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/* On <html>, `overflow: clip` reaches the viewport as `hidden`, which scripts and focus can still
+   scroll. Clipping and positioning #root instead gives stray absolutes a containing block that
+   genuinely cannot scroll, so the shell never slides out of the window. */
+#root {
+  position: relative;
+  overflow: clip;
 }
 
 html,

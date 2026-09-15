@@ -40,6 +40,25 @@ supabase/.branches/
 # vercel
 .vercel/
 
+# AI / agent tooling: kept on each machine, never in the repo
+.ai/
+.agents/
+.claude/
+.cursor/
+.hallmark/
+.superpowers/
+.context/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+design.md
+skills-lock.json
+docs/plans/
+docs/superpowers/
+
+# local helper scripts
+/*.bat
+
 # misc
 .DS_Store
 *.log

@@ -95,6 +95,8 @@ async function openPanel() {
   const panel = await context.newPage();
   await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
   await expect(panel.getByText("Tracking submissions")).toBeVisible();
+  // Worker and panel come from the same build, so no stale-worker banner.
+  await expect(panel.getByRole("button", { name: "Reload Lare" })).toHaveCount(0);
   return panel;
 }
 
@@ -215,7 +217,11 @@ test("the side panel lists tracked problems without a hand-off button, and keeps
   // Nothing local or server-side got cleared just by looking at the side panel.
   const sb = (await recorded()).filter((r) => r.path.startsWith("/supabase/"));
   expect(sb.filter((r) => r.method === "DELETE")).toHaveLength(0);
-  expect(sb.filter((r) => r.path.startsWith("/supabase/rest/v1/session_problems"))).toHaveLength(1);
+  expect(
+    sb.filter(
+      (r) => r.method === "POST" && r.path.startsWith("/supabase/rest/v1/session_problems"),
+    ),
+  ).toHaveLength(1);
 
   // A second problem accumulates alongside the first, not on top of it. (The fixture
   // page always reports "Two Sum" regardless of slug, so two rows is the signal.)
@@ -239,12 +245,20 @@ test("grading is explicit: cloud-only interview is available without desktop", a
 
   // The side panel is the only control surface now.
   await expect(panel.getByText("Tracking submissions")).toBeVisible();
+  // Mock interviews live on their own tab, away from tracking.
+  await expect(panel.getByRole("button", { name: /Start mock interview/ })).toHaveCount(0);
+  await panel.getByRole("tab", { name: "Mock interview" }).click();
+  // Without a desktop app the panel starts ungraded instead of on a dead, disabled button.
   const start = panel.getByRole("button", { name: /Start mock interview/ });
-  await expect(start).toBeDisabled();
-  await expect(panel.getByText(/Requires a compatible desktop app/)).toBeVisible();
-  await panel.getByRole("checkbox", { name: "Transcript & AI review" }).uncheck();
+  const gradedBox = panel.getByRole("checkbox", { name: "Transcript & AI review" });
+  await expect(gradedBox).not.toBeChecked();
   await expect(start).toBeEnabled();
   await expect(panel.getByText(/Disables both transcript and AI review/)).toBeVisible();
+
+  // Asking for grading says exactly what is missing.
+  await gradedBox.check();
+  await expect(start).toBeDisabled();
+  await expect(panel.getByText(/desktop app isn't running/)).toBeVisible();
 
   await panel.close();
   await problem.close();
@@ -267,7 +281,240 @@ test("publish selected cloud inbox problems opens a draft without desktop", asyn
   await problem.close();
 });
 
-test("offscreen code records real media chunks, uploads during recording and finalizes", async () => {
+const badgeText = () => sw.evaluate(() => chrome.action.getBadgeText({}));
+
+test("clear all removes tracked problems from the panel, the badge and the inbox", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  const problem = await openProblem();
+  await submitOnce(problem);
+  await expect.poll(badgeText).toBe("1");
+
+  const panel = await openPanel();
+  await expect(panel.getByText("Two Sum")).toBeVisible();
+  await panel.getByRole("button", { name: "Clear all" }).click();
+  await panel.getByRole("button", { name: "Confirm clear" }).click();
+  await expect(panel.getByText(/Nothing tracked yet/)).toBeVisible();
+  await expect.poll(badgeText).toBe("");
+
+  const deletes = (await recorded()).filter(
+    (r) => r.method === "DELETE" && r.path.startsWith("/supabase/rest/v1/session_problems"),
+  );
+  expect(deletes).toHaveLength(1);
+  expect(deletes[0]?.path).toContain(`session_id=eq.${INBOX_SESSION_ID}`);
+
+  await panel.close();
+  await problem.close();
+});
+
+test("problems posted from another client drop off the panel and the badge", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  const problem = await openProblem();
+  await submitOnce(problem);
+  await expect.poll(badgeText).toBe("1");
+
+  // The desktop app publishes (or clears) them: they leave the server inbox.
+  await fetch(`${BASE}/__inbox/empty`);
+  const panel = await openPanel();
+  await expect(panel.getByText(/Nothing tracked yet/)).toBeVisible();
+  await expect.poll(badgeText).toBe("");
+
+  await panel.close();
+  await problem.close();
+});
+
+/**
+ * Choose what Chrome's share dialog "returns" in the recorder window. Headless Chromium has no
+ * screen to share; e2e builds read this switch instead of opening the dialog. Everything behind
+ * it (window, background flow, capture, upload) is the real code.
+ */
+async function setShareDialog(mode: "cancel" | "screen"): Promise<void> {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/permissions.html?camera=0`);
+  await page.evaluate((m) => localStorage.setItem("lare:e2e-share", m), mode);
+  await page.close();
+}
+
+const startRequest = (tabId: number | null) => ({
+  type: "START_INTERVIEW",
+  problem: {
+    slug: "two-sum",
+    frontendId: "1",
+    title: "Two Sum",
+    difficulty: "Easy",
+    url: "http://localhost:4173/problems/two-sum/",
+    language: null,
+  },
+  question: null,
+  facecam: false,
+  graded: false,
+  tabId,
+});
+
+const popupCount = () =>
+  sw.evaluate(async () => (await chrome.windows.getAll({ windowTypes: ["popup"] })).length);
+
+test("cancelling Chrome's share dialog starts nothing and closes the recorder window", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  await setShareDialog("cancel");
+  const problem = await openProblem();
+  const panel = await openPanel();
+  const tabId = await sw.evaluate(
+    async () => (await chrome.tabs.query({ url: "http://localhost/problems/*" }))[0]?.id ?? null,
+  );
+
+  const res = await panel.evaluate((req) => chrome.runtime.sendMessage(req), startRequest(tabId));
+  expect(res).toMatchObject({ ok: false, error: expect.stringMatching(/cancelled/) });
+  const writes = (await recorded()).filter((r) => r.path.startsWith("/supabase/rest/v1/sessions"));
+  expect(writes).toHaveLength(0);
+  await expect.poll(popupCount).toBe(0);
+
+  await panel.close();
+  await problem.close();
+});
+
+test("a mock interview records the picked screen in the recorder window and saves on End", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  await sw.evaluate(async () => {
+    await chrome.storage.local.remove("lare:capture");
+  });
+  await setShareDialog("screen");
+  const problem = await openProblem();
+  const panel = await openPanel();
+  const tabId = await sw.evaluate(
+    async () => (await chrome.tabs.query({ url: "http://localhost/problems/*" }))[0]?.id ?? null,
+  );
+  const capture = () =>
+    sw.evaluate(async () => {
+      const c = (await chrome.storage.local.get("lare:capture"))["lare:capture"] as
+        | { state?: string; message?: string }
+        | undefined;
+      return c?.state ?? null;
+    });
+
+  const res = await panel.evaluate((req) => chrome.runtime.sendMessage(req), startRequest(tabId));
+  expect(res, JSON.stringify(res)).toMatchObject({ ok: true });
+  expect(await capture()).toBe("recording");
+  expect(await popupCount()).toBe(1);
+  // Opened big enough for Chrome's share dialog, then shrunk to the compact recorder.
+  const popupWidth = await sw.evaluate(
+    async () => (await chrome.windows.getAll({ windowTypes: ["popup"] }))[0]?.width,
+  );
+  expect(popupWidth).toBeLessThan(500);
+  await expect(dotOn(problem)).toHaveCount(1);
+  await expect
+    .poll(
+      async () =>
+        (await recorded()).filter((r) => r.method === "PATCH" && r.path.startsWith("/tus/")).length,
+    )
+    .toBeGreaterThan(0);
+
+  const ended = await panel.evaluate(() => chrome.runtime.sendMessage({ type: "END_SESSION" }));
+  expect(ended, JSON.stringify(ended)).toMatchObject({ ok: true });
+  expect(await capture()).toBe("complete");
+  expect((await recorded()).some((r) => r.path.includes("bunny-finalize-recording"))).toBe(true);
+  await expect.poll(popupCount).toBe(0);
+
+  await panel.close();
+  await problem.close();
+});
+
+const dotOn = (page: Page) => page.locator("lare-overlay").locator(".lare-rec");
+
+test("a recording survives the tab loading frames or reloading, and keeps its consent dot", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  const problem = await openProblem();
+  const tabId = await sw.evaluate(
+    async () => (await chrome.tabs.query({ url: "http://localhost/problems/*" }))[0]?.id ?? null,
+  );
+  // An interview recording on this tab, as the background and recorder window record it.
+  await sw.evaluate(async (id) => {
+    const sessionId = "00000000-0000-4000-8000-0000000000c1";
+    const t = Date.now();
+    await chrome.storage.local.set({
+      "lare:capture": { sessionId, tabId: id, graded: false, state: "recording" },
+      "lare:state": {
+        version: 2,
+        interview: {
+          sessionId,
+          kind: "interview",
+          scope: "problem",
+          startedAt: t,
+          events: [{ t, type: "start" }],
+          problems: [],
+          currentSlug: null,
+          tabId: id,
+          facecam: false,
+          synced: true,
+        },
+        tracking: { inboxSessionId: null, problems: [] },
+        appConnected: false,
+        pendingSync: [],
+      },
+    });
+  }, tabId);
+  // Ending the session would stop the capture; with no recorder window here that fails and
+  // parks the session in pendingSync, so an empty pendingSync means nothing tried to end it.
+  const status = () =>
+    sw.evaluate(async () => {
+      const got = await chrome.storage.local.get(["lare:capture", "lare:state"]);
+      const capture = got["lare:capture"] as { state?: string } | undefined;
+      const state = got["lare:state"] as { interview: unknown; pendingSync: string[] } | undefined;
+      return {
+        capture: capture?.state,
+        interview: !!state?.interview,
+        pendingSync: state?.pendingSync.length ?? 0,
+      };
+    });
+  const alive = { capture: "recording", interview: true, pendingSync: 0 };
+  const dot = (page: Page) => page.locator("lare-overlay").locator(".lare-rec");
+
+  // LeetCode's Run (and plenty else) loads frames inside the page: the tab reports "loading".
+  await problem.evaluate(() => {
+    const frame = document.createElement("iframe");
+    frame.src = "/problems/two-sum/?frame=1";
+    document.body.append(frame);
+  });
+  await expect(dot(problem)).toHaveCount(1);
+  await problem.waitForTimeout(1500);
+  expect(await status()).toEqual(alive);
+
+  // A real reload loses the dot for a moment; it comes back and the recording carries on.
+  await problem.reload();
+  await problem.waitForSelector("body[data-monaco-ready='1']");
+  await expect(dot(problem)).toHaveCount(1);
+  await problem.waitForTimeout(1500);
+  expect(await status()).toEqual(alive);
+
+  await sw.evaluate(async () => {
+    await chrome.storage.local.remove(["lare:capture", "lare:state"]);
+  });
+  await problem.close();
+});
+
+test("the permission tab asks for the microphone, reports back and closes itself", async () => {
+  const panel = await context.newPage();
+  await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  const result = panel.evaluate(
+    () =>
+      new Promise((resolve) => {
+        chrome.runtime.onMessage.addListener((msg) => {
+          if (msg?.type === "LARE_MEDIA_PERMISSION_RESULT") resolve(msg);
+        });
+      }),
+  );
+  const tab = await context.newPage();
+  await tab.goto(`chrome-extension://${extensionId}/permissions.html?camera=0`);
+  expect(await result).toMatchObject({ granted: true, error: null });
+  await tab.waitForEvent("close");
+  await panel.close();
+});
+
+test("the recorder records real media chunks with facecam, uploads while recording and finalizes", async () => {
   await fetch(`${BASE}/__reset`);
   await resetExtensionState();
   await sw.evaluate(async () => {
@@ -275,16 +522,20 @@ test("offscreen code records real media chunks, uploads during recording and fin
   });
   const document = await context.newPage();
   // Exercise the real recorder/compositor/uploader with Chrome's fake physical devices.
-  // Only tabCapture's user-gesture stream token is substituted in this harness.
+  // Only the share dialog's desktop stream id is substituted in this harness.
   await document.addInitScript(() => {
     const get = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = (constraints) =>
       get({ audio: !!constraints?.audio, video: !!constraints?.video });
   });
-  await document.goto(`chrome-extension://${extensionId}/offscreen.html`);
+  await document.goto(`chrome-extension://${extensionId}/capture.html`);
+  const picked = await sw.evaluate(() =>
+    chrome.runtime.sendMessage({ target: "capture-host", command: "pick" }),
+  );
+  expect(picked, JSON.stringify(picked)).toMatchObject({ ok: true });
   const result = await sw.evaluate(async () =>
     chrome.runtime.sendMessage({
-      target: "offscreen",
+      target: "capture-host",
       command: "start",
       sessionId: "00000000-0000-4000-8000-000000000099",
       tabId: 1,
@@ -308,19 +559,19 @@ test("offscreen code records real media chunks, uploads during recording and fin
       .toBeGreaterThan(0);
   } catch (error) {
     throw new Error(
-      `${error}\nCapture: ${JSON.stringify(await sw.evaluate(() => chrome.runtime.sendMessage({ target: "offscreen", command: "status" })))}\nRequests: ${JSON.stringify((await recorded()).map((r) => ({ method: r.method, path: r.path, headers: r.headers })))}`,
+      `${error}\nCapture: ${JSON.stringify(await sw.evaluate(() => chrome.runtime.sendMessage({ target: "capture-host", command: "status" })))}\nRequests: ${JSON.stringify((await recorded()).map((r) => ({ method: r.method, path: r.path, headers: r.headers })))}`,
     );
   }
   const paused = await sw.evaluate(() =>
-    chrome.runtime.sendMessage({ target: "offscreen", command: "pause" }),
+    chrome.runtime.sendMessage({ target: "capture-host", command: "pause" }),
   );
   expect(paused).toMatchObject({ ok: true, state: { state: "paused" } });
   const resumed = await sw.evaluate(() =>
-    chrome.runtime.sendMessage({ target: "offscreen", command: "resume" }),
+    chrome.runtime.sendMessage({ target: "capture-host", command: "resume" }),
   );
   expect(resumed).toMatchObject({ ok: true, state: { state: "recording" } });
   const stopped = await sw.evaluate(async () =>
-    chrome.runtime.sendMessage({ target: "offscreen", command: "stop" }),
+    chrome.runtime.sendMessage({ target: "capture-host", command: "stop" }),
   );
   expect(stopped, JSON.stringify(stopped)).toMatchObject({
     ok: true,

@@ -7,6 +7,7 @@ import {
   maxPage,
   pageWindow,
   type SolvedActivity,
+  summarizeActivity,
 } from "./activity";
 
 const SAMPLE: SolvedActivity = {
@@ -108,5 +109,33 @@ describe("maxPage", () => {
     expect(maxPage(20, 7)).toBe(2);
     expect(maxPage(14, 7)).toBe(1);
     expect(maxPage(0, 7)).toBe(0);
+  });
+});
+
+describe("summarizeActivity", () => {
+  const day = (iso: string, count: number) => ({ iso, date: new Date(`${iso}T00:00:00Z`), count });
+
+  it("counts a streak through yesterday while today is still empty", () => {
+    const days = [
+      day("2026-01-01", 0),
+      day("2026-01-02", 1),
+      day("2026-01-03", 2),
+      day("2026-01-04", 0),
+    ];
+    expect(summarizeActivity(days)).toMatchObject({
+      streak: 2,
+      bestDay: 2,
+      last7: 3,
+      activeDays30: 2,
+    });
+  });
+
+  it("breaks the streak on a missed day", () => {
+    const days = [day("2026-01-01", 3), day("2026-01-02", 0), day("2026-01-03", 1)];
+    expect(summarizeActivity(days).streak).toBe(1);
+  });
+
+  it("returns zeros for an empty window", () => {
+    expect(summarizeActivity([])).toEqual({ last7: 0, streak: 0, activeDays30: 0, bestDay: 0 });
   });
 });

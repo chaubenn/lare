@@ -39,6 +39,7 @@ function revalidatePost() {
   // Route pattern, not a literal path: the public URL is the post's slug, so a
   // `/p/<uuid>` string would no longer match the page anyone is actually viewing.
   revalidatePath("/p/[id]", "page");
+  revalidatePath("/p/[id]/edit", "page");
   revalidatePath("/");
 }
 

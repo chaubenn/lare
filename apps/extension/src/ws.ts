@@ -27,6 +27,16 @@ export class DesktopClient {
     return this.connected && gradingCapable(this.rawAck, userId);
   }
 
+  /** Why grading is unavailable, in words the side panel can show, or null when it is available. */
+  gradingBlocker(userId: string | null): string | null {
+    if (this.gradingAvailable(userId)) return null;
+    if (!this.connected) return "The Lare desktop app isn't running.";
+    const appUser = (this.rawAck as { userId?: string | null } | null)?.userId ?? null;
+    if (!appUser) return "Sign in to the Lare desktop app.";
+    if (appUser !== userId) return "The desktop app is signed in to a different account.";
+    return "Download a speech model in the desktop app (Settings → Recording), or update the app.";
+  }
+
   get connected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN && this.helloAck !== null;
   }
