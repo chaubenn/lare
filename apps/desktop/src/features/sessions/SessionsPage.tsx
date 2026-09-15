@@ -163,7 +163,7 @@ function SessionRows({ sessions, className }: { sessions: SessionRow[]; classNam
       {sessions.map((s) => (
         <li
           key={s.id}
-          className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-3 px-5 py-2.5 sm:grid-cols-[4.5rem_minmax(0,1fr)_5rem_auto]"
+          className="grid grid-cols-[4.5rem_minmax(0,1fr)_5.5rem] items-center gap-3 px-5 py-2.5 sm:grid-cols-[4.5rem_minmax(0,1fr)_4.5rem_5.5rem]"
         >
           <span className="text-xs tabular-nums text-[var(--text-secondary)]">
             {clock(Date.parse(s.started_at))}
@@ -195,10 +195,12 @@ function SessionRows({ sessions, className }: { sessions: SessionRow[]; classNam
               </span>
             ) : null}
           </Link>
-          <span className="hidden text-xs tabular-nums text-[var(--text-secondary)] sm:block">
+          <span className="hidden text-right text-xs tabular-nums text-[var(--text-secondary)] sm:block">
             {s.active_ms > 0 ? formatDurationHuman(s.active_ms) : "—"}
           </span>
-          <SessionAction session={s} />
+          <span className="flex justify-end">
+            <SessionAction session={s} />
+          </span>
         </li>
       ))}
     </ul>
