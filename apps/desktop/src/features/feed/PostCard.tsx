@@ -8,6 +8,7 @@ import { CommentsPreview } from "@/features/feed/CommentsPreview";
 import { PostLinkButton } from "@/features/feed/PostLinkButton";
 import { PostSlides } from "@/features/feed/PostSlides";
 import type { FeedPost } from "@/features/feed/queries";
+import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import type { UserPost } from "@/features/profile/queries";
 import { useToggleLike } from "@/features/publishing/posts/social";
 import { errorMessage } from "@/lib/supabase";
@@ -45,21 +46,25 @@ export function PostCard({
     <article className={cn(cardClass, "overflow-hidden")}>
       <header className="flex items-center gap-3 p-4 pb-3 sm:px-5">
         {author?.handle ? (
-          <Link to={`/u/${author.handle}`} className="shrink-0">
-            <Avatar url={author.avatar_url} name={name} size={40} />
-          </Link>
+          <ProfileHoverCard handle={author.handle} className="shrink-0">
+            <Link to={`/u/${author.handle}`}>
+              <Avatar url={author.avatar_url} name={name} size={40} />
+            </Link>
+          </ProfileHoverCard>
         ) : (
           <Avatar url={author?.avatar_url} name={name} size={40} />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             {author?.handle ? (
-              <Link
-                to={`/u/${author.handle}`}
-                className="truncate text-sm font-semibold text-zinc-100 hover:underline"
-              >
-                {name}
-              </Link>
+              <ProfileHoverCard handle={author.handle} className="min-w-0 truncate">
+                <Link
+                  to={`/u/${author.handle}`}
+                  className="text-sm font-semibold text-zinc-100 hover:underline"
+                >
+                  {name}
+                </Link>
+              </ProfileHoverCard>
             ) : (
               <span className="text-sm font-semibold text-zinc-100">{name}</span>
             )}

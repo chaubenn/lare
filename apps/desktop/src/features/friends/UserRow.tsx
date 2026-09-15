@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { FollowButton } from "./FollowButton";
 import type { FollowState, PersonSummary } from "./queries";
 
@@ -35,17 +36,21 @@ export function UserRow({
 
   return (
     <div className={cn("flex items-center gap-3", !flush && "px-3 py-2.5")}>
-      <ProfileLink handle={person.handle}>
-        <Avatar url={person.avatar_url} name={name} size={36} />
-      </ProfileLink>
+      <ProfileHoverCard handle={person.handle} className="shrink-0">
+        <ProfileLink handle={person.handle}>
+          <Avatar url={person.avatar_url} name={name} size={36} />
+        </ProfileLink>
+      </ProfileHoverCard>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <ProfileLink
-            handle={person.handle}
-            className="truncate text-sm font-medium text-zinc-100 hover:underline"
-          >
-            {name}
-          </ProfileLink>
+          <ProfileHoverCard handle={person.handle} className="min-w-0 truncate">
+            <ProfileLink
+              handle={person.handle}
+              className="text-sm font-medium text-zinc-100 hover:underline"
+            >
+              {name}
+            </ProfileLink>
+          </ProfileHoverCard>
           {person.is_private ? (
             <Badge>
               <Lock className="size-3" aria-hidden />
