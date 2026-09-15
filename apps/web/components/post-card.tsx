@@ -8,6 +8,7 @@ import { CopyLinkButton } from "./copy-link-button";
 import { PostActions } from "./post-actions";
 import { PostCommentsPreview } from "./post-comments-preview";
 import { PostSlides } from "./post-slides";
+import { ProfileHoverCard } from "./profile-hover-card";
 import { TimeAgo } from "./time-ago";
 
 /**
@@ -30,21 +31,29 @@ export function PostCard({ post, viewerId }: { post: PostCardData; viewerId: str
       <article>
         <header className="flex items-center gap-3 p-4 pb-3 sm:px-5">
           {author?.handle ? (
-            <Link href={`/u/${author.handle}`} className="shrink-0">
-              <Avatar src={author.avatar_url} name={authorName} />
-            </Link>
+            <ProfileHoverCard handle={author.handle} viewerId={viewerId} className="shrink-0">
+              <Link href={`/u/${author.handle}`}>
+                <Avatar src={author.avatar_url} name={authorName} />
+              </Link>
+            </ProfileHoverCard>
           ) : (
             <Avatar src={author?.avatar_url} name={authorName} />
           )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2">
               {author?.handle ? (
-                <Link
-                  href={`/u/${author.handle}`}
-                  className="truncate text-sm font-semibold text-zinc-100 hover:underline"
+                <ProfileHoverCard
+                  handle={author.handle}
+                  viewerId={viewerId}
+                  className="min-w-0 truncate"
                 >
-                  {authorName}
-                </Link>
+                  <Link
+                    href={`/u/${author.handle}`}
+                    className="text-sm font-semibold text-zinc-100 hover:underline"
+                  >
+                    {authorName}
+                  </Link>
+                </ProfileHoverCard>
               ) : (
                 <span className="text-sm font-semibold text-zinc-100">{authorName}</span>
               )}
