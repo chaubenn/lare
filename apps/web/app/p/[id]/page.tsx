@@ -1,6 +1,6 @@
 import { buildSessionOverview, excerptFromHtml, formatDurationHuman } from "@lare/shared";
-import { Container, Tooltip } from "@lare/ui/primitives";
-import { Clock, ListChecks, Lock } from "lucide-react";
+import { buttonClass, Container, Tooltip } from "@lare/ui/primitives";
+import { Clock, ListChecks, Lock, Pencil } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -11,6 +11,7 @@ import { InterviewReview } from "@/components/interview-review";
 import { PostActions } from "@/components/post-actions";
 import { PostSlides } from "@/components/post-slides";
 import { ProblemSection } from "@/components/problem-section";
+import { ProfileHoverCard } from "@/components/profile-hover-card";
 import { Skeleton } from "@/components/skeleton";
 import { TimeAgo } from "@/components/time-ago";
 import { Transcript } from "@/components/transcript";
@@ -21,7 +22,7 @@ import { fetchComments, getPostDetail } from "@/lib/posts";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 import { Comments } from "./comments";
-import { OwnerControls } from "./owner-controls";
+import { PostMenu } from "./post-menu";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -83,69 +84,28 @@ export default async function PostPage({ params }: Params) {
   return (
     <Container width="page">
       <article className="space-y-6">
-        {isOwner && viewer && (
-          <>
-            <OwnerControls
-              postId={post.id}
-              userId={viewer.id}
-              status={post.status}
-              visibility={post.visibility}
-              title={post.title ?? ""}
-              body={post.body ?? ""}
-              showVideo={post.show_video}
-              showDemoVideo={post.show_demo_video}
-              includeAiInsights={post.include_ai_insights}
-              includeOgCard={post.include_og_card}
-              ogShowAiScores={post.og_show_ai_scores}
-              hasVideo={Boolean(post.videos) && post.video_kind !== "none"}
-              hasDemoVideo={Boolean(post.demo_videos)}
-              isInterview={session?.kind === "interview"}
-              coverMediaId={post.cover_media_id}
-              images={post.images}
-            />
-            <nav aria-label="Owner workspace" className="flex flex-wrap gap-4 text-sm">
-              {post.status === "draft" && (
-                <Link href={`/drafts/${post.id}`} className="underline">
-                  Continue draft stepper
-                </Link>
-              )}
-              {session && (
-                <Link href={`/sessions/${session.id}`} className="underline">
-                  Private session timeline
-                </Link>
-              )}
-              {post.videos && (
-                <Link href={`/studio/${post.videos.id}`} className="underline">
-                  Trim full video
-                </Link>
-              )}
-              {post.demo_videos && (
-                <Link href={`/studio/${post.demo_videos.id}`} className="underline">
-                  Trim summary video
-                </Link>
-              )}
-            </nav>
-          </>
-        )}
-
         <header>
           <div className="flex items-center gap-3">
-            {author.handle ? (
-              <Link href={`/u/${author.handle}`}>
+            <ProfileHoverCard handle={author.handle} viewerId={viewer?.id ?? null}>
+              {author.handle ? (
+                <Link href={`/u/${author.handle}`}>
+                  <Avatar src={author.avatar_url} name={authorName} />
+                </Link>
+              ) : (
                 <Avatar src={author.avatar_url} name={authorName} />
-              </Link>
-            ) : (
-              <Avatar src={author.avatar_url} name={authorName} />
-            )}
+              )}
+            </ProfileHoverCard>
             <div className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-x-2">
                 {author.handle ? (
-                  <Link
-                    href={`/u/${author.handle}`}
-                    className="font-semibold text-zinc-100 hover:underline"
-                  >
-                    {authorName}
-                  </Link>
+                  <ProfileHoverCard handle={author.handle} viewerId={viewer?.id ?? null}>
+                    <Link
+                      href={`/u/${author.handle}`}
+                      className="font-semibold text-zinc-100 hover:underline"
+                    >
+                      {authorName}
+                    </Link>
+                  </ProfileHoverCard>
                 ) : (
                   <span className="font-semibold text-zinc-100">{authorName}</span>
                 )}
@@ -171,8 +131,26 @@ export default async function PostPage({ params }: Params) {
                 )}
               </p>
             </div>
-            <div className="ml-auto">
-              <CopyLinkButton path={`/p/${post.slug}`} />
+            <div className="ml-auto flex items-center gap-2">
+              {isOwner ? (
+                <>
+                  <Link href={`/p/${post.slug}/edit`} className={buttonClass("secondary", "sm")}>
+                    <Pencil className="size-3.5" />
+                    Edit post
+                  </Link>
+                  <PostMenu
+                    postId={post.id}
+                    postSlug={post.slug}
+                    isOwner
+                    isDraft={post.status === "draft"}
+                    sessionId={session?.id ?? null}
+                    videoId={post.videos?.id ?? null}
+                    demoVideoId={post.demo_videos?.id ?? null}
+                  />
+                </>
+              ) : (
+                <CopyLinkButton path={`/p/${post.slug}`} />
+              )}
             </div>
           </div>
         </header>

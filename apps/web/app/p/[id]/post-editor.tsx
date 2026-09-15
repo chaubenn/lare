@@ -356,7 +356,7 @@ export function PostEditor(props: PostEditorProps) {
           Save changes
         </Button>
         <Button type="button" size="sm" disabled={busy} onClick={props.onDone}>
-          Done
+          Back to post
         </Button>
       </div>
     </form>
