@@ -57,13 +57,22 @@ function LatestSitting({ sitting }: { sitting: Sitting<SessionRow> }) {
   return (
     <section
       aria-label="Latest sitting"
-      className="rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]"
+      className="rounded-[var(--lare-r-4)] border border-[var(--border)]"
     >
       <div className="flex flex-wrap items-start justify-between gap-3 p-5">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-[var(--text-secondary)]">
-            {live ? "In progress" : recent ? "Current sitting" : "Latest sitting"}
-          </p>
+          {live || recent ? (
+            // Status pill instead of a different background: green and softly pulsing when current.
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-[color-mix(in_oklab,var(--lare-status-run)_18%,transparent)] px-2 py-0.5 text-xs font-medium text-[color-mix(in_oklab,var(--lare-status-run)_70%,var(--lare-bone))]">
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--lare-status-run)] opacity-60 motion-reduce:hidden" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-[var(--lare-status-run)]" />
+              </span>
+              {live ? "In progress" : "Current session"}
+            </p>
+          ) : (
+            <p className="text-xs font-medium text-[var(--text-secondary)]">Latest session</p>
+          )}
           <h2 className="lare-heading mt-1 text-[var(--text)]">{sitting.label}</h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">{when(sitting)}</p>
         </div>
@@ -77,7 +86,7 @@ function LatestSitting({ sitting }: { sitting: Sitting<SessionRow> }) {
             {sitting.problems.map((p) => (
               <li
                 key={p.slug}
-                className="inline-flex items-center gap-2 overflow-hidden rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface)] pr-2.5 text-sm text-[var(--text)]"
+                className="inline-flex items-center gap-2 overflow-hidden rounded-[var(--lare-r-2)] border border-[var(--border)] pr-2.5 text-sm text-[var(--text)]"
               >
                 <DifficultyTag difficulty={p.difficulty} />
                 {p.title}

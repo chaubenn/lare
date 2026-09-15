@@ -17,7 +17,11 @@ export function DifficultyTag({
   return (
     <span
       className={`inline-flex w-11 shrink-0 items-center justify-center self-stretch py-1 text-[11px] font-semibold uppercase tracking-wide ${rounded ? "rounded-[var(--lare-r-1)]" : ""}`}
-      style={{ color: d.color, background: `color-mix(in oklab, ${d.color} 18%, transparent)` }}
+      // A light tint: brighter text and a softer wash than the raw difficulty colour.
+      style={{
+        color: `color-mix(in oklab, ${d.color} 55%, var(--lare-bone))`,
+        background: `color-mix(in oklab, ${d.color} 30%, transparent)`,
+      }}
     >
       {d.label}
     </span>
