@@ -5,6 +5,7 @@ import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageSpinner } from "@/components/ui/States";
+import { WindowScreen } from "@/components/ui/WindowScreen";
 import { usePermissions, useRecorderSettings, useWhisperModels } from "@/features/media/hooks";
 import { PermissionsSection } from "@/features/settings/recording/PermissionsSection";
 import { SpeechModelSection } from "@/features/settings/recording/SpeechModelSection";
@@ -64,43 +65,41 @@ export function SetupGate({ children }: { children: ReactNode }) {
 
 function SetupPage({ onDone, macOs }: { onDone: () => void; macOs: boolean }) {
   return (
-    <div className="flex h-full justify-center overflow-y-auto p-8">
-      <div className="w-full max-w-xl space-y-4">
-        <div>
-          <h1 className="text-xl font-semibold">Set up recording</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Lare needs your permission to record demos and mock interviews, and a local speech model
-            to transcribe them. Anything you skip can be done later in Settings → Recording.
-          </p>
+    <WindowScreen className="max-w-xl space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold">Set up recording</h1>
+        <p className="mt-1 text-sm text-zinc-400">
+          Lare needs your permission to record demos and mock interviews, and a local speech model
+          to transcribe them. Anything you skip can be done later in Settings → Recording.
+        </p>
+      </div>
+      <Card>
+        <div className="space-y-5">
+          <PermissionsSection />
+          <SpeechModelSection />
         </div>
-        <Card>
-          <div className="space-y-5">
-            <PermissionsSection />
-            <SpeechModelSection />
-          </div>
-        </Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {macOs ? (
-            <Button
-              variant="ghost"
-              icon={<RotateCcw className="size-4" aria-hidden />}
-              onClick={() => void relaunch()}
-            >
-              Quit &amp; reopen Lare
-            </Button>
-          ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={onDone}>
-              Skip for now
-            </Button>
-            <Button variant="primary" onClick={onDone}>
-              Done
-            </Button>
-          </div>
+      </Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {macOs ? (
+          <Button
+            variant="ghost"
+            icon={<RotateCcw className="size-4" aria-hidden />}
+            onClick={() => void relaunch()}
+          >
+            Quit &amp; reopen Lare
+          </Button>
+        ) : (
+          <span />
+        )}
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={onDone}>
+            Skip for now
+          </Button>
+          <Button variant="primary" onClick={onDone}>
+            Done
+          </Button>
         </div>
       </div>
-    </div>
+    </WindowScreen>
   );
 }

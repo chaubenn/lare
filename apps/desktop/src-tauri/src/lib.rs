@@ -172,6 +172,7 @@ pub fn run() {
             commands::request_permission,
             commands::permission_settings_url,
             commands::open_permission_settings,
+            commands::reset_screen_recording_permission,
             commands::recorder_settings,
             commands::set_recorder_settings,
             commands::recorder_status,

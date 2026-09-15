@@ -116,7 +116,11 @@ going through Bunny.
   granted. **Skip for now** is remembered for that app version only.
 - Install the next build over it: with a stable signing identity configured
   (`docs/releasing.md`) nothing is asked again; without one, setup reappears listing what the
-  update revoked.
+  update revoked. In that state macOS still shows Lare switched on under Screen & System Audio
+  Recording while Lare reads **Denied** — **Reset permission** clears the stale entry and asks
+  again, which is the same thing as removing Lare from that list with "-" by hand.
+- The window drags from anywhere along its top strip on sign-in, onboarding and **Set up
+  recording**, not only inside the app shell.
 - Settings -> Recording: permissions show Granted after allowing Screen Recording, Microphone and
   Camera (macOS needs a restart after Screen Recording). Device pickers list displays/mics/cameras.
   Download `small.en` once — grading is unavailable without a local model.
