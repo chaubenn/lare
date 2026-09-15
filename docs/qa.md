@@ -149,33 +149,22 @@ going through Bunny.
   Camera (macOS needs a restart after Screen Recording). Device pickers list displays/mics/cameras.
   Download `small.en` once — grading is unavailable without a local model.
 - The sidebar has no **Recordings** tab, and `/recordings` is gone.
-- Draft -> **Record (Instant)** with mic + facecam: camera bubble and pill appear. Upload
+- Draft -> **Record** with mic + facecam: camera bubble and pill appear. Upload
   progress should start climbing *during* the recording, not after stop. Stop -> video attached to
   the draft -> status goes processing -> ready (Realtime) -> player loads with a tokenised embed.
   - Then check the app data folder (`Lare/recordings`): the instant take's files are **gone**
     once the receipt is confirmed.
   - Pull the network cable mid-upload. The upload must fail visibly, the local source must be
     **kept**, and the draft's Media step must offer a retry that works.
-- Draft -> **Record (Studio)** -> pause/resume once -> stop -> editor opens with "Take 1 of 2";
-  trim, split, mark in/out, AI highlights (interviews) -> **Render & publish** -> draft shows the
-  video; **Render only** writes `output/result.mp4`. Studio uploads after the render — that is
-  expected, not a regression.
-  - After publishing an edit, the project tracks stay on disk; the exported MP4 does not.
-- **Unedited video skips the render.** Record instant, change nothing, publish: no render stage
-  should appear in the jobs tray at all. Make one trim and it should.
-- `/studio/:videoId` on a **cloud** video: it imports a signed Bunny MP4 rendition into a fresh
-  local project. If the library is not configured per `docs/cloud-studio.md`, expect an explicit
-  source-unavailable message, not a silent failure or a broken editor.
 - Mock interview started from the extension: the desktop shows the live transcript as it is
   spoken. On stop, Sessions -> the session shows video, transcript, code timeline and the AI
   review. The 5/day limit surfaces as a toast.
 - Mock interview with **facecam off**: same pipeline, no camera track, transcript and review must
   still work.
-- Stopping never takes the app with it: stop an instant take from the pill, stop a studio take,
-  and end an interview from the extension while the pill is still on screen. In each case the pill
+- Stopping never takes the app with it: stop a take from the pill, and end an interview from the extension while the pill is still on screen. In each case the pill
   and the camera bubble leave the screen, the camera light goes out, and the app is still running.
-- Pause a studio take for a while, resume, then stop: the pill's timer counts only the recorded
-  stretches, and the editor's clips add up to the same length.
+- Pause a take for a while, resume, then stop: the pill's timer counts only the recorded
+  stretches.
 - Force-quit mid-recording (Activity Monitor), reopen: the take is recovered from Cap's original
   DASH tracks into a separate `output.mp4` — never by resuming the partial combined file at a
   stale offset — and the draft can still be finished.

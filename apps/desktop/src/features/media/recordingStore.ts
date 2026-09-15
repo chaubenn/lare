@@ -14,7 +14,7 @@ export interface RecordingMeta {
   /**
    * Which video slot of `postId` this recording is destined for. Only the app knows — the
    * recorder manifest carries the post, not the slot — so it is remembered here and read again
-   * when the recording finishes, or later from the studio editor / the Recordings page.
+   * when the recording finishes.
    */
   slot: VideoSlot;
   /** `videos.id` once the upload pipeline created a row. */
@@ -24,8 +24,6 @@ export interface RecordingMeta {
   uploadUrl?: string;
   uploaded: boolean;
   transcribed: boolean;
-  /** Rendered MP4 for studio projects (path), if exported. */
-  exportPath: string | null;
   /** Last pipeline error, cleared on success. */
   error: string | null;
   updatedAt: number;
@@ -69,7 +67,6 @@ export async function patchRecordingMeta(
     videoId: null,
     uploaded: false,
     transcribed: false,
-    exportPath: null,
     error: null,
     updatedAt: 0,
   };

@@ -1,11 +1,10 @@
 /**
- * Post-recording pipelines. They orchestrate Rust jobs (thumbnail, export, upload, transcription)
- * with Supabase writes, report progress to the job registry and persist checkpoints in the
- * recording store so an interrupted run can be resumed from the Recordings page.
+ * Post-recording pipelines. They orchestrate Rust jobs (thumbnail, upload, transcription) with
+ * Supabase writes, report progress to the job registry and persist checkpoints in the recording
+ * store so an interrupted run can be resumed.
  *
  *  - publishVideo():        MP4 -> Bunny (create row, upload, thumbnail) -> optionally attach to a post
- *  - processInterview():    studio project -> transcript, rendered MP4, upload, captions, attach
- *  - exportAndPublish():    studio project + edit -> rendered MP4 -> publishVideo()
+ *  - processInterview():    interview MP4 -> transcript, upload, captions, attach
  */
 
 import type { Database, Json } from "@lare/supabase-types";
@@ -15,16 +14,13 @@ import { listen } from "@tauri-apps/api/event";
 import {
   type CompletedRecording,
   type CreateUploadResponse,
-  DEFAULT_EDIT,
   newJobId,
   type RecorderEvents,
   recorder,
-  type StudioEdit,
 } from "@/lib/recorder";
 import { errorMessage, invokeFunction, supabase } from "@/lib/supabase";
 import { createJob, type Job, type JobStage, updateJob } from "./jobs";
 import { getRecordingMeta, patchRecordingMeta } from "./recordingStore";
-import { canUseRawVideo } from "./studio/unedited";
 
 type VideoKind = Database["public"]["Enums"]["video_kind"];
 
@@ -58,7 +54,6 @@ export interface PublishVideoOptions {
   job: Job;
   userId: string;
   filePath: string;
-  mode: "instant" | "studio";
   title: string;
   sessionId?: string | null;
   /** Draft post to attach the video to. */
@@ -92,7 +87,7 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
   const created =
     reusableUpload ??
     (await invokeFunction<CreateUploadResponse>("bunny-create-upload", {
-      mode: opts.mode,
+      mode: "instant",
       title: opts.title,
       sessionId: opts.sessionId ?? null,
       captureSource: "desktop",
@@ -206,13 +201,10 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
     );
   }
 
-  // Keep edited project tracks, but not their disposable render. Instant takes have no project to preserve.
   if (rid) {
     await patchRecordingMeta(rid, { uploaded: true, error: null });
     try {
-      if (opts.mode === "instant") await recorder.delete(rid);
-      else if (filePath === (await getRecordingMeta(rid))?.exportPath)
-        await recorder.deleteFile(filePath);
+      await recorder.delete(rid);
     } catch (error) {
       console.warn("Cloud receipt confirmed, but local cleanup failed", error);
     }
@@ -231,56 +223,6 @@ export async function postForSession(
     .eq("session_id", sessionId)
     .maybeSingle();
   return data ?? null;
-}
-
-export interface ExportOptions {
-  job: Job;
-  projectPath: string;
-  edit?: StudioEdit;
-  recordingId?: string | null;
-}
-
-/** Render a studio project with `edit`; returns the MP4 path. */
-export async function renderStudio(opts: ExportOptions): Promise<string> {
-  const { job } = opts;
-  const info = await recorder.studioProjectInfo(opts.projectPath);
-  const edit = opts.edit ?? DEFAULT_EDIT;
-  if (
-    info.displayPath &&
-    canUseRawVideo(edit, !!info.cameraPath, !!info.micPath, info.clips.length)
-  ) {
-    stage(job, "export", "Unedited video: using source without rendering");
-    return info.displayPath;
-  }
-  // A new render can change bytes at the same path. It must never resume an older TUS object.
-  if (opts.recordingId) {
-    const meta = await getRecordingMeta(opts.recordingId);
-    if (meta?.uploadPath)
-      await patchRecordingMeta(opts.recordingId, {
-        upload: undefined,
-        uploadPath: undefined,
-        uploadUrl: undefined,
-      });
-  }
-  stage(job, "export", "Rendering", 0);
-  const unlisten = await onProgress("export:progress", job.id, (p) => {
-    const percent = p.total > 0 ? Math.round((p.frame / p.total) * 100) : null;
-    updateJob(job.id, { percent, detail: `Rendering ${percent ?? 0}%` });
-  });
-  try {
-    const result = await recorder.exportStudio({
-      jobId: job.id,
-      projectPath: opts.projectPath,
-      edit: opts.edit ?? DEFAULT_EDIT,
-      quality: "social",
-      fps: 30,
-      maxEdge: 1920,
-    });
-    if (opts.recordingId) await patchRecordingMeta(opts.recordingId, { exportPath: result.output });
-    return result.output;
-  } finally {
-    unlisten();
-  }
 }
 
 export interface TranscribeOptions {
@@ -332,19 +274,16 @@ export interface InterviewOptions {
   userId: string;
   queryClient?: QueryClient;
   /** Skip steps already completed in an earlier attempt. */
-  resume?: { transcribed?: boolean; exportPath?: string | null; videoId?: string | null };
+  resume?: { transcribed?: boolean; videoId?: string | null };
 }
 
 /**
  * Everything that happens after a mock interview recording stops: align the session with media
- * time, render the studio project (facecam PiP if recorded), transcribe, upload, attach captions
- * and the video to the session's draft post.
+ * time, transcribe the recording, upload it, attach captions and the video to the session's post.
  *
- * The facecam is optional, and so is everything downstream of the render: an interview recorded
- * with the facecam unchecked has no camera track, and a project that will not render for any
- * reason must not also cost the author their transcript — which is what the AI review is built
- * from. So the transcript is taken from the render when there is one and from the raw mic track
- * when there is not, and it is saved before a failed render is reported.
+ * The recording is an instant MP4 (screen, microphone, and the camera bubble when it was on), so
+ * there is nothing to render. A failed transcription does not cost the author the video: the
+ * session is marked ungraded and the upload carries on.
  */
 export async function processInterview(opts: InterviewOptions): Promise<void> {
   const { recording, userId } = opts;
@@ -355,6 +294,8 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
   });
   try {
     if (!sessionId) throw new Error("This recording is not linked to a session.");
+    const output = recording.outputMp4;
+    if (!output) throw new Error("The interview recording has no video file.");
 
     // Media time zero for transcript/edit alignment (owner update, RLS).
     throwIf(
@@ -370,56 +311,21 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
       "sessions update",
     );
 
-    // Render first: the exported MP4 carries the full mic track across every pause/resume clip,
-    // and its clock is the video's clock, so the transcript lines up with playback and captions.
-    let output = opts.resume?.exportPath ?? null;
-    let renderError: string | null = null;
-    if (!output || !(await recorder.pathExists(output))) {
-      // Hide the camera whenever no camera track was written, not just when the facecam flag was
-      // off: a facecam that failed to open leaves the same project a facecam-off take does.
-      const info = await recorder.studioProjectInfo(recording.projectPath).catch(() => null);
-      const hideCamera = !recording.facecam || !info?.cameraPath;
-      try {
-        output = await renderStudio({
-          job,
-          projectPath: recording.projectPath,
-          edit: { ...DEFAULT_EDIT, camera: { ...DEFAULT_EDIT.camera, hide: hideCamera } },
-          recordingId: recording.recordingId,
-        });
-      } catch (e) {
-        renderError = errorMessage(e);
-        output = null;
-      }
-    }
-
-    // Prefer the render (one clock for video, captions and transcript); fall back to the raw mic
-    // track, which is recorded independently of the camera. The fallback only covers the first
-    // clip of a paused recording, so it is a floor, not a replacement.
-    const transcribeInput = output ?? recording.micTrack;
     let vtt: string | null = null;
-    if (!opts.resume?.transcribed && transcribeInput) {
+    if (!opts.resume?.transcribed) {
       try {
         vtt = await transcribeSession({
           job,
           sessionId,
-          input: transcribeInput,
+          input: output,
           recordingId: recording.recordingId,
         });
       } catch (e) {
-        // A missing transcript must not block the video: record and carry on.
+        // A missing transcript must not block the video: mark the interview ungraded and carry on.
         console.warn("transcription failed", e);
         updateJob(job.id, { detail: `Transcription failed: ${errorMessage(e)}` });
+        await supabase.from("sessions").update({ graded: false }).eq("id", sessionId);
       }
-    }
-
-    // The transcript is saved by now, so the AI review is available either way; only the video
-    // is lost. Retry the render from Recordings.
-    if (!output) {
-      throw new Error(
-        `Rendering the interview video failed: ${renderError ?? "no rendered file"}.${
-          vtt ? " The transcript was saved, so the AI review still works." : ""
-        }`,
-      );
     }
 
     const post = await postForSession(sessionId);
@@ -427,7 +333,6 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
       job,
       userId,
       filePath: output,
-      mode: "studio",
       title: "Mock interview",
       sessionId,
       postId: post && !post.video_id ? post.id : null,
@@ -467,62 +372,10 @@ export async function publishInstantDemo(opts: DemoPublishOptions): Promise<stri
       job,
       userId: opts.userId,
       filePath: recording.outputMp4,
-      mode: "instant",
       title: opts.title,
       postId: opts.postId,
       slot: opts.slot,
       videoKind: "full",
-      recordingId: recording.recordingId,
-    });
-    await opts.queryClient?.invalidateQueries();
-    return videoId;
-  } catch (e) {
-    const message = errorMessage(e);
-    updateJob(job.id, { stage: "error", error: message, detail: message });
-    await patchRecordingMeta(recording.recordingId, { error: message });
-    throw e;
-  }
-}
-
-export interface StudioPublishOptions {
-  recording: Pick<CompletedRecording, "recordingId" | "projectPath" | "sessionId">;
-  edit: StudioEdit;
-  userId: string;
-  postId: string | null;
-  /** Which video slot on the post to fill. Defaults to `main`. */
-  slot?: VideoSlot;
-  title: string;
-  videoKind?: VideoKind;
-  vtt?: string | null;
-  queryClient?: QueryClient;
-}
-
-/** Studio: render with the user's edit, then upload and attach. */
-export async function exportAndPublish(opts: StudioPublishOptions): Promise<string> {
-  const { recording } = opts;
-  const job = createJob(newJobId("export"), "export", "Rendering and publishing", {
-    recordingId: recording.recordingId,
-    postId: opts.postId,
-    sessionId: recording.sessionId,
-  });
-  try {
-    const output = await renderStudio({
-      job,
-      projectPath: recording.projectPath,
-      edit: opts.edit,
-      recordingId: recording.recordingId,
-    });
-    const videoId = await publishVideo({
-      job,
-      userId: opts.userId,
-      filePath: output,
-      mode: "studio",
-      title: opts.title,
-      sessionId: recording.sessionId,
-      postId: opts.postId,
-      slot: opts.slot,
-      videoKind: opts.videoKind ?? "full",
-      vtt: opts.vtt ?? null,
       recordingId: recording.recordingId,
     });
     await opts.queryClient?.invalidateQueries();

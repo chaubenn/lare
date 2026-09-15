@@ -224,12 +224,6 @@ function SessionReview({ session }: { session: SessionDetail }) {
             {video.data ? (
               <>
                 <VideoEmbed video={video.data} title={title} startAt={seekTarget ?? undefined} />
-                <Link
-                  to={`/studio/${video.data.id}${post.data ? `?post=${post.data.id}` : ""}`}
-                  className="text-sm text-emerald-400 hover:underline"
-                >
-                  Open in studio
-                </Link>
                 {video.data.status === "ready" ? (
                   <p className="mt-1.5 text-xs text-zinc-500">
                     Seeking re-loads the player at the chosen time.

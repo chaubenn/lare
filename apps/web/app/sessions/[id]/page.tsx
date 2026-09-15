@@ -146,9 +146,6 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
             bunnyVideoId={video.bunny_video_id}
             durationMs={video.duration_ms}
           />
-          <Link href={`/studio/${video.id}`} className="text-sm underline">
-            Trim / desktop studio options
-          </Link>
         </section>
       ))}
       <Card className="p-4">

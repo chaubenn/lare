@@ -12,8 +12,7 @@ Lare records people's screens, voices and faces. These are the rules the product
     audio does not leave the machine; no other process can reach that socket from outside it.
     The app transcribes in rolling windows while the interview runs, so the transcript is ready
     when it ends.
-- Studio projects keep their editable source tracks in the app data folder (`Lare/recordings`)
-  so an edit can be redone. Everything else local is temporary — see below.
+- Local recordings are temporary — see below.
 
 ## What is uploaded, and when
 
@@ -105,8 +104,7 @@ of an ungraded interview; what ungraded means is that Lare never turns it into t
 
 - Removing a video from a draft or deleting a post calls `video-delete`, which deletes the Bunny
   video, the thumbnail object and the `videos` row.
-- Deleting a studio project in the app removes its local tracks. Instant takes have already been
-  removed automatically once the upload was confirmed.
+- Local recordings are removed automatically once the upload is confirmed.
 - Account deletion cascades through `profiles` -> sessions, posts, videos rows (Supabase Auth
   delete); Bunny objects for those videos should be removed with `video-delete` first (todo: a
   scheduled sweep for orphaned Bunny videos).

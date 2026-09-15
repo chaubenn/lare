@@ -7,7 +7,6 @@ pub mod pcm;
 pub mod recorder;
 pub mod recording;
 pub mod shutdown;
-mod source_import;
 pub mod windows;
 pub mod ws_server;
 
@@ -164,7 +163,6 @@ pub fn run() {
             ws: hub,
             initial_deeplink: Mutex::new(None),
         })
-        .manage(commands::Jobs::default())
         .manage(pcm)
         .invoke_handler(tauri::generate_handler![
             commands::configure_pcm,
@@ -197,10 +195,6 @@ pub fn run() {
             commands::focus_main,
             commands::media_info,
             commands::make_thumbnail,
-            commands::studio_project_info,
-            source_import::import_cloud_source,
-            commands::export_studio,
-            commands::cancel_job,
             commands::upload_to_bunny,
             commands::remember_upload,
             commands::whisper_models,

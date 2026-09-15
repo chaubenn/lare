@@ -3,10 +3,8 @@
 //! * [`devices`] lists displays, cameras and microphones.
 //! * [`permissions`] reports/requests OS capture permissions.
 //! * [`Feeds`] owns the long-lived camera/microphone actors and hands out locks.
-//! * [`start`] launches an **instant** (single MP4, camera window captured as part of the
-//!   screen) or **studio** (separate display/camera/mic tracks in a `.cap` project) recording;
-//!   [`ActiveRecording`] pauses/resumes/stops it.
-//! * [`export_studio`] renders a studio project to MP4 headlessly with `cap-export`.
+//! * [`start`] launches an instant recording (single MP4, camera window captured as part of the
+//!   screen); [`ActiveRecording`] pauses/resumes/stops it.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -16,78 +14,19 @@ use anyhow::{Context, anyhow};
 use cap_recording::feeds::camera::{self, CameraFeed, CameraFeedLock};
 use cap_recording::feeds::microphone::{self, MicrophoneFeed, MicrophoneFeedLock};
 use cap_recording::sources::screen_capture::ScreenCaptureTarget;
-use cap_recording::{instant_recording, studio_recording};
+use cap_recording::instant_recording;
 use kameo::Actor as _;
 use kameo::actor::ActorRef;
 use scap_targets::{Display, DisplayId};
 use serde::{Deserialize, Serialize};
 
-pub use cap_project::{ProjectConfiguration, RecordingMeta};
+pub use cap_project::RecordingMeta;
 
 pub mod devices;
-pub mod edit;
 pub mod permissions;
 pub mod thumbnail;
 mod fragmented;
 mod live;
-
-/// Path of the primary display track of a studio project (first segment).
-pub fn find_display_track(project_path: &Path) -> Option<PathBuf> {
-    first_segment_file(project_path, &["display.mp4", "display.mov"])
-}
-
-/// Every recording clip of a studio project (one per pause/resume stretch) with its display
-/// track and duration in seconds, in recording order. Empty until the project is remuxed.
-pub fn clip_tracks(project_path: &Path) -> Vec<(PathBuf, f64)> {
-    let segments = project_path.join("content").join("segments");
-    let Ok(rd) = std::fs::read_dir(&segments) else {
-        return Vec::new();
-    };
-    let mut dirs: Vec<PathBuf> = rd
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.is_dir())
-        .collect();
-    dirs.sort();
-    dirs.into_iter()
-        .filter_map(|dir| {
-            let p = ["display.mp4", "display.mov"]
-                .iter()
-                .map(|n| dir.join(n))
-                .find(|p| p.exists())?;
-            let d = thumbnail::probe(&p).ok()?.duration_ms? as f64 / 1000.0;
-            (d > 0.0).then_some((p, d))
-        })
-        .collect()
-}
-
-/// Path of the camera track of a studio project (first segment), if a camera was recorded.
-pub fn find_camera_track(project_path: &Path) -> Option<PathBuf> {
-    first_segment_file(project_path, &["camera.mp4", "camera.mov"]).or_else(|| {
-        ["content/camera.mp4", "content/camera.mov"]
-            .iter()
-            .map(|n| project_path.join(n))
-            .find(|p| p.exists())
-    })
-}
-
-fn first_segment_file(project_path: &Path, names: &[&str]) -> Option<PathBuf> {
-    let segments = project_path.join("content").join("segments");
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(&segments)
-        .ok()?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.is_dir())
-        .collect();
-    dirs.sort();
-    for dir in dirs {
-        for name in names {
-            let p = dir.join(name);
-            if p.exists() {
-                return Some(p);
-            }
-        }
-    }
-    None
-}
 
 // ---------------------------------------------------------------------------
 // Feeds (long-lived device actors)
@@ -189,8 +128,6 @@ impl Feeds {
 pub enum RecordingMode {
     /// One append-only MP4 (`content/capture.mp4`), camera preview captured with the screen.
     Instant,
-    /// Separate display/camera/mic tracks in a `.cap` project, rendered later via [`export_studio`].
-    Studio,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,11 +139,11 @@ pub struct StartRequest {
     pub display_id: Option<String>,
     /// Microphone label; `None` = no microphone.
     pub mic_label: Option<String>,
-    /// Camera device id; `None` = no camera track (studio) / no camera (instant).
+    /// Camera device id; `None` = no camera.
     pub camera_id: Option<String>,
     #[serde(default = "default_fps")]
     pub max_fps: u32,
-    /// Instant mode: cap the longest output edge (e.g. 1920). `None` = native resolution.
+    /// Cap the longest output edge (e.g. 1920). `None` = native resolution.
     pub max_output_size: Option<u32>,
     /// Capture system audio too.
     #[serde(default)]
@@ -221,17 +158,14 @@ fn default_fps() -> u32 {
 pub struct CompletedRecording {
     pub mode: RecordingMode,
     pub project_path: PathBuf,
-    /// Instant mode: the finished MP4. Studio mode: `None` until [`export_studio`] runs.
+    /// The finished MP4.
     pub output_mp4: Option<PathBuf>,
-    /// Studio mode: the microphone track (`content/segments/segment-0/audio-input.ogg`) if recorded.
-    pub mic_track: Option<PathBuf>,
     pub started_at_epoch_ms: u64,
     pub ended_at_epoch_ms: u64,
 }
 
 enum Handle {
     Instant(instant_recording::ActorHandle),
-    Studio(studio_recording::ActorHandle),
 }
 
 /// A running recording. Drop without `stop`/`cancel` leaves files on disk but stops nothing;
@@ -311,26 +245,10 @@ pub async fn start(req: StartRequest, feeds: &Feeds) -> anyhow::Result<ActiveRec
             let h = b.build().await?;
             Handle::Instant(h)
         }
-        RecordingMode::Studio => {
-            let mut b = studio_recording::Actor::builder(req.dir.clone(), target)
-                .with_system_audio(req.system_audio)
-                .with_max_fps(req.max_fps)
-                .with_custom_cursor(true);
-            if let Some(m) = mic.clone() {
-                b = b.with_mic_feed(m);
-            }
-            if let Some(c) = camera.clone() {
-                b = b.with_camera_feed(c);
-            }
-            #[cfg(target_os = "macos")]
-            let h = b.build(shareable).await?;
-            #[cfg(not(target_os = "macos"))]
-            let h = b.build().await?;
-            Handle::Studio(h)
-        }
     };
 
-    let live = if let Handle::Instant(h) = &handle {
+    let Handle::Instant(h) = &handle;
+    let live = {
         let result = h.take_segment_rx().ok_or_else(|| anyhow!("capture has no closed-fragment stream")).and_then(|rx| {
             live::LiveOutput::start(&req.dir, mic.is_some() || req.system_audio, move |timeout| {
                 use cap_enc_ffmpeg::segmented_stream::SegmentMediaType;
@@ -347,8 +265,6 @@ pub async fn start(req: StartRequest, feeds: &Feeds) -> anyhow::Result<ActiveRec
                 return Err(error);
             }
         }
-    } else {
-        None
     };
     Ok(ActiveRecording {
         mode: req.mode,
@@ -383,14 +299,12 @@ impl ActiveRecording {
     pub async fn pause(&self) -> anyhow::Result<()> {
         match &self.handle {
             Handle::Instant(h) => h.pause().await,
-            Handle::Studio(h) => h.pause().await,
         }
     }
 
     pub async fn resume(&self) -> anyhow::Result<()> {
         match &self.handle {
             Handle::Instant(h) => h.resume().await,
-            Handle::Studio(h) => h.resume().await,
         }
     }
 
@@ -408,29 +322,6 @@ impl ActiveRecording {
                     mode: RecordingMode::Instant,
                     project_path: done.project_path,
                     output_mp4: output.exists().then_some(output),
-                    mic_track: None,
-                    started_at_epoch_ms: self.started_at_epoch_ms,
-                    ended_at_epoch_ms: ended,
-                })
-            }
-            Handle::Studio(h) => {
-                let done = h.stop().await.context("stopping studio recording")?;
-                // Cap's studio pipeline writes each display track as DASH fragments and marks the
-                // project `NeedsRemux`; produce the per-segment `display.mp4` files the exporter,
-                // the editor preview and ffprobe-style tooling expect.
-                let project = done.project_path.clone();
-                tokio::task::spawn_blocking(move || {
-                    cap_recording::recovery::RecoveryManager::remux_if_needed(&project)
-                })
-                .await
-                .context("remux task panicked")?
-                .map_err(|e| anyhow!("remuxing studio recording: {e}"))?;
-                let mic_track = find_mic_track(&done.project_path);
-                Ok(CompletedRecording {
-                    mode: RecordingMode::Studio,
-                    project_path: done.project_path,
-                    output_mp4: None,
-                    mic_track,
                     started_at_epoch_ms: self.started_at_epoch_ms,
                     ended_at_epoch_ms: ended,
                 })
@@ -442,119 +333,18 @@ impl ActiveRecording {
     pub async fn cancel(self) -> anyhow::Result<()> {
         let result = match self.handle {
             Handle::Instant(h) => h.cancel().await,
-            Handle::Studio(h) => h.cancel().await,
         };
         if let Some(live) = self.live { let _ = live.finish(false).await; }
         result
     }
 }
 
-/// Locate the microphone track of a studio project (first segment).
-pub fn find_mic_track(project_path: &Path) -> Option<PathBuf> {
-    let names = [
-        "audio-input.m4a",
-        "audio-input.preview.m4a",
-        "audio-input.ogg",
-        "audio-input.mp3",
-        "audio-input.wav",
-        "audio.ogg",
-        "microphone.m4a",
-        "mic.m4a",
-    ];
-    first_segment_file(project_path, &names).or_else(|| {
-        names
-            .iter()
-            .map(|n| project_path.join("content").join(n))
-            .find(|p| p.exists())
-    })
-}
-
-/// WKWebView cannot play Cap's `audio-input.ogg` (Opus). Transcode to AAC/M4A for the editor preview.
-pub fn ensure_playable_audio(path: &Path) -> anyhow::Result<PathBuf> {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    if matches!(ext.as_str(), "m4a" | "mp3" | "wav" | "aac" | "mp4" | "caf") {
-        return Ok(path.to_path_buf());
-    }
-    let dest = path.with_extension("preview.m4a");
-    if dest.exists() {
-        if let Ok(meta) = dest.metadata() {
-            if meta.len() > 64 {
-                return Ok(dest);
-            }
-        }
-    }
-    transcode_audio_to_m4a(path, &dest)?;
-    Ok(dest)
-}
-
-fn transcode_audio_to_m4a(input: &Path, output: &Path) -> anyhow::Result<()> {
-    use cap_enc_ffmpeg::{AudioEncoder, aac::AACEncoder};
-    use cap_media_info::AudioInfo;
-    use ffmpeg::ChannelLayout;
-
-    ffmpeg::init().ok();
-    let mut ictx = ffmpeg::format::input(input)
-        .with_context(|| format!("opening {}", input.display()))?;
-    let input_stream = ictx
-        .streams()
-        .best(ffmpeg::media::Type::Audio)
-        .ok_or_else(|| anyhow!("no audio stream in {}", input.display()))?;
-    let input_stream_index = input_stream.index();
-    let input_time_base = input_stream.time_base();
-    let decoder_ctx = ffmpeg::codec::context::Context::from_parameters(input_stream.parameters())?;
-    let mut decoder = decoder_ctx.decoder().audio()?;
-    if decoder.channel_layout().is_empty() {
-        decoder.set_channel_layout(ChannelLayout::default(decoder.channels() as i32));
-    }
-    decoder.set_packet_time_base(input_time_base);
-    let input_audio_info = AudioInfo::from_decoder(&decoder)?;
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let mut octx = ffmpeg::format::output(output)
-        .with_context(|| format!("creating {}", output.display()))?;
-    let mut encoder = AACEncoder::init(input_audio_info, &mut octx)
-        .map_err(|e| anyhow!("aac encoder: {e}"))?;
-    octx.write_header()?;
-    let mut decoded_frame = ffmpeg::frame::Audio::empty();
-    for (stream, packet) in ictx.packets() {
-        if stream.index() != input_stream_index {
-            continue;
-        }
-        decoder.send_packet(&packet)?;
-        while decoder.receive_frame(&mut decoded_frame).is_ok() {
-            AudioEncoder::try_send_frame(&mut encoder, decoded_frame.clone(), &mut octx)?;
-        }
-    }
-    decoder.send_eof()?;
-    while decoder.receive_frame(&mut decoded_frame).is_ok() {
-        AudioEncoder::try_send_frame(&mut encoder, decoded_frame.clone(), &mut octx)?;
-    }
-    encoder.flush(&mut octx)?;
-    octx.write_trailer()?;
-    Ok(())
-}
-
-/// Remux a studio project's DASH display fragments into `display.mp4` files if Cap marked it
-/// `NeedsRemux` (e.g. a recording that was interrupted before `stop` completed). Returns `true`
-/// when work was done.
-pub fn remux_studio_if_needed(project_path: &Path) -> anyhow::Result<bool> {
-    cap_recording::recovery::RecoveryManager::remux_if_needed(project_path)
-        .map_err(|e| anyhow!("remuxing studio recording: {e}"))
-}
-
 /// Finish a project from whatever is on disk, without the actor that wrote it.
 ///
 /// [`ActiveRecording::stop`] does this with the actor's own completion handle; this is the same
 /// work for the two cases where that handle is gone: `stop` itself failed, and the process was
-/// killed mid-recording. Instant projects reuse a certified live output or are recovered into
-/// `content/output.mp4` (returned); studio
-/// projects are remuxed into the per-segment `display.mp4` files the exporter reads, and have no
-/// single output until [`export_studio`] runs.
+/// killed mid-recording. The project reuses a certified live output or is recovered into
+/// `content/output.mp4` (returned).
 pub fn finalize_project(mode: RecordingMode, project_path: &Path) -> anyhow::Result<Option<PathBuf>> {
     match mode {
         RecordingMode::Instant => {
@@ -574,84 +364,5 @@ pub fn finalize_project(mode: RecordingMode, project_path: &Path) -> anyhow::Res
             }
             Ok(output.exists().then_some(output))
         }
-        RecordingMode::Studio => {
-            remux_studio_if_needed(project_path)?;
-            Ok(None)
-        }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Export (studio projects)
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ExportQuality {
-    Maximum,
-    Social,
-    Web,
-    Potato,
-}
-
-impl From<ExportQuality> for cap_export::mp4::ExportCompression {
-    fn from(q: ExportQuality) -> Self {
-        match q {
-            ExportQuality::Maximum => cap_export::mp4::ExportCompression::Maximum,
-            ExportQuality::Social => cap_export::mp4::ExportCompression::Social,
-            ExportQuality::Web => cap_export::mp4::ExportCompression::Web,
-            ExportQuality::Potato => cap_export::mp4::ExportCompression::Potato,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExportRequest {
-    pub project_path: PathBuf,
-    /// Timeline/camera/background configuration. `None` = the project's saved
-    /// `project-config.json`, or Cap's defaults (full recording, camera bottom-right).
-    pub config: Option<ProjectConfiguration>,
-    pub output: PathBuf,
-    #[serde(default = "default_fps")]
-    pub fps: u32,
-    /// Longest edge of the rendered video, e.g. 1920 (defaults to the source size).
-    pub resolution_base: Option<(u32, u32)>,
-    pub quality: ExportQuality,
-}
-
-/// Render a studio project to MP4. `on_progress(rendered_frames, total_frames)`; return
-/// `false` from it to cancel.
-pub async fn export_studio<F>(req: ExportRequest, mut on_progress: F) -> anyhow::Result<PathBuf>
-where
-    F: FnMut(u32, u32) -> bool + Send + 'static,
-{
-    let mut builder = cap_export::ExporterBase::builder(req.project_path.clone())
-        .with_output_path(req.output.clone());
-    if let Some(cfg) = req.config.clone() {
-        builder = builder.with_config(cfg);
-    }
-    let base = builder.build().await.map_err(|e| anyhow!("export setup failed: {e}"))?;
-    let total = base.total_frames(req.fps);
-    // Default to the display track's own size so nothing is upscaled.
-    let source_size = find_display_track(&req.project_path)
-        .and_then(|p| thumbnail::probe(&p).ok())
-        .and_then(|m| Some((m.width?, m.height?)));
-    let (w, h) = req
-        .resolution_base
-        .or(source_size)
-        .map(|(w, h)| (w.max(2) & !1, h.max(2) & !1))
-        .unwrap_or((1920, 1080));
-    let settings = cap_export::mp4::Mp4ExportSettings {
-        fps: req.fps,
-        resolution_base: cap_project::XY::new(w, h),
-        compression: req.quality.into(),
-        custom_bpp: None,
-        force_ffmpeg_decoder: false,
-        optimize_filesize: true,
-    };
-    let path = settings
-        .export(base, move |frame| on_progress(frame, total))
-        .await
-        .map_err(|e| anyhow!("export failed: {e}"))?;
-    Ok(path)
 }

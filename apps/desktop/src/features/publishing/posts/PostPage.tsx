@@ -7,7 +7,6 @@ import {
   Lock,
   MoreHorizontal,
   Pencil,
-  Scissors,
   Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -200,21 +199,7 @@ function PostView({ post }: { post: PostDetail }) {
 
         {post.demo_videos && (post.show_demo_video || isMine) ? (
           <section>
-            <SectionTitle
-              action={
-                isMine ? (
-                  <Link
-                    to={`/studio/${post.demo_videos.id}?post=${post.id}&slot=demo`}
-                    className={buttonClass("ghost", "sm")}
-                  >
-                    <Scissors className="size-3.5" aria-hidden />
-                    Trim
-                  </Link>
-                ) : undefined
-              }
-            >
-              Summary video
-            </SectionTitle>
+            <SectionTitle>Summary video</SectionTitle>
             <VideoEmbed video={post.demo_videos} />
             {!post.show_demo_video && isMine ? <HiddenNote postId={post.id} /> : null}
           </section>
@@ -222,19 +207,7 @@ function PostView({ post }: { post: PostDetail }) {
 
         {(post.video_kind !== "none" || post.videos) && (post.show_video || isMine) ? (
           <section>
-            <SectionTitle
-              action={
-                isMine && post.videos ? (
-                  <Link
-                    to={`/studio/${post.videos.id}?post=${post.id}`}
-                    className={buttonClass("ghost", "sm")}
-                  >
-                    <Scissors className="size-3.5" aria-hidden />
-                    Open in studio
-                  </Link>
-                ) : undefined
-              }
-            >
+            <SectionTitle>
               {post.video_kind === "highlights" ? "Highlights" : "Demo video"}
             </SectionTitle>
             {post.videos ? (

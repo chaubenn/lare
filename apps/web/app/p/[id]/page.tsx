@@ -144,8 +144,6 @@ export default async function PostPage({ params }: Params) {
                     isOwner
                     isDraft={post.status === "draft"}
                     sessionId={session?.id ?? null}
-                    videoId={post.videos?.id ?? null}
-                    demoVideoId={post.demo_videos?.id ?? null}
                   />
                 </>
               ) : (

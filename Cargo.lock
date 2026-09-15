@@ -4376,8 +4376,6 @@ dependencies = [
  "anyhow",
  "cap-camera",
  "cap-enc-ffmpeg",
- "cap-export",
- "cap-media-info",
  "cap-project",
  "cap-recording",
  "cidre",

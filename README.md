@@ -23,7 +23,7 @@ Share posts with followers, attach demo videos, and run AI-graded mock interview
 | | |
 | --- | --- |
 | **Chrome extension** | Captures problems, your Monaco edits and judge results on its own — nothing to start or stop. Records mock interviews from a side panel. |
-| **Desktop app** (Tauri) | Records your screen natively with Cap's recording stack, edits takes in the studio, and **transcribes interviews locally with whisper.cpp**. |
+| **Desktop app** (Tauri) | Records your screen natively with Cap's recording stack and **transcribes interviews locally with whisper.cpp**. |
 | **Web** | The same app: feed, posts, profiles, drafts, sessions — plus recording in the browser. |
 
 **You can do everything on the web except be graded.** A mock interview is *graded* when the

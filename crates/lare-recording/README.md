@@ -14,7 +14,7 @@ numbers and track IDs are rewritten before appending. Only moof-relative fragmen
 are accepted. Unsupported layouts fail rather than silently corrupting offsets.
 
 The desktop's `prepare_bunny_upload` registers one pending target for the next
-`recording_start`. Start consumes it even on a failed/studio attempt. An explicit
+`recording_start`. Start consumes it even on a failed attempt. An explicit
 `upload: { tus, uploadUrl }` start argument can override it. Instant capture starts
 `lare_bunny::upload_growing_file` immediately and persists its resume URL beside
 the file. The existing post-recording upload command joins that tailer instead of
@@ -38,12 +38,9 @@ remain in the frontend publishing pipeline.
 
 ## Limits
 
-- Realtime upload applies to **instant demo captures** with a prepared target.
-  Studio capture keeps separate editable tracks and uses the unchanged full
-  renderer. Studio/interview upload still follows rendering.
-- Edited rendering cannot safely stream through the current public cap-export
-  API: its MP4File writer seeks and uses `+faststart`. No unsafe tailing of that
-  output, reduced editor, or replacement renderer was introduced.
+- Realtime upload applies to captures started with a prepared target (demo and
+  summary videos). Interviews started from the extension upload the finished MP4
+  after stop.
 - Latency is fragment-scale, not frame-scale: Cap normally closes video fragments
   around two seconds and audio fragments around three seconds, plus encoder and
   network delay. Short captures may only publish media at stop.

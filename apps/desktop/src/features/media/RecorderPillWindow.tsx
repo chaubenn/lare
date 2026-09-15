@@ -106,16 +106,12 @@ export function RecorderPillWindow() {
               : state === "starting"
                 ? "Starting…"
                 : state === "stopping"
-                  ? status?.mode === "instant"
-                    ? "Muxing…"
-                    : "Finishing…"
+                  ? "Finishing…"
                   : paused
                     ? "Paused"
                     : isInterview
                       ? "Mock interview"
-                      : status?.mode === "studio"
-                        ? "Studio recording"
-                        : "Recording"}
+                      : "Recording"}
           </div>
         </div>
         {isInterview ? (

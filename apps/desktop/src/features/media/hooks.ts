@@ -87,7 +87,6 @@ export interface RecordingWithMeta extends CompletedRecording {
   videoId: string | null;
   uploaded: boolean;
   transcribed: boolean;
-  exportPath: string | null;
   error: string | null;
 }
 
@@ -106,7 +105,6 @@ export function useRecordings() {
           videoId: m?.videoId ?? null,
           uploaded: m?.uploaded ?? false,
           transcribed: m?.transcribed ?? false,
-          exportPath: m?.exportPath ?? null,
           error: m?.error ?? null,
         };
       });

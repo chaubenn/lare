@@ -30,16 +30,8 @@ in the repository's setup instructions.
   post-recording upload command joins that tailer rather than starting a
   competing writer. See `crates/lare-recording/README.md` for the muxer's limits
   and its FFmpeg-free test harness.
-- **Studio capture and edited exports still upload after rendering.** Studio
-  keeps separate editable tracks, and `cap-export`'s MP4 writer seeks and uses
-  `+faststart`, so its output cannot be safely tailed. This is a deliberate
-  limit, not an unfinished piece.
-- **`/studio/:videoId` can import a cloud video.** `source_import.rs` downloads
-  a signed Bunny MP4 rendition through `bunny-download-source` into a fresh local
-  project. It is an encoded copy, not the original recording, and not separate
-  camera/microphone layers. The Bunny library settings it depends on are listed
-  in `docs/cloud-studio.md`; without them the studio shows the player and an
-  explicit source-unavailable message instead.
+- **There is no studio editor.** It was removed and is deferred; see
+  `docs/deferred/studio.md`.
 - Upload receipt is confirmed by `bunny-finalize-recording` before local cleanup.
   Failed uploads stay available in their draft's Media step. Successful instant
   takes are removed; edited project tracks remain, while their exported MP4 is
