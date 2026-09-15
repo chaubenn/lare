@@ -68,7 +68,7 @@ export function GoalDialog({ goal, onClose }: { goal: Goal | null; onClose: () =
   return (
     <Modal open onClose={onClose} title="Practice goal">
       <form
-        className="space-y-4"
+        className="space-y-4 p-4"
         onSubmit={(e) => {
           e.preventDefault();
           onSave();
