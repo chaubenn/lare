@@ -15,3 +15,4 @@ export * from "./session/protocol";
 export * from "./session/session";
 export * from "./session/skills";
 export * from "./session/timer";
+export * from "./social/notifications";

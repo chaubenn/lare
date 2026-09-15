@@ -22,6 +22,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
 tauri-plugin-process = "2"
+tauri-plugin-notification = "~2.3"
 # Desktop-only (no mobile build for Lare); pulls updates from the GitHub release `latest.json`.
 tauri-plugin-updater = "2"
 

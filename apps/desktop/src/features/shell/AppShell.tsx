@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { JobsTray } from "@/features/media/JobsTray";
 import { useRecordingEvents } from "@/features/media/useRecordingEvents";
+import { useNotificationStream } from "@/features/notifications/queries";
 import { useDraftsRealtime } from "@/features/publishing/drafts/queries";
 import { CommandPalette } from "./CommandPalette";
 import { NAV_ITEMS } from "./nav";
@@ -13,6 +14,7 @@ export function AppShell() {
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   useDraftsRealtime();
+  useNotificationStream();
   useRecordingEvents();
 
   useEffect(() => {

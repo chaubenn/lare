@@ -52,3 +52,13 @@ export function safeNextPath(value: string | null | undefined, fallback = "/"): 
   if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return fallback;
   return value;
 }
+
+/** Unread notifications for the signed-in viewer (RLS scopes the count to them). */
+export const getUnreadNotificationCount = cache(async (): Promise<number> => {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .is("read_at", null);
+  return error ? 0 : (count ?? 0);
+});

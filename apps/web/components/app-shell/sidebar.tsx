@@ -3,14 +3,22 @@
 import { SPRING } from "@lare/ui";
 import { Wordmark } from "@lare/ui/brand";
 import { cn } from "@lare/ui/cn";
-import { Inbox, Rss, Settings, SquarePen, User, Users } from "lucide-react";
+import { Bell, Inbox, Rss, Settings, SquarePen, User, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AvatarMenu } from "@/components/avatar-menu";
 import type { SiteViewer } from "@/components/site-chrome";
 
-export function Sidebar({ viewer, pending }: { viewer: SiteViewer; pending: number }) {
+export function Sidebar({
+  viewer,
+  pending,
+  unread,
+}: {
+  viewer: SiteViewer;
+  pending: number;
+  unread: number;
+}) {
   const pathname = usePathname();
   const items = [
     { href: "/", label: "Feed", icon: Rss },
@@ -18,8 +26,10 @@ export function Sidebar({ viewer, pending }: { viewer: SiteViewer; pending: numb
     { href: "/sessions", label: "Sessions", icon: Inbox },
     { href: viewer.handle ? `/u/${viewer.handle}` : "/onboarding", label: "Profile", icon: User },
     { href: "/friends", label: "Friends", icon: Users },
+    { href: "/notifications", label: "Notifications", icon: Bell },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
+  const counts: Record<string, number> = { "/friends": pending, "/notifications": unread };
   return (
     <aside
       data-app-sidebar
@@ -57,8 +67,8 @@ export function Sidebar({ viewer, pending }: { viewer: SiteViewer; pending: numb
                 )}
               />
               <span className="relative z-10 flex-1">{label}</span>
-              {href === "/friends" && pending > 0 && (
-                <span className="relative z-10 text-xs">{pending}</span>
+              {(counts[href] ?? 0) > 0 && (
+                <span className="relative z-10 text-xs">{counts[href]}</span>
               )}
             </Link>
           );
