@@ -4,6 +4,7 @@ export * from "./format/website";
 export * from "./leetcode/leetcode";
 export * from "./media/avatar";
 export * from "./media/media";
+export * from "./progress/goals";
 export * from "./progress/leaderboard";
 export * from "./session/activity";
 export * from "./session/ai-review";

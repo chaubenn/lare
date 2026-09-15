@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useSolvedActivity, useSolvedSkills } from "@/features/profile/queries";
+import { GoalPanel } from "@/features/progress/GoalPanel";
 import { useDrafts } from "@/features/publishing/drafts/queries";
 import type { FeedPost } from "./queries";
 
@@ -22,6 +23,7 @@ export function FeedSidebar({ posts }: { posts: FeedPost[] }) {
   return (
     <aside className="space-y-4" aria-label="Your progress and what's trending">
       <YourWeek />
+      <GoalPanel />
       <DraftsWaiting />
       <YourSkills />
       <Trending posts={posts} />

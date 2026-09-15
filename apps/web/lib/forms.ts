@@ -11,3 +11,11 @@ export const PROFILE_FORM_IDLE: ProfileFormState = { error: null, field: null };
 export function isUniqueViolation(error: { code?: string } | null | undefined): boolean {
   return error?.code === "23505";
 }
+
+/** State for the practice goal form on the home page. */
+export interface GoalFormState {
+  error: string | null;
+  ok?: boolean;
+}
+
+export const GOAL_FORM_IDLE: GoalFormState = { error: null };
