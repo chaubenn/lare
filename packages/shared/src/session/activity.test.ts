@@ -135,7 +135,28 @@ describe("summarizeActivity", () => {
     expect(summarizeActivity(days).streak).toBe(1);
   });
 
+  it("finds the longest run of solving days in the window", () => {
+    const days = [
+      day("2026-01-01", 1),
+      day("2026-01-02", 1),
+      day("2026-01-03", 0),
+      day("2026-01-04", 2),
+      day("2026-01-05", 1),
+      day("2026-01-06", 3),
+      day("2026-01-07", 0),
+    ];
+    const summary = summarizeActivity(days);
+    expect(summary.longestStreak).toBe(3);
+    expect(summary.streak).toBe(3);
+  });
+
   it("returns zeros for an empty window", () => {
-    expect(summarizeActivity([])).toEqual({ last7: 0, streak: 0, activeDays30: 0, bestDay: 0 });
+    expect(summarizeActivity([])).toEqual({
+      last7: 0,
+      streak: 0,
+      longestStreak: 0,
+      activeDays30: 0,
+      bestDay: 0,
+    });
   });
 });

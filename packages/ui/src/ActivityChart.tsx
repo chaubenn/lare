@@ -204,7 +204,10 @@ export function ActivityChart({
         {[
           ["All time", activity.all_time],
           ["Last 7 days", summary.last7],
-          ["Streak", summary.streak === 1 ? "1 day" : `${summary.streak} days`],
+          [
+            `Streak · best ${summary.longestStreak}`,
+            summary.streak === 1 ? "1 day" : `${summary.streak} days`,
+          ],
           ["Best day", summary.bestDay],
         ].map(([label, value], i) => (
           <div
