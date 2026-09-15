@@ -1,4 +1,4 @@
-import { formatDurationHuman, formatLocalTimestamp } from "@lare/shared";
+import { formatDurationHuman, formatLocalTimestamp, postStateOf } from "@lare/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -15,7 +15,7 @@ import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge, KindBadge } from "@/components/ui/Badge";
+import { Badge, KindBadge, PostStateBadge } from "@/components/ui/Badge";
 import { Button, buttonClass } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
@@ -119,6 +119,7 @@ function PostView({ post }: { post: PostDetail }) {
                   <span className="text-[var(--text-tertiary)]">@{author.handle}</span>
                 ) : null}
                 {post.status === "draft" ? <Badge tone="amber">Draft</Badge> : null}
+                {isMine ? <PostStateBadge state={postStateOf(post)} /> : null}
                 {post.visibility === "private" ? (
                   <Badge>
                     <Lock className="size-3" aria-hidden />

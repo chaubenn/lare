@@ -1,1 +1,7 @@
-export { Badge, CountBadge, KindBadge, SessionStatusBadge } from "@lare/ui/primitives";
+export {
+  Badge,
+  CountBadge,
+  KindBadge,
+  PostStateBadge,
+  SessionStatusBadge,
+} from "@lare/ui/primitives";

@@ -1,5 +1,10 @@
-import { buildSessionOverview, excerptFromHtml, formatDurationHuman } from "@lare/shared";
-import { buttonClass, Container, Tooltip } from "@lare/ui/primitives";
+import {
+  buildSessionOverview,
+  excerptFromHtml,
+  formatDurationHuman,
+  postStateOf,
+} from "@lare/shared";
+import { buttonClass, Container, PostStateBadge, Tooltip } from "@lare/ui/primitives";
 import { Clock, ListChecks, Lock, Pencil } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -121,14 +126,15 @@ export default async function PostPage({ params }: Params) {
                   </Tooltip>
                 )}
               </div>
-              <p className="text-xs text-zinc-500">
+              <p className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                 {post.published_at ? (
-                  <>
+                  <span>
                     Published <TimeAgo iso={post.published_at} />
-                  </>
+                  </span>
                 ) : (
                   "Draft"
                 )}
+                {isOwner ? <PostStateBadge state={postStateOf(post)} /> : null}
               </p>
             </div>
             <div className="ml-auto flex items-center gap-2">

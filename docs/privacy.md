@@ -82,6 +82,9 @@ review can be written to it — the database rejects the write, including from t
 
 - Posts are `public` or `private`. A public post on a **private account** is visible only to
   accepted followers; a private post only to its owner. Follow requests must be accepted.
+- A published post stays **pending** — visible only to its author — until every video it shows
+  has finished processing (migration `0018_pending_posts.sql`). It goes live on its own when the
+  last one is ready, even if the author's app is closed.
 - Mock-interview grades, transcripts and timestamped moments are shown to others only when the
   author turns on **Include AI insights with the post** for that post.
 

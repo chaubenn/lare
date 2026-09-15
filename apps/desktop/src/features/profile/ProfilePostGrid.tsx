@@ -1,6 +1,7 @@
+import { postStateOf } from "@lare/shared";
 import { Heart, MessageCircle, Play } from "lucide-react";
 import { Link } from "react-router";
-import { KindBadge } from "@/components/ui/Badge";
+import { KindBadge, PostStateBadge } from "@/components/ui/Badge";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import type { UserPost } from "./queries";
 
@@ -58,6 +59,7 @@ function PostTile({ post }: { post: UserPost }) {
         <p className="line-clamp-2 text-sm font-semibold text-[var(--text)]">{title}</p>
         <div className="flex flex-wrap items-center gap-1.5">
           {session ? <KindBadge kind={session.kind} /> : null}
+          <PostStateBadge state={postStateOf(post)} />
           {problems.length === 1 && problems[0]?.title === title ? (
             // The title already names the problem; just add its difficulty.
             <DifficultyTag difficulty={problems[0].difficulty} rounded />

@@ -1,9 +1,10 @@
-import { excerptFromHtml } from "@lare/shared";
+import { excerptFromHtml, postStateOf } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Heart, Lock, MessageCircle, Sparkles } from "lucide-react";
 import { Link } from "react-router";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
+import { PostStateBadge } from "@/components/ui/Badge";
 import { CommentsPreview } from "@/features/feed/CommentsPreview";
 import { PostLinkButton } from "@/features/feed/PostLinkButton";
 import { PostSlides } from "@/features/feed/PostSlides";
@@ -85,6 +86,8 @@ export function PostCard({
                 <span className="text-zinc-400">Only me</span>
               </>
             )}
+            {/* Only the author can load a post that is not live yet, so no ownership check. */}
+            <PostStateBadge state={postStateOf(post)} />
           </div>
         </div>
         <div className="shrink-0">

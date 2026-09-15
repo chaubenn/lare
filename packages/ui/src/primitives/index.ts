@@ -22,6 +22,7 @@ export { Collapsible } from "./Collapsible";
 export { Container } from "./Container";
 export { FieldError, Input, Label, Select, Textarea, Toggle } from "./Field";
 export { Modal } from "./Modal";
+export { PostStateBadge } from "./PostStateBadge";
 export { Progress } from "./Progress";
 export { Scrubber, type ScrubberMark } from "./Scrubber";
 export { type SegmentedTab, SegmentedTabs } from "./SegmentedTabs";

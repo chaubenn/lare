@@ -153,6 +153,11 @@ going through Bunny.
 - Publish a draft; the post page in the desktop and on the web render the runtime chart, code and
   video. A private account's public post is invisible to a stranger and visible to an accepted
   follower.
+- **Pending posts**: publish while the video is still processing. The author sees the post with a
+  **Pending** badge (feed card, post page, profile tile) and can watch the local preview; a
+  second account does not see it in the feed or at its link. When the video turns ready the post
+  appears for the second account at the top of the feed and the badge goes. A failed video shows
+  **Not visible** until it is replaced or hidden.
 
 ## Web
 
@@ -176,6 +181,10 @@ going through Bunny.
   the desktop/web Requests page reveals the posts.
 
 ## Database
+
+`0018_pending_posts.sql` is idempotent; `supabase/functions/_tests/pending_posts.sql` is its
+isolated fixture (pending, hidden videos, drafts, the ready trigger, swapping a video back to
+pending). Run it the same way as the others, never against real data.
 
 `0015_v1.sql` is idempotent — apply it twice against a disposable database and confirm both the
 second run and these behaviours. `supabase/functions/_tests/v1_schema.sql` is the isolated
