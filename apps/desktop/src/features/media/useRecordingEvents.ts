@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast/ToastProvider";
 import { useUser } from "@/features/auth/AuthProvider";
 import { errorMessage } from "@/lib/supabase";
 import { useTauriEvent } from "@/lib/tauri";
+import { localCopiesKey } from "./localCopies";
 import { processInterview, publishInstantDemo } from "./pipeline";
 import { getRecordingMeta } from "./recordingStore";
 
@@ -18,10 +19,12 @@ export function useRecordingEvents(): void {
 
   useTauriEvent("recording:completed", (recording) => {
     void queryClient.invalidateQueries({ queryKey: ["recorder", "recordings"] });
+    // A take that finished is playable from disk before it is uploaded.
+    void queryClient.invalidateQueries({ queryKey: localCopiesKey });
     if (recording.purpose === "interview") {
       toast({
         title: "Mock interview recorded",
-        description: "Transcribing and uploading in the background.",
+        description: "Watch it in the draft now; it transcribes and uploads in the background.",
       });
       processInterview({ recording, userId, queryClient })
         .then(() => {
@@ -57,7 +60,7 @@ export function useRecordingEvents(): void {
       .then(() => {
         toast({
           title: "Video uploaded",
-          description: "Bunny is encoding it now; the player appears when that finishes.",
+          description: "Others can watch it once it finishes processing.",
           variant: "success",
         });
       })

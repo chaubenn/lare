@@ -124,12 +124,14 @@ going through Bunny.
 - Draft -> **Record** with mic + facecam: camera bubble and pill appear. Upload
   progress should start climbing *during* the recording, not after stop. Stop -> video attached to
   the draft -> status goes processing -> ready (Realtime) -> player loads with a tokenised embed.
-  - Before the video is ready, the draft, post page and feed card play the **local preview**
-    (labelled as such). The take's folder in the app data folder (`Lare/recordings`) is still
+  - Right after stop, before the upload finishes, the draft already shows the video and plays the
+    **local preview** (labelled as such) with upload progress underneath; **Remove** is disabled
+    until the upload is done. The post page and feed card also play it until the video is ready. The take's folder in the app data folder (`Lare/recordings`) is still
     there; once the status turns ready it is **gone** within a few seconds (or at next launch).
   - Pull the network cable mid-upload. The upload must fail visibly, the local source must be
     **kept**, and the draft's Media step must offer a retry that works.
-- Mock interview started from the extension: on stop, Sessions -> the session shows video,
+- Mock interview started from the extension: right after stop the draft and the session page play
+  the local recording while it transcribes and uploads; then Sessions -> the session shows video,
   transcript, code timeline and the AI review. The 5/day limit surfaces as a toast.
 - Mock interview with **facecam off**: same pipeline, no camera track, transcript and review must
   still work.

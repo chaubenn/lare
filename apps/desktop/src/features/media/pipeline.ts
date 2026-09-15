@@ -64,20 +64,33 @@ export interface PublishVideoOptions {
   /** WebVTT captions to attach on Bunny once uploaded. */
   vtt?: string | null;
   recordingId?: string | null;
+  /** Called once the video is on the post, before the upload, so the UI can show the preview. */
+  onAttached?: () => Promise<unknown> | undefined;
+}
+
+interface RegisteredVideo {
+  created: CreateUploadResponse;
+  /** Upload URL of an earlier attempt at the same target, to resume. */
+  resumeUrl: string | undefined;
 }
 
 /**
- * Upload a finished MP4 to Bunny Stream and record it in `videos`. Resolves with the `videos.id`.
- * Safe to call again after a failure: the TUS upload resumes from the server offset.
+ * The `videos` row and Bunny upload target for a recording: the one already on record for it when
+ * it is still usable (a live capture or an earlier attempt), otherwise a new one. Recording the
+ * video id against the take is what lets the local preview play before any byte is uploaded.
  */
-export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
-  const { job, userId, filePath } = opts;
-  const rid = opts.recordingId ?? null;
-
+async function registerVideo(opts: {
+  job: Job;
+  filePath: string;
+  title: string;
+  sessionId?: string | null;
+  recordingId: string | null;
+}): Promise<RegisteredVideo> {
+  const { job, filePath } = opts;
+  const rid = opts.recordingId;
   stage(job, "create", "Registering the video");
-  const info = await recorder.mediaInfo(filePath);
   const meta = rid ? await getRecordingMeta(rid) : null;
-  const reusableUpload =
+  const reusable =
     meta?.upload &&
     (!meta.uploadPath || meta.uploadPath === filePath) &&
     !meta.uploaded &&
@@ -85,7 +98,7 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
       ? meta.upload
       : null;
   const created =
-    reusableUpload ??
+    reusable ??
     (await invokeFunction<CreateUploadResponse>("bunny-create-upload", {
       mode: "instant",
       title: opts.title,
@@ -98,11 +111,53 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
     await patchRecordingMeta(rid, {
       videoId: created.videoId,
       upload: created,
-      uploadUrl: reusableUpload ? meta?.uploadUrl : undefined,
+      uploadUrl: reusable ? meta?.uploadUrl : undefined,
       uploadPath: filePath,
       uploaded: false,
       error: null,
     });
+  // An expired target was replaced: the old row never got bytes, so it must not linger on a draft.
+  if (!reusable && meta?.videoId && meta.videoId !== created.videoId && !meta.uploaded)
+    void invokeFunction("video-delete", { videoId: meta.videoId }).catch(() => undefined);
+  return { created, resumeUrl: reusable ? meta?.uploadUrl : undefined };
+}
+
+async function attachVideo(
+  postId: string,
+  slot: VideoSlot,
+  videoId: string,
+  videoKind: VideoKind,
+): Promise<void> {
+  // `video_kind` describes the main video only — a summary clip is always the whole take.
+  const patch =
+    slot === "demo" ? { demo_video_id: videoId } : { video_id: videoId, video_kind: videoKind };
+  throwIf((await supabase.from("posts").update(patch).eq("id", postId)).error, "posts update");
+}
+
+/**
+ * Upload a finished MP4 to Bunny Stream and record it in `videos`. Resolves with the `videos.id`.
+ * Safe to call again after a failure: the TUS upload resumes from the server offset.
+ *
+ * The video is attached to the post before the upload starts, so the draft shows the local copy
+ * straight away; the post stays pending (visible only to its author) until Bunny has processed it.
+ */
+export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
+  const { job, userId, filePath } = opts;
+  const rid = opts.recordingId ?? null;
+
+  const info = await recorder.mediaInfo(filePath);
+  const { created, resumeUrl } = await registerVideo({
+    job,
+    filePath,
+    title: opts.title,
+    sessionId: opts.sessionId,
+    recordingId: rid,
+  });
+  if (opts.postId) {
+    stage(job, "attach", "Attaching to the post");
+    await attachVideo(opts.postId, opts.slot ?? "main", created.videoId, opts.videoKind ?? "full");
+    await opts.onAttached?.();
+  }
 
   throwIf(
     (
@@ -147,7 +202,7 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
       jobId: job.id,
       path: filePath,
       tus: created.tus,
-      resumeUrl: reusableUpload ? meta?.uploadUrl : undefined,
+      resumeUrl,
     });
     sizeBytes = result.sizeBytes;
   } finally {
@@ -186,19 +241,6 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
     } catch (e) {
       console.warn("captions failed", e);
     }
-  }
-
-  if (opts.postId) {
-    stage(job, "attach", "Attaching to the post");
-    // `video_kind` describes the main video only — a summary clip is always the whole take.
-    const patch =
-      opts.slot === "demo"
-        ? { demo_video_id: created.videoId }
-        : { video_id: created.videoId, video_kind: opts.videoKind ?? "full" };
-    throwIf(
-      (await supabase.from("posts").update(patch).eq("id", opts.postId)).error,
-      "posts update",
-    );
   }
 
   // The take stays on this device as a preview until Bunny has processed it; `localCopies.ts`
@@ -306,6 +348,25 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
       "sessions update",
     );
 
+    // Register the video and put it on the draft first: the recording is already on disk, so the
+    // author can watch it while it is transcribed and uploaded.
+    const { created } = await registerVideo({
+      job,
+      filePath: output,
+      title: "Mock interview",
+      sessionId,
+      recordingId: recording.recordingId,
+    });
+    // The extension creates the draft when the interview ends, which can land just after this.
+    const attachToDraft = async (): Promise<boolean> => {
+      const post = await postForSession(sessionId);
+      if (!post || (post.video_id && post.video_id !== created.videoId)) return false;
+      if (!post.video_id) await attachVideo(post.id, "main", created.videoId, "full");
+      return true;
+    };
+    const attached = await attachToDraft();
+    if (attached) await opts.queryClient?.invalidateQueries();
+
     let vtt: string | null = null;
     if (!opts.resume?.transcribed) {
       try {
@@ -323,18 +384,17 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
       }
     }
 
-    const post = await postForSession(sessionId);
     await publishVideo({
       job,
       userId,
       filePath: output,
       title: "Mock interview",
       sessionId,
-      postId: post && !post.video_id ? post.id : null,
       videoKind: "full",
       vtt,
       recordingId: recording.recordingId,
     });
+    if (!attached) await attachToDraft();
     await opts.queryClient?.invalidateQueries();
   } catch (e) {
     const message = errorMessage(e);
@@ -372,6 +432,7 @@ export async function publishInstantDemo(opts: DemoPublishOptions): Promise<stri
       slot: opts.slot,
       videoKind: "full",
       recordingId: recording.recordingId,
+      onAttached: () => opts.queryClient?.invalidateQueries(),
     });
     await opts.queryClient?.invalidateQueries();
     return videoId;

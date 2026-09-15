@@ -176,12 +176,21 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
             {draft.video_kind === "highlights" ? "Highlights reel" : "Full recording"}
             {video.data.duration_ms ? ` · ${Math.round(video.data.duration_ms / 1000)}s` : ""}
           </p>
+          {activeJob ? (
+            <JobProgress
+              label={activeJob.label}
+              detail={activeJob.detail}
+              percent={activeJob.percent}
+            />
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               variant="danger"
               icon={<Trash2 className="size-3.5" aria-hidden />}
               loading={removeVideo.isPending}
+              // Deleting a video mid-upload would pull it out from under its own pipeline.
+              disabled={!!activeJob}
               onClick={() => removeVideo.mutate()}
             >
               Remove
@@ -253,11 +262,19 @@ function SummaryVideoPanel({ draft }: { draft: Draft }) {
             Plays before the full recording
             {video.data.duration_ms ? ` · ${Math.round(video.data.duration_ms / 1000)}s` : ""}
           </p>
+          {activeJob ? (
+            <JobProgress
+              label={activeJob.label}
+              detail={activeJob.detail}
+              percent={activeJob.percent}
+            />
+          ) : null}
           <Button
             size="sm"
             variant="danger"
             icon={<Trash2 className="size-3.5" aria-hidden />}
             loading={removeVideo.isPending}
+            disabled={!!activeJob}
             onClick={() => removeVideo.mutate()}
           >
             Remove
