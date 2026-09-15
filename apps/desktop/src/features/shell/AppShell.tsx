@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { JobsTray } from "@/features/media/JobsTray";
+import { useLocalCopyCleanup } from "@/features/media/localCopies";
 import { useRecordingEvents } from "@/features/media/useRecordingEvents";
 import { useNotificationStream } from "@/features/notifications/queries";
 import { useDraftsRealtime } from "@/features/publishing/drafts/queries";
@@ -16,6 +17,7 @@ export function AppShell() {
   useDraftsRealtime();
   useNotificationStream();
   useRecordingEvents();
+  useLocalCopyCleanup();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

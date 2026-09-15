@@ -51,7 +51,7 @@ going through Bunny.
   the same time after stop.
 - The extension's toolbar icon opens a **side panel**, not a popup. Mock interviews are started
   from it and recorded by the desktop app.
-- There is no Recordings page. Local files are cleaned up once the cloud confirms receipt.
+- There is no Recordings page. Local files stay as a preview until their video is ready, then go.
 - The website has the desktop app's shell, plus drafts, sessions and browser recording.
 
 ## Chrome extension
@@ -124,8 +124,9 @@ going through Bunny.
 - Draft -> **Record** with mic + facecam: camera bubble and pill appear. Upload
   progress should start climbing *during* the recording, not after stop. Stop -> video attached to
   the draft -> status goes processing -> ready (Realtime) -> player loads with a tokenised embed.
-  - Then check the app data folder (`Lare/recordings`): the instant take's files are **gone**
-    once the receipt is confirmed.
+  - Before the video is ready, the draft, post page and feed card play the **local preview**
+    (labelled as such). The take's folder in the app data folder (`Lare/recordings`) is still
+    there; once the status turns ready it is **gone** within a few seconds (or at next launch).
   - Pull the network cable mid-upload. The upload must fail visibly, the local source must be
     **kept**, and the draft's Media step must offer a retry that works.
 - Mock interview started from the extension: on stop, Sessions -> the session shows video,

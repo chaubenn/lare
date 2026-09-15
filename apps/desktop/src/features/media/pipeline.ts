@@ -201,14 +201,9 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
     );
   }
 
-  if (rid) {
-    await patchRecordingMeta(rid, { uploaded: true, error: null });
-    try {
-      await recorder.delete(rid);
-    } catch (error) {
-      console.warn("Cloud receipt confirmed, but local cleanup failed", error);
-    }
-  }
+  // The take stays on this device as a preview until Bunny has processed it; `localCopies.ts`
+  // removes it once the video is ready.
+  if (rid) await patchRecordingMeta(rid, { uploaded: true, error: null });
   stage(job, "done", "Upload confirmed; playback becomes available as Bunny encodes");
   return created.videoId;
 }

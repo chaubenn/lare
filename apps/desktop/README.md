@@ -35,8 +35,10 @@ in the repository's setup instructions.
   and its FFmpeg-free test harness.
 - **There is no studio editor.** It was removed and is deferred; see
   `docs/deferred/studio.md`.
-- Upload receipt is confirmed by `bunny-finalize-recording` before local cleanup.
-  Failed uploads stay available in their draft's Media step.
+- Recordings stay on disk after upload and play as a local preview until their
+  video is `ready`; `features/media/localCopies.ts` then deletes them (on launch,
+  on the Realtime ready event, and every five minutes). Failed uploads stay
+  available in their draft's Media step.
 
 ## Still Needs A Machine
 

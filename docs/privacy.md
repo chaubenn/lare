@@ -19,11 +19,12 @@ Lare records people's screens, voices and faces. These are the rules the product
   consequence for privacy: the bytes are already leaving the machine during the recording, not at
   the moment you decide to keep it. Stopping early does not keep what was already sent — discard
   the video if you do not want it kept.
-- **The local copy does not survive the upload.** Once Bunny confirms receipt
-  (`bunny-finalize-recording`), an instant take's local files are deleted, and an edited take's
-  disposable render is deleted while its project tracks stay. Nothing is deleted before the
-  receipt: a failed upload keeps its source so it can be retried from the draft's Media step.
-  There is no longer a Recordings page, because there is no longer a local library to manage.
+- **The local copy lasts until the cloud copy has processed.** A desktop recording stays in the
+  app data folder (`Lare/recordings`) after upload so the author can watch it immediately, and is
+  deleted once its video is `ready` (or the video was removed). A failed upload or a video that
+  failed to process keeps its source so it can be retried. A browser recording's preview lives
+  only in that tab's memory. There is no Recordings page, because there is no local library to
+  manage.
 - **Practice is captured automatically**, with no start button: while the extension is installed
   and signed in, every LeetCode problem opened and every submission judged is saved (problem,
   code, verdict, runtime and memory). It is private to the account — it stays in the user's
@@ -88,7 +89,7 @@ review can be written to it — the database rejects the write, including from t
 
 - Removing a video from a draft or deleting a post calls `video-delete`, which deletes the Bunny
   video, the thumbnail object and the `videos` row.
-- Local recordings are removed automatically once the upload is confirmed.
+- Local recordings are removed automatically once their video has processed.
 - Account deletion cascades through `profiles` -> sessions, posts, videos rows (Supabase Auth
   delete); Bunny objects for those videos should be removed with `video-delete` first (todo: a
   scheduled sweep for orphaned Bunny videos).
