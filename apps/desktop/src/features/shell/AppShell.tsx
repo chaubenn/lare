@@ -7,6 +7,7 @@ import { useNotificationStream } from "@/features/notifications/queries";
 import { useDraftsRealtime } from "@/features/publishing/drafts/queries";
 import { CommandPalette } from "./CommandPalette";
 import { NAV_ITEMS } from "./nav";
+import { PageActionsSlot } from "./PageActions";
 import { Sidebar } from "./Sidebar";
 import { StatusFooter } from "./StatusFooter";
 import { UpdateBanner } from "./UpdateBanner";
@@ -48,6 +49,7 @@ export function AppShell() {
             <Outlet />
           </div>
         </main>
+        <PageActionsSlot />
         <JobsTray />
         <StatusFooter />
       </div>

@@ -16,6 +16,7 @@ import { useRecorderStatus } from "@/features/media/hooks";
 import { isActive, useJobs } from "@/features/media/jobs";
 import { PostMediaPanel } from "@/features/publishing/posts/PostMediaPanel";
 import { PostPreview, usePreviewSlides } from "@/features/publishing/posts/PostPreview";
+import { PageActions } from "@/features/shell/PageActions";
 import { copyText } from "@/lib/clipboard";
 import { postWebUrl } from "@/lib/env";
 import { formatDateTime, plural } from "@/lib/format";
@@ -306,7 +307,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const saveState = saveError ? "error" : saved ? "saved" : "saving";
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="w-full">
       <Link
         to="/drafts"
         className="inline-flex items-center gap-1 rounded-[var(--lare-r-1)] text-sm text-[var(--text-secondary)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
@@ -432,7 +433,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
         </aside>
 
         {/* ---- The current step ---- */}
-        <form onSubmit={onSubmit} className="min-w-0">
+        <form id="draft-editor-form" onSubmit={onSubmit} className="min-w-0">
           <header className="mb-5">
             {/* The narrow layout already shows this above its progress bar. */}
             <p className="mb-1 hidden text-xs font-medium text-[var(--text-secondary)] lg:block">
@@ -562,8 +563,8 @@ function DraftEditor({ draft }: { draft: Draft }) {
             ) : null}
           </div>
 
-          {/* ---- One action bar for every step ---- */}
-          <div className="lare-material-thin sticky bottom-0 -mx-5 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-5 py-3">
+          {/* ---- One action bar for every step, across the whole content pane ---- */}
+          <PageActions>
             <Button
               variant="ghost"
               icon={<ArrowLeft className="size-4" aria-hidden />}
@@ -584,13 +585,14 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 Save draft
               </Button>
               {step < STEPS.length - 1 ? (
-                <Button type="submit" variant="primary" disabled={busy}>
+                <Button type="submit" form="draft-editor-form" variant="primary" disabled={busy}>
                   Continue to {STEPS[step + 1]?.label}
                   <ArrowRight className="size-4" aria-hidden />
                 </Button>
               ) : (
                 <Button
                   type="submit"
+                  form="draft-editor-form"
                   variant="primary"
                   icon={<Send className="size-4" aria-hidden />}
                   loading={publish.isPending}
@@ -601,7 +603,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
                 </Button>
               )}
             </div>
-          </div>
+          </PageActions>
         </form>
       </div>
 
