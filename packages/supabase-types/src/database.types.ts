@@ -773,6 +773,7 @@ export type Database = {
       }
       profile_stats: { Args: { target_handle: string }; Returns: Json }
       solved_activity: { Args: { target_handle: string; days?: number }; Returns: Json }
+      solved_skills: { Args: { target_handle: string }; Returns: Json }
       request_follow: {
         Args: { target_handle: string }
         Returns: Database["public"]["Enums"]["follow_status"]

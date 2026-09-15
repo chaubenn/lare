@@ -7,7 +7,7 @@ import { useViewerLikes } from "@/features/publishing/posts/social";
 import { profileWebUrl } from "@/lib/env";
 import { openExternal } from "@/lib/open";
 import { ProfileView } from "./ProfileView";
-import { useProfileStats, useSolvedActivity, useUserPosts } from "./queries";
+import { useProfileStats, useSolvedActivity, useSolvedSkills, useUserPosts } from "./queries";
 
 export { type StatItem, StatStrip } from "./StatStrip";
 
@@ -17,6 +17,7 @@ export function ProfilePage() {
   const { profile, session, userId } = useUser();
   const stats = useProfileStats(profile?.handle);
   const activity = useSolvedActivity(profile?.handle);
+  const skills = useSolvedSkills(profile?.handle);
   const posts = useUserPosts(userId);
   const postList = posts.data ?? [];
   const likes = useViewerLikes(
@@ -72,6 +73,7 @@ export function ProfilePage() {
       onRetryStats={() => void stats.refetch()}
       showExtendedStats
       activity={activity.data}
+      skills={skills.data}
       posts={postList}
       postsPending={posts.isPending}
       postsError={posts.isError ? posts.error : undefined}

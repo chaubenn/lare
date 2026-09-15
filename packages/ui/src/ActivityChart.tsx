@@ -21,6 +21,10 @@ import { Button } from "./primitives/Button";
 
 type Mode = "day" | "week";
 
+const DAY_WINDOW = 7;
+/** Weeks per page: about a month. Seven weeks back read as an arbitrary span. */
+const WEEK_WINDOW = 4;
+
 function describeDayPage(bars: ActivityDay[]): string {
   const total = bars.reduce((n, d) => n + d.count, 0);
   const activeDays = bars.filter((d) => d.count > 0).length;
@@ -30,7 +34,7 @@ function describeDayPage(bars: ActivityDay[]): string {
 
 function describeWeekPage(bars: ActivityWeek[]): string {
   const total = bars.reduce((n, w) => n + w.count, 0);
-  if (total === 0) return "No problems these 7 weeks";
+  if (total === 0) return `No problems these ${bars.length} weeks`;
   return `${total} problem${total === 1 ? "" : "s"} over the last ${bars.length} weeks`;
 }
 
@@ -63,7 +67,7 @@ function NavButton({
 }
 
 /**
- * Hevy-style solve chart. Toggle between a 7-day and a 7-week window; swipe
+ * Hevy-style solve chart. Toggle between the last 7 days and the last 4 weeks (about a month); swipe
  * (drag, arrows, or keyboard) to page back through history.
  */
 export function ActivityChart({
@@ -83,9 +87,10 @@ export function ActivityChart({
   const days = useMemo(() => buildActivityDays(activity), [activity]);
   const weeks = useMemo(() => buildActivityWeekBars(activity), [activity]);
 
-  const dayBars = useMemo(() => pageWindow(days, 7, page), [days, page]);
-  const weekBars = useMemo(() => pageWindow(weeks, 7, page), [weeks, page]);
-  const lastPage = maxPage(mode === "day" ? days.length : weeks.length, 7);
+  const dayBars = useMemo(() => pageWindow(days, DAY_WINDOW, page), [days, page]);
+  const weekBars = useMemo(() => pageWindow(weeks, WEEK_WINDOW, page), [weeks, page]);
+  const lastPage =
+    mode === "day" ? maxPage(days.length, DAY_WINDOW) : maxPage(weeks.length, WEEK_WINDOW);
   const clampedPage = Math.min(page, lastPage);
 
   useEffect(() => {
@@ -137,7 +142,7 @@ export function ActivityChart({
     <section
       aria-labelledby="activity-heading"
       className={cn(
-        "relative rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] p-5",
+        "@container relative rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] p-5",
         className,
       )}
       onKeyDown={(e) => {
@@ -160,8 +165,8 @@ export function ActivityChart({
                   ? "in the last 7 days"
                   : "that week"
                 : clampedPage === 0
-                  ? "in the last 7 weeks"
-                  : "in those 7 weeks"}
+                  ? "in the last 4 weeks"
+                  : "in those 4 weeks"}
             </span>
           </p>
           <p className="mt-1.5 min-h-4 text-xs text-[var(--text-secondary)]" aria-live="polite">
@@ -195,7 +200,7 @@ export function ActivityChart({
         </div>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 border-y border-[var(--border)] sm:grid-cols-4">
+      <dl className="mt-4 grid grid-cols-2 border-y border-[var(--border)] @xl:grid-cols-4">
         {[
           ["All time", activity.all_time],
           ["Last 7 days", summary.last7],
@@ -206,8 +211,8 @@ export function ActivityChart({
             key={label}
             className={cn(
               "flex flex-col-reverse py-3",
-              i > 0 && "sm:border-l sm:border-[var(--border)] sm:pl-4",
-              i % 2 === 1 && "max-sm:pl-4",
+              i > 0 && "@xl:border-l @xl:border-[var(--border)] @xl:pl-4",
+              i % 2 === 1 && "@max-xl:pl-4",
             )}
           >
             <dt className="mt-0.5 text-xs text-[var(--text-secondary)]">{label}</dt>

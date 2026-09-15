@@ -11,4 +11,5 @@ export * from "./session/edits";
 export * from "./session/overview";
 export * from "./session/protocol";
 export * from "./session/session";
+export * from "./session/skills";
 export * from "./session/timer";

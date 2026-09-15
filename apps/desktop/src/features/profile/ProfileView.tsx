@@ -1,4 +1,10 @@
-import { formatDurationHuman, type SolvedActivity, websiteHref, websiteLabel } from "@lare/shared";
+import {
+  formatDurationHuman,
+  type SolvedActivity,
+  type SolvedSkills,
+  websiteHref,
+  websiteLabel,
+} from "@lare/shared";
 import { ExternalLink, Lock } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ActivityGrid } from "@/components/ActivityGrid";
@@ -10,6 +16,7 @@ import { openExternal } from "@/lib/open";
 import { FollowListModal } from "./FollowListModal";
 import { ProfilePostGrid } from "./ProfilePostGrid";
 import type { FollowListKind, UserPost } from "./queries";
+import { SkillsPanel } from "./SkillsPanel";
 import { StatStrip } from "./StatStrip";
 
 const SECTION_HEADING = "mb-3 text-sm font-semibold text-[var(--text)]";
@@ -33,6 +40,7 @@ export function ProfileView({
   onRetryStats,
   showExtendedStats,
   activity,
+  skills,
   posts,
   postsPending,
   postsError,
@@ -57,6 +65,7 @@ export function ProfileView({
   onRetryStats?: () => void;
   showExtendedStats: boolean;
   activity?: SolvedActivity | null;
+  skills?: SolvedSkills | null;
   posts: UserPost[];
   postsPending: boolean;
   postsError: unknown;
@@ -150,12 +159,18 @@ export function ProfileView({
         </div>
       ) : (
         <>
-          {activity?.visible ? (
-            <section className="mt-8" aria-labelledby="profile-activity">
-              <h2 id="profile-activity" className={SECTION_HEADING}>
-                Activity
+          {activity?.visible || skills?.visible ? (
+            <section className="mt-8" aria-labelledby="profile-progress">
+              <h2 id="profile-progress" className={SECTION_HEADING}>
+                Progress
               </h2>
-              <ActivityGrid activity={activity} />
+              {/* Side by side, so neither panel sprawls across the whole page on its own. */}
+              <div
+                className={`grid items-start gap-4 ${activity?.visible && skills?.visible ? "lg:grid-cols-2" : ""}`}
+              >
+                {activity?.visible ? <ActivityGrid activity={activity} /> : null}
+                {skills?.visible ? <SkillsPanel skills={skills} /> : null}
+              </div>
             </section>
           ) : null}
 

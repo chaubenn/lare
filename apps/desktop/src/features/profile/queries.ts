@@ -1,4 +1,4 @@
-import { parseSolvedActivity } from "@lare/shared";
+import { parseSolvedActivity, parseSolvedSkills } from "@lare/shared";
 import type { Profile } from "@lare/supabase-types";
 import type { QueryData } from "@supabase/supabase-js";
 import { useQuery } from "@tanstack/react-query";
@@ -36,6 +36,23 @@ export function useSolvedActivity(handle: string | null | undefined) {
       });
       if (error) throw error;
       return parseSolvedActivity(data);
+    },
+  });
+}
+
+/**
+ * Every distinct solved problem with its difficulty and topics, for the skills panel. Returns
+ * `visible: false` for a private account the viewer doesn't follow, like solved activity.
+ */
+export function useSolvedSkills(handle: string | null | undefined) {
+  return useQuery({
+    queryKey: ["solved-skills", handle],
+    enabled: !!handle,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("solved_skills", { target_handle: handle ?? "" });
+      if (error) throw error;
+      return parseSolvedSkills(data);
     },
   });
 }

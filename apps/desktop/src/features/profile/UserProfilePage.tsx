@@ -13,6 +13,7 @@ import {
   useProfileStats,
   usePublicProfile,
   useSolvedActivity,
+  useSolvedSkills,
   useUserPosts,
 } from "./queries";
 
@@ -26,6 +27,7 @@ export function UserProfilePage() {
 
   const stats = useProfileStats(handle);
   const activity = useSolvedActivity(handle);
+  const skills = useSolvedSkills(handle);
   const followState = useFollowState(profile?.id);
   const posts = useUserPosts(profile?.id);
   const postList = posts.data ?? [];
@@ -82,6 +84,7 @@ export function UserProfilePage() {
       stats={stats.data}
       showExtendedStats={visible}
       activity={activity.data}
+      skills={skills.data}
       posts={postList}
       postsPending={posts.isPending}
       postsError={posts.isError ? posts.error : undefined}
