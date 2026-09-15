@@ -12,15 +12,15 @@ export function PageActionsSlot() {
 }
 
 /**
- * A page's action bar, pinned to the bottom of the content pane at its full width. `className`
- * sizes the row of buttons inside it, so they can line up with the page's own columns.
+ * A page's action bar, pinned to the bottom of the content pane at its full width. Its buttons
+ * follow the page's own width: the centred 1360px column, or the whole pane for `fullWidth` pages.
  */
 export function PageActions({
   children,
-  className = "mx-auto max-w-[1360px]",
+  fullWidth = false,
 }: {
   children: ReactNode;
-  className?: string;
+  fullWidth?: boolean;
 }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useEffect(() => setSlot(document.getElementById(SLOT_ID)), []);
@@ -29,7 +29,7 @@ export function PageActions({
     <div className="lare-material-thin border-t border-[var(--border)]">
       {/* Same gutters as the page above, so the buttons line up with its content. */}
       <div
-        className={`flex w-full flex-wrap items-center justify-between gap-3 px-5 py-3 ${className}`}
+        className={`flex w-full flex-wrap items-center justify-between gap-3 px-5 py-3 ${fullWidth ? "" : "mx-auto max-w-[1360px]"}`}
       >
         {children}
       </div>

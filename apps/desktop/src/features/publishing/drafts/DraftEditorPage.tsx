@@ -316,7 +316,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
         Drafts
       </Link>
 
-      <div className="mt-4 grid gap-8 lg:grid-cols-[15rem_minmax(0,64rem)]">
+      <div className="mt-4 grid gap-8 lg:grid-cols-[15rem_minmax(0,1fr)]">
         {/* ---- Step rail: where you are, what's left, and what this draft is ---- */}
         <aside className="lg:sticky lg:top-0 lg:self-start">
           <p className="truncate text-sm font-semibold text-[var(--text)]" title={title}>
@@ -564,8 +564,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
           </div>
 
           {/* ---- One action bar for every step, across the whole content pane ---- */}
-          {/* Rail 15rem + gap 2rem + form 64rem + the bar's own 2.5rem gutters. */}
-          <PageActions className="max-w-[83.5rem]">
+          <PageActions fullWidth>
             <Button
               variant="ghost"
               icon={<ArrowLeft className="size-4" aria-hidden />}
