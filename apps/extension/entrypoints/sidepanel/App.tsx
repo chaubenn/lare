@@ -7,6 +7,12 @@ import { PAGE_PROBLEM_REQUEST, type PageProblemReply } from "@/src/pageControlle
 
 const SITE_URL: string = import.meta.env.WXT_SITE_URL ?? "https://lare-one.vercel.app";
 
+type Tab = "tracking" | "interview";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "tracking", label: "Tracking" },
+  { id: "interview", label: "Mock interview" },
+];
+
 export function App() {
   const [snap, setSnap] = useState<RuntimeSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
@@ -21,6 +27,7 @@ export function App() {
   const [gradedChoice, setGraded] = useState<boolean | null>(null);
   const [facecam, setFacecam] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [tab, setTab] = useState<Tab>("tracking");
   const [, setTick] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -144,10 +151,17 @@ export function App() {
   // Ids posted or cleared elsewhere must not stay selected.
   const selectedIds = selected.filter((id) => tracked.some((p) => p.sessionProblemId === id));
 
+  const starting = !interview && recording?.state === "starting";
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is the trigger
   useEffect(() => {
     setConfirmEnd(false);
   }, [sessionId]);
+
+  // A live interview is what the panel is for until it ends.
+  useEffect(() => {
+    if (sessionId || starting) setTab("interview");
+  }, [sessionId, starting]);
 
   return (
     <div className="sidepanel">
@@ -249,361 +263,417 @@ export function App() {
         </section>
       ) : (
         <>
-          <section className="account">
-            {auth.avatarUrl ? (
-              <img src={auth.avatarUrl} alt="" className="avatar" />
-            ) : (
-              <div className="avatar" />
-            )}
-            <div className="grow">
-              <div className="name">
-                {auth.displayName ?? auth.handle ?? auth.email ?? "Signed in"}
-              </div>
-              <div className="handle">
-                {auth.handle ? `@${auth.handle}` : "Set a handle in the app"}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="link"
-              disabled={busy || !!interview}
-              onClick={() => void run(() => sendRuntime({ type: "SIGN_OUT" }))}
-            >
-              Sign out
-            </button>
-          </section>
+          <div className="tabs" role="tablist" aria-label="Lare">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                id={`tab-${t.id}`}
+                type="button"
+                role="tab"
+                className="tab"
+                aria-selected={tab === t.id}
+                aria-controls={`pane-${t.id}`}
+                tabIndex={tab === t.id ? 0 : -1}
+                onClick={() => setTab(t.id)}
+                onKeyDown={(e) => {
+                  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                  const step = e.key === "ArrowRight" ? 1 : TABS.length - 1;
+                  const next = TABS[(TABS.indexOf(t) + step) % TABS.length];
+                  if (!next) return;
+                  setTab(next.id);
+                  document.getElementById(`tab-${next.id}`)?.focus();
+                }}
+              >
+                {t.label}
+                {t.id === "tracking" && tracked.length > 0 && (
+                  <span className="tab-count">{tracked.length}</span>
+                )}
+                {t.id === "interview" && (interview || starting) && (
+                  <span className="tab-live" role="img" aria-label="In progress" />
+                )}
+                {t.id === "interview" && !interview && !!snap.state.pendingSync.length && (
+                  <span className="tab-alert" role="img" aria-label="Needs attention" />
+                )}
+              </button>
+            ))}
+          </div>
 
-          <section className="card">
-            <h2 className="card-title">
-              Tracking submissions
-              <span className="badge on">On</span>
-            </h2>
-            <p className="note">
-              Problems and submissions are saved to your cloud inbox. No desktop app needed.
-            </p>
-            {tracked.length > 0 && (
-              <div className="list-bar">
-                <span>
-                  {selectedIds.length > 0
-                    ? `${selectedIds.length} of ${tracked.length} selected`
-                    : `${tracked.length} tracked`}
-                </span>
-                {!confirmClear && (
-                  <button
-                    type="button"
-                    className="link"
-                    disabled={busy}
-                    onClick={() => setConfirmClear(true)}
-                  >
-                    {selectedIds.length > 0 ? `Clear ${selectedIds.length} selected` : "Clear all"}
-                  </button>
-                )}
-              </div>
-            )}
-            <ul className="problems">
-              {tracked.map((p) => (
-                <li key={p.sessionProblemId}>
-                  <label className="problem">
-                    <input
-                      type="checkbox"
-                      className="check"
-                      aria-label={`Select ${p.title || p.slug}`}
-                      disabled={!p.synced}
-                      checked={selectedIds.includes(p.sessionProblemId)}
-                      onChange={(e) =>
-                        setSelected(
-                          e.target.checked
-                            ? [...selectedIds, p.sessionProblemId]
-                            : selectedIds.filter((id) => id !== p.sessionProblemId),
-                        )
-                      }
-                    />
-                    <span className="problem-title">{p.title || p.slug}</span>
-                    <span className="problem-meta">
-                      {p.submissionCount === 0
-                        ? "opened"
-                        : `${p.acceptedCount}/${p.submissionCount} accepted`}
-                    </span>
-                  </label>
-                </li>
-              ))}
-              {tracked.length === 0 && (
-                <li className="problems-empty">Nothing tracked yet — open a LeetCode problem.</li>
-              )}
-            </ul>
-            <button
-              type="button"
-              className="btn"
-              disabled={busy || selectedIds.length === 0}
-              onClick={() =>
-                void run(() => sendRuntime({ type: "PUBLISH_PROBLEMS", ids: selectedIds })).then(
-                  (res) => {
-                    setSelected([]);
-                    if (res.ok && res.postId)
-                      void chrome.tabs.create({ url: `${SITE_URL}/drafts/${res.postId}` });
-                  },
-                )
-              }
+          {tab === "tracking" ? (
+            <section
+              className="pane"
+              id="pane-tracking"
+              role="tabpanel"
+              aria-labelledby="tab-tracking"
             >
-              Create draft from selected problems
-            </button>
-            {confirmClear && (
-              <div className="confirm-sheet" role="dialog" aria-label="Clear tracked problems">
-                <p>
-                  {selectedIds.length > 0
-                    ? `Remove ${selectedIds.length} selected problem${selectedIds.length === 1 ? "" : "s"}`
-                    : "Remove every tracked problem"}{" "}
-                  from your inbox without posting? Their captured submissions are deleted too.
-                </p>
-                <div className="row">
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    disabled={busy}
-                    onClick={() => {
-                      setConfirmClear(false);
-                      const ids = selectedIds.length > 0 ? selectedIds : undefined;
-                      void run(() => sendRuntime({ type: "CLEAR_TRACKED", ids })).then(() =>
-                        setSelected([]),
-                      );
-                    }}
-                  >
-                    Confirm clear
-                  </button>
-                  <button type="button" className="btn" onClick={() => setConfirmClear(false)}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="card">
-            {interview ? (
-              <>
-                <h2 className="card-title">
-                  Mock interview
-                  <span className={`badge ${status}`}>{status}</span>
-                </h2>
-                <div className="timer" role="timer">
-                  {formatDuration(activeMs(interview.events, Date.now()))}
-                </div>
-                <p className="note">
-                  {snap.capture?.graded
-                    ? "Graded: local Whisper and AI review"
-                    : "Ungraded: video only, no transcript or AI review"}
-                </p>
-                {snap.capture?.message && (
-                  <p className="muted" role="status">
-                    {snap.capture.message}
-                  </p>
-                )}
-                {!!snap.capture?.recordedBytes && (
-                  <p className="muted">
-                    {((snap.capture.uploadedBytes ?? 0) / 1048576).toFixed(1)} /{" "}
-                    {(snap.capture.recordedBytes / 1048576).toFixed(1)} MB uploaded
-                  </p>
-                )}
-                {snap.capture?.transcript && (
-                  <section className="transcript" aria-label="Live transcript">
-                    {snap.capture.transcript}
-                  </section>
-                )}
-                {recording?.state === "recording" && (
-                  <p className="muted">Recording. A red dot shows on the problem page.</p>
-                )}
-                <ul className="problems">
-                  {interview.problems.map((p) => (
-                    <li key={p.sessionProblemId} className="problem plain">
-                      <span className="problem-title">{p.problem.title}</span>
-                      <span className="problem-meta">
-                        {p.submissions.filter((sub) => sub.accepted).length}/{p.submissions.length}{" "}
-                        accepted
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="row">
-                  {status === "running" ? (
+              <h2 className="card-title">
+                Tracking submissions
+                <span className="badge on">On</span>
+              </h2>
+              <p className="note">
+                Problems and submissions are saved to your cloud inbox. No desktop app needed.
+              </p>
+              {tracked.length > 0 && (
+                <div className="list-bar">
+                  <span>
+                    {selectedIds.length > 0
+                      ? `${selectedIds.length} of ${tracked.length} selected`
+                      : `${tracked.length} tracked`}
+                  </span>
+                  {!confirmClear && (
                     <button
                       type="button"
-                      className="btn"
+                      className="link"
                       disabled={busy}
-                      onClick={() => void run(() => sendRuntime({ type: "PAUSE_SESSION" }))}
+                      onClick={() => setConfirmClear(true)}
                     >
-                      Pause
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn"
-                      disabled={busy || status === "ended"}
-                      onClick={() => void run(() => sendRuntime({ type: "RESUME_SESSION" }))}
-                    >
-                      Resume
+                      {selectedIds.length > 0
+                        ? `Clear ${selectedIds.length} selected`
+                        : "Clear all"}
                     </button>
                   )}
-                  {!confirmEnd && status !== "ended" ? (
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={busy}
-                      onClick={() => setConfirmEnd(true)}
-                    >
-                      End &amp; save
-                    </button>
-                  ) : null}
                 </div>
-                {confirmEnd && (
-                  <div className="confirm-sheet" role="dialog" aria-label="End mock interview">
-                    <p>End and save this mock interview?</p>
-                    <div className="row">
-                      <button
-                        type="button"
-                        className="btn btn-danger"
-                        disabled={busy}
-                        onClick={() => {
-                          setConfirmEnd(false);
-                          void run(() => sendRuntime({ type: "END_SESSION" }));
-                        }}
-                      >
-                        Confirm end
-                      </button>
-                      <button type="button" className="btn" onClick={() => setConfirmEnd(false)}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <h2 className="card-title">Mock interview</h2>
-                <p className="note">Records your screen and microphone. Camera is optional.</p>
-                <div className="options">
-                  <div className="option">
-                    <label className="option-row">
-                      Transcript &amp; AI review
+              )}
+              <ul className="problems">
+                {tracked.map((p) => (
+                  <li key={p.sessionProblemId}>
+                    <label className="problem">
                       <input
                         type="checkbox"
-                        className="switch"
-                        checked={graded}
-                        onChange={(e) => setGraded(e.target.checked)}
+                        className="check"
+                        aria-label={`Select ${p.title || p.slug}`}
+                        disabled={!p.synced}
+                        checked={selectedIds.includes(p.sessionProblemId)}
+                        onChange={(e) =>
+                          setSelected(
+                            e.target.checked
+                              ? [...selectedIds, p.sessionProblemId]
+                              : selectedIds.filter((id) => id !== p.sessionProblemId),
+                          )
+                        }
                       />
+                      <span className="problem-title">{p.title || p.slug}</span>
+                      <span className="problem-meta">
+                        {p.submissionCount === 0
+                          ? "opened"
+                          : `${p.acceptedCount}/${p.submissionCount} accepted`}
+                      </span>
                     </label>
-                    <p className="option-hint">
-                      {graded
-                        ? "Transcribed by local Whisper in the desktop app, then AI reviewed."
-                        : "Ungraded: video only. Disables both transcript and AI review; desktop is not required."}
-                    </p>
-                  </div>
-                  <div className="option">
-                    <label className="option-row">
-                      Include camera
-                      <input
-                        type="checkbox"
-                        className="switch"
-                        checked={facecam}
-                        onChange={(e) => setFacecam(e.target.checked)}
-                      />
-                    </label>
-                  </div>
-                </div>
-                {graded && gradingBlocker && (
-                  <p className="error" role="status">
-                    Can't grade yet: {gradingBlocker} Or untick Transcript &amp; AI review to record
-                    without it.
-                  </p>
+                  </li>
+                ))}
+                {tracked.length === 0 && (
+                  <li className="problems-empty">Nothing tracked yet — open a LeetCode problem.</li>
                 )}
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={busy || (graded && !!gradingBlocker)}
-                  onClick={() => void startInterview()}
-                >
-                  Start mock interview
-                </button>
-                <button
-                  type="button"
-                  className="link link-quiet"
-                  disabled={busy}
-                  onClick={() => void run(() => sendRuntime({ type: "PROBE_APP" }))}
-                >
-                  Check desktop grading connection
-                </button>
-              </>
-            )}
-          </section>
-
-          {!!snap.state.pendingSync.length && (
-            <section className="card retry">
-              <div className="card-title">Couldn’t save a mock interview</div>
-              <p className="muted">
-                {snap.state.pendingSync.length === 1
-                  ? "The last mock interview is still on this device. Retry the upload."
-                  : `${snap.state.pendingSync.length} mock interviews are waiting to sync.`}
-              </p>
+              </ul>
               <button
                 type="button"
-                className="btn btn-primary"
-                disabled={busy}
-                onClick={() => void run(() => sendRuntime({ type: "RETRY_SYNC" }))}
+                className="btn"
+                disabled={busy || selectedIds.length === 0}
+                onClick={() =>
+                  void run(() => sendRuntime({ type: "PUBLISH_PROBLEMS", ids: selectedIds })).then(
+                    (res) => {
+                      setSelected([]);
+                      if (res.ok && res.postId)
+                        void chrome.tabs.create({ url: `${SITE_URL}/drafts/${res.postId}` });
+                    },
+                  )
+                }
               >
-                Retry sync
+                Create draft from selected problems
               </button>
-              {snap.capture?.state === "error" && (
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  disabled={busy}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Permanently discard the failed video and save the session without video, transcript or AI review?",
-                      )
-                    )
-                      void run(() => sendRuntime({ type: "DISCARD_RECORDING" }));
-                  }}
-                >
-                  Discard failed video and keep session
-                </button>
+              {confirmClear && (
+                <div className="confirm-sheet" role="dialog" aria-label="Clear tracked problems">
+                  <p>
+                    {selectedIds.length > 0
+                      ? `Remove ${selectedIds.length} selected problem${selectedIds.length === 1 ? "" : "s"}`
+                      : "Remove every tracked problem"}{" "}
+                    from your inbox without posting? Their captured submissions are deleted too.
+                  </p>
+                  <div className="row">
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      disabled={busy}
+                      onClick={() => {
+                        setConfirmClear(false);
+                        const ids = selectedIds.length > 0 ? selectedIds : undefined;
+                        void run(() => sendRuntime({ type: "CLEAR_TRACKED", ids })).then(() =>
+                          setSelected([]),
+                        );
+                      }}
+                    >
+                      Confirm clear
+                    </button>
+                    <button type="button" className="btn" onClick={() => setConfirmClear(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          ) : (
+            <section
+              className="pane"
+              id="pane-interview"
+              role="tabpanel"
+              aria-labelledby="tab-interview"
+            >
+              {interview ? (
+                <>
+                  <h2 className="card-title">
+                    Mock interview
+                    <span className={`badge ${status}`}>{status}</span>
+                  </h2>
+                  <div className="timer" role="timer">
+                    {formatDuration(activeMs(interview.events, Date.now()))}
+                  </div>
+                  <p className="note">
+                    {snap.capture?.graded
+                      ? "Graded: local Whisper and AI review"
+                      : "Ungraded: video only, no transcript or AI review"}
+                  </p>
+                  {snap.capture?.message && (
+                    <p className="muted" role="status">
+                      {snap.capture.message}
+                    </p>
+                  )}
+                  {!!snap.capture?.recordedBytes && (
+                    <p className="muted">
+                      {((snap.capture.uploadedBytes ?? 0) / 1048576).toFixed(1)} /{" "}
+                      {(snap.capture.recordedBytes / 1048576).toFixed(1)} MB uploaded
+                    </p>
+                  )}
+                  {snap.capture?.transcript && (
+                    <section className="transcript" aria-label="Live transcript">
+                      {snap.capture.transcript}
+                    </section>
+                  )}
+                  {recording?.state === "recording" && (
+                    <p className="muted">Recording. A red dot shows on the problem page.</p>
+                  )}
+                  <ul className="problems">
+                    {interview.problems.map((p) => (
+                      <li key={p.sessionProblemId} className="problem plain">
+                        <span className="problem-title">{p.problem.title}</span>
+                        <span className="problem-meta">
+                          {p.submissions.filter((sub) => sub.accepted).length}/
+                          {p.submissions.length} accepted
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="row">
+                    {status === "running" ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={busy}
+                        onClick={() => void run(() => sendRuntime({ type: "PAUSE_SESSION" }))}
+                      >
+                        Pause
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={busy || status === "ended"}
+                        onClick={() => void run(() => sendRuntime({ type: "RESUME_SESSION" }))}
+                      >
+                        Resume
+                      </button>
+                    )}
+                    {!confirmEnd && status !== "ended" ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={busy}
+                        onClick={() => setConfirmEnd(true)}
+                      >
+                        End &amp; save
+                      </button>
+                    ) : null}
+                  </div>
+                  {confirmEnd && (
+                    <div className="confirm-sheet" role="dialog" aria-label="End mock interview">
+                      <p>End and save this mock interview?</p>
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          disabled={busy}
+                          onClick={() => {
+                            setConfirmEnd(false);
+                            void run(() => sendRuntime({ type: "END_SESSION" }));
+                          }}
+                        >
+                          Confirm end
+                        </button>
+                        <button type="button" className="btn" onClick={() => setConfirmEnd(false)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="muted">
+                    Records your screen and microphone while you solve. Camera is optional.
+                  </p>
+                  <div className="options">
+                    <div className="option">
+                      <label className="option-row">
+                        Transcript &amp; AI review
+                        <input
+                          type="checkbox"
+                          className="switch"
+                          checked={graded}
+                          onChange={(e) => setGraded(e.target.checked)}
+                        />
+                      </label>
+                      <p className="option-hint">
+                        {graded
+                          ? "Transcribed by local Whisper in the desktop app, then AI reviewed."
+                          : "Ungraded: video only. Disables both transcript and AI review; desktop is not required."}
+                      </p>
+                    </div>
+                    <div className="option">
+                      <label className="option-row">
+                        Include camera
+                        <input
+                          type="checkbox"
+                          className="switch"
+                          checked={facecam}
+                          onChange={(e) => setFacecam(e.target.checked)}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  {graded && gradingBlocker && (
+                    <p className="error" role="status">
+                      Can't grade yet: {gradingBlocker} Or untick Transcript &amp; AI review to
+                      record without it.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busy || starting || (graded && !!gradingBlocker)}
+                    onClick={() => void startInterview()}
+                  >
+                    Start mock interview
+                  </button>
+                  {starting && (
+                    <p className="muted" role="status">
+                      Choose what to share in the Lare window. The timer starts once you share.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className="link link-quiet"
+                    disabled={busy}
+                    onClick={() => void run(() => sendRuntime({ type: "PROBE_APP" }))}
+                  >
+                    Check desktop grading connection
+                  </button>
+                </>
+              )}
+
+              {!!snap.state.pendingSync.length && (
+                <section className="card retry">
+                  <div className="card-title">Couldn’t save a mock interview</div>
+                  <p className="muted">
+                    {snap.state.pendingSync.length === 1
+                      ? "The last mock interview is still on this device. Retry the upload."
+                      : `${snap.state.pendingSync.length} mock interviews are waiting to sync.`}
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busy}
+                    onClick={() => void run(() => sendRuntime({ type: "RETRY_SYNC" }))}
+                  >
+                    Retry sync
+                  </button>
+                  {snap.capture?.state === "error" && (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Permanently discard the failed video and save the session without video, transcript or AI review?",
+                          )
+                        )
+                          void run(() => sendRuntime({ type: "DISCARD_RECORDING" }));
+                      }}
+                    >
+                      Discard failed video and keep session
+                    </button>
+                  )}
+                </section>
+              )}
+
+              {!interview && snap.capture?.state === "complete" && (
+                <section className="card" aria-label="Last recording">
+                  <div className="card-title">
+                    {snap.capture.graded ? "Graded interview saved" : "Ungraded session saved"}
+                  </div>
+                  {snap.capture.message && <p role="status">{snap.capture.message}</p>}
+                  <p className="muted">
+                    {snap.capture.graded
+                      ? "Local transcript and AI review included."
+                      : "No transcript or AI review included."}{" "}
+                    Upload acknowledgement does not mean playback encoding is finished.
+                  </p>
+                  <a href={`${SITE_URL}/drafts`} target="_blank" rel="noreferrer" className="link">
+                    Review and publish your draft
+                  </a>
+                </section>
               )}
             </section>
           )}
 
-          {!interview && snap.capture?.state === "complete" && (
-            <section className="card" aria-label="Last recording">
-              <div className="card-title">
-                {snap.capture.graded ? "Graded interview saved" : "Ungraded session saved"}
+          <footer className="footer">
+            <div className="account">
+              {auth.avatarUrl ? (
+                <img src={auth.avatarUrl} alt="" className="avatar" />
+              ) : (
+                <div className="avatar" />
+              )}
+              <div className="grow">
+                <div className="name">
+                  {auth.displayName ?? auth.handle ?? auth.email ?? "Signed in"}
+                </div>
+                <div className="handle">
+                  {auth.handle ? `@${auth.handle}` : "Set a handle in the app"}
+                </div>
               </div>
-              {snap.capture.message && <p role="status">{snap.capture.message}</p>}
-              <p className="muted">
-                {snap.capture.graded
-                  ? "Local transcript and AI review included."
-                  : "No transcript or AI review included."}{" "}
-                Upload acknowledgement does not mean playback encoding is finished.
-              </p>
-              <a href={`${SITE_URL}/drafts`} target="_blank" rel="noreferrer" className="link">
-                Review and publish your draft
+              <button
+                type="button"
+                className="link"
+                disabled={busy || !!interview}
+                onClick={() => void run(() => sendRuntime({ type: "SIGN_OUT" }))}
+              >
+                Sign out
+              </button>
+            </div>
+            <nav className="links" aria-label="Lare links">
+              <button
+                type="button"
+                className="link"
+                onClick={() => void sendRuntime({ type: "OPEN_APP" })}
+              >
+                Desktop app
+              </button>
+              <a href={SITE_URL} target="_blank" rel="noreferrer" className="link">
+                lare.app
               </a>
-            </section>
-          )}
-
-          <section className="links">
-            <button
-              type="button"
-              className="link"
-              onClick={() => void sendRuntime({ type: "OPEN_APP" })}
-            >
-              Open desktop app
-            </button>
-            <a href={SITE_URL} target="_blank" rel="noreferrer" className="link">
-              Open lare.app
-            </a>
-            <a href={`${SITE_URL}/drafts`} target="_blank" rel="noreferrer" className="link">
-              Review drafts
-            </a>
-          </section>
+              <a href={`${SITE_URL}/drafts`} target="_blank" rel="noreferrer" className="link">
+                Drafts
+              </a>
+            </nav>
+          </footer>
         </>
       )}
     </div>

@@ -124,21 +124,98 @@ p {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--lare-status-run) 22%, transparent);
 }
 
-/* ---- Account ----------------------------------------------------------- */
+/* ---- Tabs -------------------------------------------------------------- */
 
-.account {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
   border: 1px solid var(--lare-line);
   border-radius: var(--lare-r-3);
   background: var(--lare-ink-2);
 }
+.tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--lare-r-2);
+  background: transparent;
+  color: var(--lare-muted);
+  font-size: var(--text-md);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-smooth-out, ease-out),
+    color var(--duration-fast, 150ms) var(--ease-smooth-out, ease-out);
+}
+.tab:hover {
+  color: var(--lare-bone);
+}
+.tab[aria-selected="true"] {
+  background: var(--lare-ink-3);
+  color: var(--lare-bone);
+  box-shadow: inset 0 0 0 1px var(--lare-line-strong);
+}
+.tab:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--lare-ink),
+    0 0 0 4px var(--lare-focus);
+}
+.tab-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--lare-r-5);
+  background: var(--lare-line);
+  color: var(--lare-soft);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+.tab-live,
+.tab-alert {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--lare-r-5);
+}
+.tab-live {
+  background: var(--lare-status-stop);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--lare-status-stop) 25%, transparent);
+}
+.tab-alert {
+  background: var(--lare-status-pause);
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ---- Footer: account and links ----------------------------------------- */
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--lare-line);
+}
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
 .avatar {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--lare-r-5);
   background: var(--lare-line);
   object-fit: cover;
@@ -569,15 +646,11 @@ label.problem:hover {
 /* ---- Footer links ------------------------------------------------------ */
 
 .links {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2) var(--space-4);
-  margin-top: auto;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--lare-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
 }
 .links .link {
-  justify-self: start;
   white-space: nowrap;
 }
 

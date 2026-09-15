@@ -245,6 +245,9 @@ test("grading is explicit: cloud-only interview is available without desktop", a
 
   // The side panel is the only control surface now.
   await expect(panel.getByText("Tracking submissions")).toBeVisible();
+  // Mock interviews live on their own tab, away from tracking.
+  await expect(panel.getByRole("button", { name: /Start mock interview/ })).toHaveCount(0);
+  await panel.getByRole("tab", { name: "Mock interview" }).click();
   // Without a desktop app the panel starts ungraded instead of on a dead, disabled button.
   const start = panel.getByRole("button", { name: /Start mock interview/ });
   const gradedBox = panel.getByRole("checkbox", { name: "Transcript & AI review" });
