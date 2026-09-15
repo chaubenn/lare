@@ -48,7 +48,8 @@ export const router = createMemoryRouter([
               { path: "/posts/:id", element: <PostPage /> },
               { path: "/posts/:id/edit", element: <PostEditPage /> },
               { path: "/drafts", element: <DraftsPage /> },
-              { path: "/drafts/:id", element: <DraftEditorPage /> },
+              // The editor has its own step rail, so it starts at the sidebar instead of centring.
+              { path: "/drafts/:id", element: <DraftEditorPage />, handle: { fullWidth: true } },
               { path: "/sessions", element: <SessionsPage /> },
               { path: "/sessions/:id", element: <SessionReviewPage /> },
               { path: "/profile", element: <ProfilePage /> },

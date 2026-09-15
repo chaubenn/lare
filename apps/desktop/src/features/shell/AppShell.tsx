@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate } from "react-router";
+import { Outlet, useMatches, useNavigate } from "react-router";
 import { JobsTray } from "@/features/media/JobsTray";
 import { useLocalCopyCleanup } from "@/features/media/localCopies";
 import { useRecordingEvents } from "@/features/media/useRecordingEvents";
@@ -15,6 +15,10 @@ import { UpdateBanner } from "./UpdateBanner";
 export function AppShell() {
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Pages with their own side rail (the draft editor) start at the sidebar instead of centring.
+  const fullWidth = useMatches().some(
+    (match) => (match.handle as { fullWidth?: boolean } | undefined)?.fullWidth,
+  );
   useDraftsRealtime();
   useNotificationStream();
   useRecordingEvents();
@@ -45,7 +49,9 @@ export function AppShell() {
         <div data-tauri-drag-region className="h-8 shrink-0" />
         <UpdateBanner />
         <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[1360px] px-5 py-5">
+          <div
+            className={fullWidth ? "w-full px-5 py-5" : "mx-auto w-full max-w-[1360px] px-5 py-5"}
+          >
             <Outlet />
           </div>
         </main>
