@@ -76,8 +76,9 @@ function LatestSitting({ sitting }: { sitting: Sitting<SessionRow> }) {
             {sitting.problems.map((p) => (
               <li
                 key={p.slug}
-                className="inline-flex items-center gap-2 rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-sm text-[var(--text)]"
+                className="inline-flex items-center gap-2 overflow-hidden rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface)] pr-2.5 text-sm text-[var(--text)]"
               >
+                <DifficultyTag difficulty={p.difficulty} />
                 {p.title}
                 {p.attempts > 1 ? (
                   <span className="tabular-nums text-xs text-[var(--text-tertiary)]">
@@ -161,7 +162,13 @@ function SessionRows({ sessions, className }: { sessions: SessionRow[]; classNam
             to={`/sessions/${s.id}`}
             className="flex min-w-0 items-center gap-2 rounded-[var(--lare-r-1)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
           >
-            <KindBadge kind={s.kind} />
+            {/* Fixed width so difficulty and title line up whatever the kind. */}
+            <span className="flex w-[4.5rem] shrink-0 items-center">
+              <KindBadge kind={s.kind} />
+            </span>
+            {s.session_problems[0] ? (
+              <DifficultyTag difficulty={s.session_problems[0].difficulty} rounded />
+            ) : null}
             <span className="truncate text-sm text-[var(--text)] hover:underline">
               {s.session_problems[0]?.title ??
                 (s.kind === "interview" ? "Mock interview" : "Practice")}
@@ -208,6 +215,32 @@ function SessionAction({ session }: { session: SessionRow }) {
     <Link to={`/sessions/${session.id}`} className={cls}>
       Review
     </Link>
+  );
+}
+
+const DIFFICULTY: Record<string, { label: string; color: string }> = {
+  Easy: { label: "Easy", color: "var(--lare-diff-easy)" },
+  Medium: { label: "Med", color: "var(--lare-diff-medium)" },
+  Hard: { label: "Hard", color: "var(--lare-diff-hard)" },
+};
+
+/** LeetCode difficulty as a fixed-width coloured block, so titles line up down a list. */
+function DifficultyTag({
+  difficulty,
+  rounded = false,
+}: {
+  difficulty: string | null | undefined;
+  rounded?: boolean;
+}) {
+  const d = difficulty ? DIFFICULTY[difficulty] : undefined;
+  if (!d) return null;
+  return (
+    <span
+      className={`inline-flex w-11 shrink-0 items-center justify-center self-stretch py-1 text-[11px] font-semibold uppercase tracking-wide ${rounded ? "rounded-[var(--lare-r-1)]" : ""}`}
+      style={{ color: d.color, background: `color-mix(in oklab, ${d.color} 18%, transparent)` }}
+    >
+      {d.label}
+    </span>
   );
 }
 
