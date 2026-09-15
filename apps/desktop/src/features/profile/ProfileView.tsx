@@ -9,20 +9,18 @@ import { ExternalLink, Lock } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
-import { EmptyState, ErrorState, PageSpinner, Spinner } from "@/components/ui/States";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import type { ProfileStats } from "@/lib/json";
 import { openExternal } from "@/lib/open";
 import { FollowListModal } from "./FollowListModal";
 import { ProfilePostGrid } from "./ProfilePostGrid";
 import type { FollowListKind, UserPost } from "./queries";
 import { SkillsPanel } from "./SkillsPanel";
-import { StatStrip } from "./StatStrip";
-
-const SECTION_HEADING = "mb-3 text-sm font-semibold text-[var(--text)]";
 
 /**
- * A profile, read-only: identity and counts in one raised panel, then activity, then posts.
+ * A profile, read-only: a compact identity header with inline counts, then posts, with
+ * progress (activity and skills) on its own tab.
  * Shared by your own profile tab and other people's profiles; editing lives on its own page.
  */
 export function ProfileView({
@@ -76,81 +74,96 @@ export function ProfileView({
   lockedDescription?: ReactNode;
 }) {
   const [followList, setFollowList] = useState<FollowListKind | null>(null);
+  const [tab, setTab] = useState<"posts" | "progress">("posts");
+  const hasProgress = Boolean(activity?.visible || skills?.visible);
+  const shownTab = hasProgress ? tab : "posts";
+
+  const counts: { label: string; value: number | string; onClick?: () => void }[] = stats
+    ? [
+        ...(showExtendedStats ? [{ label: "posts", value: stats.posts ?? 0 }] : []),
+        {
+          label: stats.followers === 1 ? "follower" : "followers",
+          value: stats.followers,
+          onClick: () => setFollowList("followers"),
+        },
+        { label: "following", value: stats.following, onClick: () => setFollowList("following") },
+        ...(showExtendedStats ? [{ label: "solved", value: stats.problems_solved ?? 0 }] : []),
+      ]
+    : [];
 
   return (
     <>
-      <section className="rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]">
-        <div className="flex flex-wrap items-start gap-4 p-5">
-          <Avatar url={avatarUrl} name={name} size={72} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="lare-heading min-w-0 truncate text-[var(--text)]">{name}</h1>
-              {isPrivate ? (
-                <Badge>
-                  <Lock className="size-3" aria-hidden />
-                  Private
-                </Badge>
-              ) : null}
-            </div>
-            {handle ? <p className="text-sm text-[var(--text-secondary)]">@{handle}</p> : null}
-            {bio ? (
-              <p className="mt-3 max-w-prose select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]">
-                {bio}
-              </p>
-            ) : emptyBio ? (
-              <p className="mt-3 text-sm text-[var(--text-tertiary)]">{emptyBio}</p>
-            ) : null}
-            {website ? (
-              <button
-                type="button"
-                onClick={() => void openExternal(websiteHref(website))}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--lare-r-1)] text-sm text-[var(--text-secondary)] underline-offset-2 hover:text-[var(--text)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
-              >
-                <ExternalLink className="size-3.5" aria-hidden />
-                {websiteLabel(website)}
-              </button>
+      <header className="flex flex-wrap items-start gap-5">
+        <Avatar url={avatarUrl} name={name} size={80} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="lare-heading min-w-0 truncate text-[var(--text)]">{name}</h1>
+            {isPrivate ? (
+              <Lock className="size-3.5 text-[var(--text-tertiary)]" aria-label="Private account" />
             ) : null}
           </div>
-          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
-        </div>
+          {handle ? <p className="text-sm text-[var(--text-secondary)]">@{handle}</p> : null}
 
-        {statsPending && handle ? (
-          <div className="border-t border-[var(--border)]">
-            <Spinner className="py-4" />
-          </div>
-        ) : statsError ? (
-          <div className="border-t border-[var(--border)] p-4">
-            <ErrorState error={statsError} onRetry={onRetryStats} />
-          </div>
-        ) : stats ? (
-          <div className="border-t border-[var(--border)] px-5">
-            <StatStrip
-              items={[
-                {
-                  label: "Followers",
-                  value: stats.followers,
-                  onClick: () => setFollowList("followers"),
-                },
-                {
-                  label: "Following",
-                  value: stats.following,
-                  onClick: () => setFollowList("following"),
-                },
-                ...(showExtendedStats
-                  ? [
-                      { label: "Posts", value: stats.posts ?? 0 },
-                      { label: "Solved", value: stats.problems_solved ?? 0 },
-                      { label: "Time", value: formatDurationHuman(stats.total_active_ms ?? 0) },
-                    ]
-                  : []),
-              ]}
-            />
-          </div>
-        ) : null}
-      </section>
+          {statsPending && handle ? (
+            <span className="lare-skel mt-3 block h-4 w-64 rounded" />
+          ) : statsError ? (
+            <p className="mt-3 text-sm text-[var(--text-secondary)]">
+              Couldn&apos;t load counts.{" "}
+              <button type="button" className="underline underline-offset-2" onClick={onRetryStats}>
+                Retry
+              </button>
+            </p>
+          ) : counts.length > 0 ? (
+            <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--text-secondary)]">
+              {counts.map((c) => {
+                const content = (
+                  <>
+                    <span className="font-semibold tabular-nums text-[var(--text)]">{c.value}</span>{" "}
+                    {c.label}
+                  </>
+                );
+                return (
+                  <li key={c.label}>
+                    {c.onClick ? (
+                      <button
+                        type="button"
+                        onClick={c.onClick}
+                        className="rounded-[var(--lare-r-1)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      content
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+
+          {bio ? (
+            <p className="mt-3 max-w-prose select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]">
+              {bio}
+            </p>
+          ) : emptyBio ? (
+            <p className="mt-3 text-sm text-[var(--text-tertiary)]">{emptyBio}</p>
+          ) : null}
+          {website ? (
+            <button
+              type="button"
+              onClick={() => void openExternal(websiteHref(website))}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--lare-r-1)] text-sm text-[var(--text-secondary)] underline-offset-2 hover:text-[var(--text)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
+            >
+              <ExternalLink className="size-3.5" aria-hidden />
+              {websiteLabel(website)}
+            </button>
+          ) : null}
+        </div>
+        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+      </header>
 
       {locked ? (
-        <div className="mt-6">
+        <div className="mt-8">
           <EmptyState
             icon={<Lock className="size-8" aria-hidden />}
             title="This account is private"
@@ -159,31 +172,25 @@ export function ProfileView({
         </div>
       ) : (
         <>
-          {activity?.visible || skills?.visible ? (
-            <section className="mt-8" aria-labelledby="profile-progress">
-              <h2 id="profile-progress" className={SECTION_HEADING}>
-                Progress
-              </h2>
-              {/* Side by side, so neither panel sprawls across the whole page on its own. */}
-              <div
-                className={`grid items-start gap-4 ${activity?.visible && skills?.visible ? "lg:grid-cols-2" : ""}`}
-              >
-                {activity?.visible ? <ActivityGrid activity={activity} /> : null}
-                {skills?.visible ? <SkillsPanel skills={skills} /> : null}
-              </div>
-            </section>
-          ) : null}
+          {/* Posts lead; progress is one click away instead of stacked above them. */}
+          <div className="mt-8 mb-4">
+            {hasProgress ? (
+              <SegmentedTabs
+                label="Profile sections"
+                value={shownTab}
+                onChange={setTab}
+                items={[
+                  { key: "posts", label: "Posts" },
+                  { key: "progress", label: "Progress" },
+                ]}
+              />
+            ) : (
+              <h2 className="text-sm font-semibold text-[var(--text)]">Posts</h2>
+            )}
+          </div>
 
-          <section className="mt-8" aria-labelledby="profile-posts">
-            <h2 id="profile-posts" className={SECTION_HEADING}>
-              Posts
-              {posts.length > 0 ? (
-                <span className="ml-2 font-normal tabular-nums text-[var(--text-tertiary)]">
-                  {posts.length}
-                </span>
-              ) : null}
-            </h2>
-            {postsPending ? (
+          {shownTab === "posts" ? (
+            postsPending ? (
               <PageSpinner />
             ) : postsError ? (
               <ErrorState error={postsError} onRetry={onRetryPosts} />
@@ -191,8 +198,26 @@ export function ProfileView({
               postsEmpty
             ) : (
               <ProfilePostGrid posts={posts} />
-            )}
-          </section>
+            )
+          ) : (
+            <div className="space-y-4">
+              {showExtendedStats && stats?.total_active_ms ? (
+                <p className="text-sm text-[var(--text-secondary)]">
+                  <span className="font-semibold text-[var(--text)]">
+                    {formatDurationHuman(stats.total_active_ms)}
+                  </span>{" "}
+                  of active practice recorded
+                </p>
+              ) : null}
+              {/* Side by side, so neither panel sprawls across the whole page on its own. */}
+              <div
+                className={`grid items-start gap-4 ${activity?.visible && skills?.visible ? "lg:grid-cols-2" : ""}`}
+              >
+                {activity?.visible ? <ActivityGrid activity={activity} /> : null}
+                {skills?.visible ? <SkillsPanel skills={skills} /> : null}
+              </div>
+            </div>
+          )}
         </>
       )}
 

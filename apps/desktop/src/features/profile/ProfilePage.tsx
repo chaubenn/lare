@@ -9,8 +9,6 @@ import { openExternal } from "@/lib/open";
 import { ProfileView } from "./ProfileView";
 import { useProfileStats, useSolvedActivity, useSolvedSkills, useUserPosts } from "./queries";
 
-export { type StatItem, StatStrip } from "./StatStrip";
-
 /** Your profile as others see it. Editing is a deliberate step: `/profile/edit`. */
 export function ProfilePage() {
   const navigate = useNavigate();
