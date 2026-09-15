@@ -11,6 +11,7 @@ import {
   maxPage,
   pageWindow,
   type SolvedActivity,
+  summarizeActivity,
 } from "@lare/shared";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -124,8 +125,9 @@ export function ActivityChart({
   const activeDay = mode === "day" && hover !== null ? dayBars[hover] : null;
   const activeWeek = mode === "week" && hover !== null ? weekBars[hover] : null;
 
-  const height = 144;
-  const pad = { top: 8, right: 0, bottom: 22, left: 0 };
+  const summary = useMemo(() => summarizeActivity(days), [days]);
+  const height = 160;
+  const pad = { top: 18, right: 0, bottom: 22, left: 0 };
   const innerH = height - pad.top - pad.bottom;
   const gap = 10;
   const count = Math.max(bars.length, 1);
@@ -135,7 +137,7 @@ export function ActivityChart({
     <section
       aria-labelledby="activity-heading"
       className={cn(
-        "relative rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)] p-4",
+        "relative rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] p-5",
         className,
       )}
       onKeyDown={(e) => {
@@ -143,29 +145,35 @@ export function ActivityChart({
         if (e.key === "ArrowRight") goToPage(clampedPage - 1);
       }}
     >
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <h2 id="activity-heading" className="text-sm font-semibold text-[var(--text)]">
             Problems solved
           </h2>
-          <p className="mt-0.5 text-xs text-[var(--text-tertiary)]" aria-live="polite">
-            {activeDay ? (
-              <span className="text-[var(--text-secondary)]">
-                {describeActivityCell({ ...activeDay, outside: false })}
-              </span>
-            ) : activeWeek ? (
-              <span className="text-[var(--text-secondary)]">
-                {describeActivityWeek(activeWeek)}
-              </span>
-            ) : (
-              <span className="text-[var(--text-secondary)]">
-                {mode === "day" ? describeDayPage(dayBars) : describeWeekPage(weekBars)}
-              </span>
-            )}
+          <p className="mt-1 flex items-baseline gap-2">
+            <span className="text-3xl font-semibold leading-none tabular-nums text-[var(--text)]">
+              {bars.reduce((n, b) => n + b.count, 0)}
+            </span>
+            <span className="text-sm text-[var(--text-secondary)]">
+              {mode === "day"
+                ? clampedPage === 0
+                  ? "in the last 7 days"
+                  : "that week"
+                : clampedPage === 0
+                  ? "in the last 7 weeks"
+                  : "in those 7 weeks"}
+            </span>
+          </p>
+          <p className="mt-1.5 min-h-4 text-xs text-[var(--text-secondary)]" aria-live="polite">
+            {/* The big number already states the period; this line narrates the hovered bar. */}
+            {activeDay
+              ? describeActivityCell({ ...activeDay, outside: false })
+              : activeWeek
+                ? describeActivityWeek(activeWeek)
+                : "Hover a bar for details"}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <p className="lare-micro tabular-nums text-[var(--text-tertiary)]">Peak {max}</p>
           <div className="flex rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface)_60%,transparent)] p-0.5 text-[11px]">
             {(["day", "week"] as const).map((m) => (
               <button
@@ -187,7 +195,28 @@ export function ActivityChart({
         </div>
       </div>
 
-      <div ref={frameRef} className="relative mt-3 min-w-0">
+      <dl className="mt-4 grid grid-cols-2 border-y border-[var(--border)] sm:grid-cols-4">
+        {[
+          ["All time", activity.all_time],
+          ["Last 7 days", summary.last7],
+          ["Streak", summary.streak === 1 ? "1 day" : `${summary.streak} days`],
+          ["Best day", summary.bestDay],
+        ].map(([label, value], i) => (
+          <div
+            key={label}
+            className={cn(
+              "flex flex-col-reverse py-3",
+              i > 0 && "sm:border-l sm:border-[var(--border)] sm:pl-4",
+              i % 2 === 1 && "max-sm:pl-4",
+            )}
+          >
+            <dt className="mt-0.5 text-xs text-[var(--text-secondary)]">{label}</dt>
+            <dd className="text-base font-semibold tabular-nums text-[var(--text)]">{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div ref={frameRef} className="relative mt-4 min-w-0">
         <div ref={dragRef} className="touch-pan-y">
           <svg
             width="100%"
@@ -227,7 +256,24 @@ export function ActivityChart({
                   : ((bar as ActivityWeek).monthLabel ?? "");
               return (
                 <g key={mode === "day" ? (bar as ActivityDay).iso : (bar as ActivityWeek).start}>
-                  <rect x={x} y={y} width={barW} height={h} rx={2} fill={fill} />
+                  <rect x={x} y={y} width={barW} height={h} rx={3} fill={fill} />
+                  {empty ? null : (
+                    <text
+                      x={x + barW / 2}
+                      y={y - 5}
+                      textAnchor="middle"
+                      fill={
+                        hover === i || (hover === null && current)
+                          ? "var(--text)"
+                          : "var(--text-secondary)"
+                      }
+                      fontSize={11}
+                      fontWeight={600}
+                      style={{ fontVariantNumeric: "tabular-nums" }}
+                    >
+                      {countVal}
+                    </text>
+                  )}
                   <text
                     x={x + barW / 2}
                     y={height - 6}

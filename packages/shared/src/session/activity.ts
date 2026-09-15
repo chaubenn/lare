@@ -217,3 +217,34 @@ export function describeActivityWeek(week: ActivityWeek): string {
   if (week.count === 0) return `No problems solved ${range}`;
   return `${week.count} problem${week.count === 1 ? "" : "s"} solved · ${range}`;
 }
+
+export interface ActivitySummary {
+  /** Problems solved in the last seven days of the window, today included. */
+  last7: number;
+  /** Consecutive days with a solve, ending today (or yesterday, while today is still open). */
+  streak: number;
+  /** Days with at least one solve in the last 30. */
+  activeDays30: number;
+  /** Most problems solved in a single day across the window. */
+  bestDay: number;
+}
+
+/** Headline numbers for the activity chart, from the chronological day list. */
+export function summarizeActivity(days: readonly ActivityDay[]): ActivitySummary {
+  const last = days.length - 1;
+  const sum = (from: number) => days.slice(Math.max(0, from)).reduce((n, d) => n + d.count, 0);
+  let i = last;
+  // Today with nothing yet does not break a streak that ran through yesterday.
+  if (i >= 0 && days[i]?.count === 0) i -= 1;
+  let streak = 0;
+  while (i >= 0 && (days[i]?.count ?? 0) > 0) {
+    streak += 1;
+    i -= 1;
+  }
+  return {
+    last7: sum(days.length - 7),
+    streak,
+    activeDays30: days.slice(Math.max(0, days.length - 30)).filter((d) => d.count > 0).length,
+    bestDay: days.reduce((n, d) => Math.max(n, d.count), 0),
+  };
+}

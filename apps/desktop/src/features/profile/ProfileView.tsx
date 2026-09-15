@@ -5,10 +5,10 @@ import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState, ErrorState, PageSpinner, Spinner } from "@/components/ui/States";
-import { PostCard } from "@/features/feed/PostCard";
 import type { ProfileStats } from "@/lib/json";
 import { openExternal } from "@/lib/open";
 import { FollowListModal } from "./FollowListModal";
+import { ProfilePostGrid } from "./ProfilePostGrid";
 import type { FollowListKind, UserPost } from "./queries";
 import { StatStrip } from "./StatStrip";
 
@@ -175,11 +175,7 @@ export function ProfileView({
             ) : posts.length === 0 ? (
               postsEmpty
             ) : (
-              <div className="space-y-4">
-                {posts.map((post) => (
-                  <PostCard key={post.id} post={post} liked={likedIds.has(post.id)} />
-                ))}
-              </div>
+              <ProfilePostGrid posts={posts} />
             )}
           </section>
         </>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/Card";
+import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { plural } from "@/lib/format";
 import { groupSittings, SITTING_GAP_MS, type Sitting } from "./grouping";
@@ -215,32 +216,6 @@ function SessionAction({ session }: { session: SessionRow }) {
     <Link to={`/sessions/${session.id}`} className={cls}>
       Review
     </Link>
-  );
-}
-
-const DIFFICULTY: Record<string, { label: string; color: string }> = {
-  Easy: { label: "Easy", color: "var(--lare-diff-easy)" },
-  Medium: { label: "Med", color: "var(--lare-diff-medium)" },
-  Hard: { label: "Hard", color: "var(--lare-diff-hard)" },
-};
-
-/** LeetCode difficulty as a fixed-width coloured block, so titles line up down a list. */
-function DifficultyTag({
-  difficulty,
-  rounded = false,
-}: {
-  difficulty: string | null | undefined;
-  rounded?: boolean;
-}) {
-  const d = difficulty ? DIFFICULTY[difficulty] : undefined;
-  if (!d) return null;
-  return (
-    <span
-      className={`inline-flex w-11 shrink-0 items-center justify-center self-stretch py-1 text-[11px] font-semibold uppercase tracking-wide ${rounded ? "rounded-[var(--lare-r-1)]" : ""}`}
-      style={{ color: d.color, background: `color-mix(in oklab, ${d.color} 18%, transparent)` }}
-    >
-      {d.label}
-    </span>
   );
 }
 
