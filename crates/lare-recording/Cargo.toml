@@ -4,15 +4,13 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Thin facade over the vendored Cap crates: devices, permissions, instant/studio recording and headless export."
+description = "Thin facade over the vendored Cap crates: devices, permissions, instant recording."
 
 [dependencies]
 cap-recording = { path = "../vendor/cap/recording" }
 cap-project = { path = "../vendor/cap/project" }
-cap-export = { path = "../vendor/cap/export" }
 cap-camera = { path = "../vendor/cap/camera" }
 cap-enc-ffmpeg = { path = "../vendor/cap/enc-ffmpeg" }
-cap-media-info = { path = "../vendor/cap/media-info" }
 scap-targets = { path = "../vendor/cap/scap-targets" }
 kameo = "0.17.2"
 cpal = { workspace = true }

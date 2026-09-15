@@ -3,6 +3,8 @@ import type { Video } from "@lare/supabase-types";
 import { cn } from "@lare/ui";
 import { CircleAlert, LoaderCircle, Play, Video as VideoIcon } from "lucide-react";
 import { useState } from "react";
+import { LocalPreview } from "@/components/LocalPreview";
+import { useLocalVideoSrc } from "@/features/media/localCopies";
 import { invokeFunction } from "@/lib/supabase";
 
 const STATUS_LABEL: Record<Video["status"], string> = {
@@ -63,6 +65,11 @@ export function VideoSlide({
   }
 
   const ready = status === "ready" && Boolean(bunnyVideoId);
+  const localSrc = useLocalVideoSrc(videoId, status);
+
+  if (!ready && localSrc) {
+    return <LocalPreview src={localSrc} status={status} title={title} className={className} />;
+  }
 
   if (!ready) {
     const failed = status === "failed";

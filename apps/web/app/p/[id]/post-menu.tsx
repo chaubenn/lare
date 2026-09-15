@@ -1,16 +1,7 @@
 "use client";
 
 import { Button } from "@lare/ui/primitives";
-import {
-  Check,
-  Film,
-  History,
-  Link2,
-  MoreHorizontal,
-  PenLine,
-  Scissors,
-  Trash2,
-} from "lucide-react";
+import { Check, History, Link2, MoreHorizontal, PenLine, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { FormToast } from "@/components/form-toast";
@@ -22,8 +13,6 @@ export interface PostMenuProps {
   isOwner: boolean;
   isDraft: boolean;
   sessionId: string | null;
-  videoId: string | null;
-  demoVideoId: string | null;
 }
 
 const ITEM =
@@ -158,28 +147,6 @@ export function PostMenu(props: PostMenuProps) {
                 >
                   <History className={ICON} aria-hidden />
                   Session timeline
-                </Link>
-              )}
-              {props.videoId && (
-                <Link
-                  href={`/studio/${props.videoId}`}
-                  role="menuitem"
-                  className={ITEM}
-                  onClick={close}
-                >
-                  <Film className={ICON} aria-hidden />
-                  Trim full video
-                </Link>
-              )}
-              {props.demoVideoId && (
-                <Link
-                  href={`/studio/${props.demoVideoId}`}
-                  role="menuitem"
-                  className={ITEM}
-                  onClick={close}
-                >
-                  <Scissors className={ICON} aria-hidden />
-                  Trim summary video
                 </Link>
               )}
               <hr className="my-1 border-[var(--border)]" />

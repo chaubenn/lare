@@ -1,14 +1,11 @@
-//! Smoke test: `cargo run -p lare-recording --example record_smoke -- [instant|studio] [seconds] [mic-label]`
+//! Smoke test: `cargo run -p lare-recording --example record_smoke -- [seconds] [mic-label]`
 //! Records the primary display and prints the resulting files.
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
-    let mode = match args.next().as_deref() {
-        Some("studio") => lare_recording::RecordingMode::Studio,
-        _ => lare_recording::RecordingMode::Instant,
-    };
+    let mode = lare_recording::RecordingMode::Instant;
     let seconds: u64 = args.next().and_then(|s| s.parse().ok()).unwrap_or(4);
     let mic_label = args.next();
 

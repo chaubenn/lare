@@ -1,7 +1,7 @@
 /**
- * Persistent (per-machine) bookkeeping for recordings: which ones have been uploaded,
- * transcribed, or discarded. Lives in the Tauri store plugin so it survives restarts and lets
- * the Recordings page resume interrupted pipelines.
+ * Persistent (per-machine) bookkeeping for recordings: which video each became, and whether it
+ * has been uploaded or transcribed. Lives in the Tauri store plugin so it survives restarts, lets
+ * interrupted pipelines resume, and tells `localCopies.ts` when a take can be removed.
  */
 
 import { load, type Store } from "@tauri-apps/plugin-store";
@@ -14,7 +14,7 @@ export interface RecordingMeta {
   /**
    * Which video slot of `postId` this recording is destined for. Only the app knows — the
    * recorder manifest carries the post, not the slot — so it is remembered here and read again
-   * when the recording finishes, or later from the studio editor / the Recordings page.
+   * when the recording finishes.
    */
   slot: VideoSlot;
   /** `videos.id` once the upload pipeline created a row. */
@@ -24,8 +24,6 @@ export interface RecordingMeta {
   uploadUrl?: string;
   uploaded: boolean;
   transcribed: boolean;
-  /** Rendered MP4 for studio projects (path), if exported. */
-  exportPath: string | null;
   /** Last pipeline error, cleared on success. */
   error: string | null;
   updatedAt: number;
@@ -59,6 +57,16 @@ export async function getAllRecordingMeta(): Promise<Record<string, RecordingMet
   }
 }
 
+export async function deleteRecordingMeta(recordingId: string): Promise<void> {
+  try {
+    const s = await store();
+    await s.delete(recordingId);
+    await s.save();
+  } catch {
+    // Best effort: a stale entry only points at a recording that is no longer on disk.
+  }
+}
+
 export async function patchRecordingMeta(
   recordingId: string,
   patch: Partial<Omit<RecordingMeta, "recordingId">>,
@@ -69,7 +77,6 @@ export async function patchRecordingMeta(
     videoId: null,
     uploaded: false,
     transcribed: false,
-    exportPath: null,
     error: null,
     updatedAt: 0,
   };

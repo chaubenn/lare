@@ -1,5 +1,5 @@
-import { excerptFromHtml } from "@lare/shared";
-import { Card, Tooltip } from "@lare/ui/primitives";
+import { excerptFromHtml, postStateOf } from "@lare/shared";
+import { Card, PostStateBadge, Tooltip } from "@lare/ui/primitives";
 import { Lock } from "lucide-react";
 import Link from "next/link";
 import type { PostCardData } from "@/lib/posts";
@@ -73,6 +73,8 @@ export function PostCard({ post, viewerId }: { post: PostCardData; viewerId: str
             </div>
             <div className="flex items-center gap-2 text-xs text-zinc-500">
               <TimeAgo iso={when} />
+              {/* Only the author can load a post that is not live yet, so no ownership check. */}
+              <PostStateBadge state={postStateOf(post)} />
               {post.visibility === "private" && (
                 <>
                   <span aria-hidden="true">·</span>

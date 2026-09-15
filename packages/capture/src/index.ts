@@ -28,6 +28,8 @@ export interface CaptureOptions {
   maxMemoryBytes?: number;
   onProgress?: (progress: CaptureProgress) => void;
   onError?: (error: Error) => void;
+  /** Every recorded chunk, in order, for a caller that keeps its own local copy (e.g. a preview). */
+  onChunk?: (chunk: Blob) => void;
 }
 export interface CaptureSession {
   videoId: string;
@@ -140,6 +142,7 @@ export async function startCapture(options: CaptureOptions): Promise<CaptureSess
   recorder.ondataavailable = (event) => {
     if (!event.data.size || discarded) return;
     const blob = event.data;
+    options.onChunk?.(blob);
     const start = recordedBytes;
     recordedBytes += blob.size;
     memoryBytes += blob.size;

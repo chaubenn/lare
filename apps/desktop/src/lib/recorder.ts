@@ -1,5 +1,5 @@
 /**
- * Typed wrappers for the recording/export/upload/transcription commands in
+ * Typed wrappers for the recording/upload/transcription commands in
  * src-tauri/src/commands.rs and the events they emit. Shapes mirror the Rust structs
  * (serde camelCase).
  */
@@ -7,12 +7,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "./tauri";
 
-export type RecordingMode = "instant" | "studio";
+export type RecordingMode = "instant";
 export type RecordingState = "idle" | "starting" | "recording" | "paused" | "stopping" | "error";
 export type Purpose = "interview" | "demo";
 export type PermissionStatus = "granted" | "denied" | "not_determined" | "not_applicable";
 export type WhisperModel = "tiny-en" | "base-en" | "small-en" | "medium-en";
-export type ExportQuality = "maximum" | "social" | "web" | "potato";
 
 export interface DisplayInfo {
   id: string;
@@ -75,7 +74,6 @@ export interface CompletedRecording {
   mode: RecordingMode;
   projectPath: string;
   outputMp4: string | null;
-  micTrack: string | null;
   startedAt: number;
   endedAt: number;
   postId: string | null;
@@ -96,78 +94,6 @@ export interface MediaInfo {
   width: number | null;
   height: number | null;
   hasAudio: boolean;
-}
-
-export interface ClipInfo {
-  displayPath: string;
-  durationMs: number;
-  /** Start of this clip on the concatenated timeline. */
-  offsetMs: number;
-}
-
-export interface StudioProjectInfo {
-  projectPath: string;
-  /** First clip's display track. */
-  displayPath: string | null;
-  cameraPath: string | null;
-  micPath: string | null;
-  /** Total duration across clips (a pause/resume creates a new clip). */
-  durationMs: number;
-  width: number | null;
-  height: number | null;
-  clips: ClipInfo[];
-}
-
-export interface TimeRange {
-  start: number;
-  end: number;
-}
-export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
-export interface StudioEdit {
-  segments: TimeRange[];
-  camera: {
-    hide: boolean;
-    position: Corner;
-    size: number;
-    rounding: number;
-    mirror: boolean;
-    keepAspect: boolean;
-  };
-  background: { kind: "color"; rgb: [number, number, number] } | { kind: "wallpaper" };
-  padding: number;
-  aspectRatio: "wide" | "vertical" | "square" | "classic" | "tall" | null;
-}
-
-export const DEFAULT_EDIT: StudioEdit = {
-  segments: [],
-  camera: {
-    hide: false,
-    position: "bottom-right",
-    size: 30,
-    rounding: 100,
-    mirror: false,
-    keepAspect: false,
-  },
-  background: { kind: "color", rgb: [0, 0, 0] },
-  padding: 0,
-  aspectRatio: null,
-};
-
-export interface ExportJob {
-  jobId: string;
-  projectPath: string;
-  edit?: StudioEdit;
-  output?: string;
-  quality?: ExportQuality;
-  fps?: number;
-  maxEdge?: number | null;
-}
-export interface ExportResult {
-  output: string;
-  durationMs: number | null;
-  width: number | null;
-  height: number | null;
-  sizeBytes: number;
 }
 
 export interface TusCredentials {
@@ -217,7 +143,6 @@ export interface RecorderEvents {
   /** Whether the facecam preview window should be holding the webcam open. */
   "camera:active": boolean;
   "upload:progress": { jobId: string; uploaded: number; total: number };
-  "export:progress": { jobId: string; frame: number; total: number };
   "transcribe:progress":
     | { stage: "download"; jobId: string; received: number; total: number | null }
     | { stage: "decoding"; jobId: string }
@@ -229,8 +154,6 @@ function notInTauri(): never {
 }
 
 export const recorder = {
-  importCloudSource: (url: string, referer: string) =>
-    invoke<CompletedRecording>("import_cloud_source", { url, referer }),
   listDevices: () => (inTauri ? invoke<Devices>("list_devices") : notInTauri()),
   checkPermissions: () => (inTauri ? invoke<Permissions>("check_permissions") : notInTauri()),
   requestPermission: (which: "screen_recording" | "camera" | "microphone") =>
@@ -267,11 +190,6 @@ export const recorder = {
   mediaInfo: (path: string) => invoke<MediaInfo>("media_info", { path }),
   makeThumbnail: (req: { videoPath: string; atMs?: number; maxWidth?: number; output?: string }) =>
     invoke<string>("make_thumbnail", { req }),
-  studioProjectInfo: (projectPath: string) =>
-    invoke<StudioProjectInfo>("studio_project_info", { projectPath }),
-  exportStudio: (job: ExportJob) => invoke<ExportResult>("export_studio", { job }),
-  cancelJob: (jobId: string) => invoke<boolean>("cancel_job", { jobId }),
-
   upload: (job: UploadJob) => invoke<UploadResult>("upload_to_bunny", { job }),
   prepareUpload: (tus: TusCredentials) => invoke<string>("prepare_bunny_upload", { tus }),
   rememberUpload: (path: string, uploadUrl: string) =>

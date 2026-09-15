@@ -22,19 +22,14 @@ Share posts with followers, attach demo videos, and run AI-graded mock interview
 
 | | |
 | --- | --- |
-| **Chrome extension** | Captures problems, your Monaco edits and judge results on its own — nothing to start or stop. Records mock interviews from a side panel. |
-| **Desktop app** (Tauri) | Records your screen natively with Cap's recording stack, edits takes in the studio, and **transcribes interviews locally with whisper.cpp**. |
+| **Chrome extension** | Captures problems, your Monaco edits and judge results on its own — nothing to start or stop. Starts mock interviews from a side panel. |
+| **Desktop app** (Tauri) | Records your screen natively with Cap's recording stack and **transcribes interviews locally with whisper.cpp**. |
 | **Web** | The same app: feed, posts, profiles, drafts, sessions — plus recording in the browser. |
 
-**You can do everything on the web except be graded.** A mock interview is *graded* when the
-desktop app is running: the extension streams your microphone to it over loopback, whisper.cpp
-transcribes it on your machine while you talk, and the AI review is built from that transcript.
-Without the app, an interview is *ungraded* — video only, no transcript, no AI — and the extension
-says so before you start rather than degrading quietly. Local transcription is the reason the
-desktop app exists; it is not going to the cloud.
-
-Video uploads while it records, not after you stop, so stopping is roughly instant no matter how
-long you recorded.
+**Mock interviews need the desktop app.** Start one from the extension's side panel while the app
+is open: the app records your screen, microphone and camera bubble, whisper.cpp transcribes the
+recording on your machine, and the AI review is built from that transcript. Local transcription is
+the reason the desktop app exists; it is not going to the cloud.
 
 ## Install
 
@@ -66,10 +61,9 @@ run **Settings > Check for updates**.
 4. Pin the Lare icon and click it to open the side panel, then sign in and open any LeetCode
    problem. Practice starts logging itself immediately.
 
-The extension works on its own — sign-in, passive capture, drafts and ungraded interviews need
-nothing else running. It talks to the desktop app over `127.0.0.1` only to hand it interview
-audio for local transcription, so the app has to be open for a *graded* interview and the
-desktop footer shows **Extension: connected**. Chrome 116+. Chrome Web Store listing is coming;
+The extension works on its own for sign-in, passive capture and drafts. It talks to the desktop
+app over `127.0.0.1` to start, pause and end a mock interview, so the app has to be open for one
+and the desktop footer shows **Extension: connected**. Chrome 116+. Chrome Web Store listing is coming;
 until then the unpacked install is the supported path.
 
 ## Development

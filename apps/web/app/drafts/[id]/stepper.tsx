@@ -330,9 +330,6 @@ export function DraftStepper({
                       durationMs={video.duration_ms}
                     />
                   )}
-                  <Link className="text-sm underline" href={`/studio/${id}`}>
-                    Trim / desktop studio options
-                  </Link>
                 </div>
               );
             })}

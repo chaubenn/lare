@@ -1,6 +1,6 @@
 /**
  * Facecam preview (`?window=camera`): a draggable, always-on-top circle showing the webcam.
- * In instant mode it is captured as part of the screen; in studio mode it is a preview only.
+ * It is captured as part of the screen recording.
  * The camera is opened with getUserMedia so it works without any Rust plumbing.
  *
  * This window outlives the recording that opened it — it is hidden, not closed — so the stream is

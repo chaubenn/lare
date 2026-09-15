@@ -3,6 +3,7 @@
 import { type CaptureSession, preferredMimeType, startCapture } from "@lare/capture";
 import { Button, Card } from "@lare/ui/primitives";
 import { useEffect, useRef, useState } from "react";
+import { rememberLocalPreview } from "@/lib/local-previews";
 import { createClient } from "@/lib/supabase/client";
 
 export function BrowserRecorder({
@@ -22,6 +23,8 @@ export function BrowserRecorder({
   const preview = useRef<HTMLVideoElement>(null);
   const finishing = useRef(false);
   const mounted = useRef(false);
+  /** The recording itself, kept for an instant preview while the cloud copy processes. */
+  const chunks = useRef<Blob[]>([]);
   const [state, setState] = useState<
     "idle" | "starting" | "recording" | "uploading" | "failed" | "done"
   >("idle");
@@ -89,6 +92,9 @@ export function BrowserRecorder({
     releaseTracks();
     try {
       const video = await result;
+      if (capture.current)
+        rememberLocalPreview(video.videoId, chunks.current, capture.current.mimeType);
+      chunks.current = [];
       capture.current = null;
       setState("done");
       onComplete(video.videoId);
@@ -107,6 +113,7 @@ export function BrowserRecorder({
     setError(null);
     setState("starting");
     setProgress({ uploadedBytes: 0, recordedBytes: 0 });
+    chunks.current = [];
     onBusy(true);
     try {
       if (!window.isSecureContext || !navigator.mediaDevices)
@@ -161,6 +168,7 @@ export function BrowserRecorder({
           if (error) throw error;
         },
         onProgress: setProgress,
+        onChunk: (chunk) => chunks.current.push(chunk),
         onError: (cause) =>
           setError(`${cause.message} Stop to finish or retry the upload; keep this tab open.`),
       });
@@ -232,7 +240,7 @@ export function BrowserRecorder({
           : state === "uploading"
             ? "Finishing upload. Do not close this tab."
             : state === "done"
-              ? "Uploaded and attached. Playback may still be encoding."
+              ? "Uploaded and attached. Watch it below while it processes."
               : state === "starting"
                 ? "Preparing recording..."
                 : null}
@@ -277,6 +285,7 @@ export function BrowserRecorder({
                 try {
                   await capture.current?.discard();
                   capture.current = null;
+                  chunks.current = [];
                   releaseTracks();
                   setState("idle");
                   setError(null);

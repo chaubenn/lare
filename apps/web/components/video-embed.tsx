@@ -7,6 +7,7 @@ import { useToast } from "@lare/ui/primitives";
 import { CircleAlert, LoaderCircle, Play, Video as VideoIcon } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { forgetLocalPreview, useLocalPreview } from "@/lib/local-previews";
 
 export interface VideoEmbedProps {
   videoId: string;
@@ -72,9 +73,34 @@ export function VideoEmbed({
   }, [toastError, videoId]);
 
   const ready = status === "ready" && Boolean(bunnyVideoId);
+  const localPreview = useLocalPreview(videoId);
   useEffect(() => {
     if (autoLoad && ready) void load();
   }, [autoLoad, ready, load]);
+  useEffect(() => {
+    if (ready) forgetLocalPreview(videoId);
+  }, [ready, videoId]);
+
+  if (!ready && localPreview) {
+    return (
+      <div className={cn("space-y-1.5", className)}>
+        <video
+          src={localPreview}
+          controls
+          preload="metadata"
+          title={title}
+          className="aspect-video w-full rounded-xl border border-zinc-800 bg-black"
+        >
+          <track kind="captions" />
+        </video>
+        <p className="text-xs text-zinc-500">
+          {status === "failed"
+            ? "Local preview. The cloud copy failed to process."
+            : "Local preview. Others can watch once the cloud copy finishes processing."}
+        </p>
+      </div>
+    );
+  }
 
   if (!ready) {
     const failed = status === "failed";

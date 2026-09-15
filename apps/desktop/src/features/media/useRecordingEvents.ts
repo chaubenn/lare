@@ -4,26 +4,27 @@
  */
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router";
 import { useToast } from "@/components/toast/ToastProvider";
 import { useUser } from "@/features/auth/AuthProvider";
 import { errorMessage } from "@/lib/supabase";
 import { useTauriEvent } from "@/lib/tauri";
+import { localCopiesKey } from "./localCopies";
 import { processInterview, publishInstantDemo } from "./pipeline";
 import { getRecordingMeta } from "./recordingStore";
 
 export function useRecordingEvents(): void {
   const { userId } = useUser();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   useTauriEvent("recording:completed", (recording) => {
     void queryClient.invalidateQueries({ queryKey: ["recorder", "recordings"] });
+    // A take that finished is playable from disk before it is uploaded.
+    void queryClient.invalidateQueries({ queryKey: localCopiesKey });
     if (recording.purpose === "interview") {
       toast({
         title: "Mock interview recorded",
-        description: "Transcribing and uploading in the background.",
+        description: "Watch it in the draft now; it transcribes and uploads in the background.",
       });
       processInterview({ recording, userId, queryClient })
         .then(() => {
@@ -42,39 +43,34 @@ export function useRecordingEvents(): void {
         });
       return;
     }
-    if (recording.mode === "instant") {
-      // Which slot the author was filling is only known here (the recorder manifest carries the
-      // post, not the slot), so read it back from the store the panel wrote it to.
-      getRecordingMeta(recording.recordingId)
-        .then((meta) => {
-          const slot = meta?.slot ?? "main";
-          return publishInstantDemo({
-            recording,
-            userId,
-            postId: recording.postId,
-            slot,
-            title: slot === "demo" ? "Summary video" : "Demo video",
-            queryClient,
-          });
-        })
-        .then(() => {
-          toast({
-            title: "Video uploaded",
-            description: "Bunny is encoding it now; the player appears when that finishes.",
-            variant: "success",
-          });
-        })
-        .catch((e: unknown) => {
-          toast({
-            title: "Upload failed",
-            description: `${errorMessage(e)}. Retry from the draft's Media step.`,
-            variant: "error",
-          });
+    // Which slot the author was filling is only known here (the recorder manifest carries the
+    // post, not the slot), so read it back from the store the panel wrote it to.
+    getRecordingMeta(recording.recordingId)
+      .then((meta) => {
+        const slot = meta?.slot ?? "main";
+        return publishInstantDemo({
+          recording,
+          userId,
+          postId: recording.postId,
+          slot,
+          title: slot === "demo" ? "Summary video" : "Demo video",
+          queryClient,
         });
-      return;
-    }
-    // Studio: hand over to the editor.
-    void navigate(`/studio/local/${recording.recordingId}`);
+      })
+      .then(() => {
+        toast({
+          title: "Video uploaded",
+          description: "Others can watch it once it finishes processing.",
+          variant: "success",
+        });
+      })
+      .catch((e: unknown) => {
+        toast({
+          title: "Upload failed",
+          description: `${errorMessage(e)}. Retry from the draft's Media step.`,
+          variant: "error",
+        });
+      });
   });
 
   useTauriEvent("recording:state", (state) => {

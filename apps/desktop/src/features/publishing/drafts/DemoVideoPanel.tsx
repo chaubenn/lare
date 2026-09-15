@@ -1,6 +1,6 @@
 import { Progress } from "@lare/ui/primitives";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Camera, Mic, Monitor, Scissors, Trash2, Video } from "lucide-react";
+import { Camera, Mic, Trash2, Video } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
 import { useToast } from "@/components/toast/ToastProvider";
@@ -41,23 +41,18 @@ function useSlotRecording(draft: Draft) {
 
   /**
    * Start a take for one slot. The recorder only knows which post it belongs to, so the slot is
-   * written to the local recording store here and read back when the take finishes (instant) or
-   * is published from the studio editor.
+   * written to the local recording store here and read back when the take finishes.
    */
-  const start = async (
-    mode: "instant" | "studio",
-    slot: VideoSlot,
-    options: { facecam: boolean; mic: boolean },
-  ) => {
+  const start = async (slot: VideoSlot, options: { facecam: boolean; mic: boolean }) => {
     const upload = await invokeFunction<CreateUploadResponse>("bunny-create-upload", {
-      mode,
+      mode: "instant",
       title: slot === "demo" ? "Summary video" : "Demo video",
       captureSource: "desktop",
       mimeType: "video/mp4",
     });
     try {
       const uploadUrl = await recorder.prepareUpload(upload.tus);
-      const state = await recorder.start({ mode, postId: draft.id, ...options });
+      const state = await recorder.start({ mode: "instant", postId: draft.id, ...options });
       if (state.recordingId)
         await patchRecordingMeta(state.recordingId, {
           slot,
@@ -70,11 +65,8 @@ function useSlotRecording(draft: Draft) {
       throw error;
     }
     toast({
-      title: mode === "instant" ? "Recording — one take" : "Recording — studio",
-      description:
-        mode === "instant"
-          ? "Stop from the pill to upload straight away."
-          : "Stop from the pill, then trim and publish from the editor.",
+      title: "Recording",
+      description: "Stop from the pill to upload straight away.",
     });
   };
 
@@ -126,22 +118,13 @@ export function DemoVideoPanel({ draft }: { draft: Draft }) {
                   {new Date(recording.startedAt).toLocaleString()}
                 </p>
                 {recording.error && <p className="text-xs text-rose-400">{recording.error}</p>}
-                {recording.mode === "instant" ? (
-                  <Button
-                    size="sm"
-                    disabled={retry.isPending || working}
-                    onClick={() => retry.mutate(recording)}
-                  >
-                    Retry upload
-                  </Button>
-                ) : (
-                  <Link
-                    to={`/studio/local/${recording.recordingId}?post=${draft.id}&slot=${recording.slot}`}
-                    className="text-emerald-400 hover:underline"
-                  >
-                    Continue editing
-                  </Link>
-                )}
+                <Button
+                  size="sm"
+                  disabled={retry.isPending || working}
+                  onClick={() => retry.mutate(recording)}
+                >
+                  Retry upload
+                </Button>
               </div>
             ))}
           </div>
@@ -193,19 +176,21 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
             {draft.video_kind === "highlights" ? "Highlights reel" : "Full recording"}
             {video.data.duration_ms ? ` · ${Math.round(video.data.duration_ms / 1000)}s` : ""}
           </p>
+          {activeJob ? (
+            <JobProgress
+              label={activeJob.label}
+              detail={activeJob.detail}
+              percent={activeJob.percent}
+            />
+          ) : null}
           <div className="flex flex-wrap gap-2">
-            {draft.video_id ? (
-              <Link to={`/studio/${draft.video_id}?post=${draft.id}`}>
-                <Button size="sm" icon={<Scissors className="size-3.5" aria-hidden />}>
-                  {isInterview ? "Cut highlights" : "Re-edit"}
-                </Button>
-              </Link>
-            ) : null}
             <Button
               size="sm"
               variant="danger"
               icon={<Trash2 className="size-3.5" aria-hidden />}
               loading={removeVideo.isPending}
+              // Deleting a video mid-upload would pull it out from under its own pipeline.
+              disabled={!!activeJob}
               onClick={() => removeVideo.mutate()}
             >
               Remove
@@ -221,8 +206,7 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
       ) : isInterview ? (
         <div className="space-y-2 text-sm text-zinc-400">
           <p>
-            The extension uploads the interview while recording. Keep its recording page open until
-            upload finishes.
+            The desktop app records the interview and uploads it when you end it from the extension.
           </p>
         </div>
       ) : (
@@ -274,20 +258,23 @@ function SummaryVideoPanel({ draft }: { draft: Draft }) {
       {draft.demo_video_id && video.data ? (
         <div className="space-y-3">
           <VideoEmbed video={video.data} title="Summary video" />
-          <Link to={`/studio/${draft.demo_video_id}?post=${draft.id}&slot=demo`}>
-            <Button size="sm" icon={<Scissors className="size-3.5" aria-hidden />}>
-              Trim summary
-            </Button>
-          </Link>
           <p className="text-xs text-zinc-500">
             Plays before the full recording
             {video.data.duration_ms ? ` · ${Math.round(video.data.duration_ms / 1000)}s` : ""}
           </p>
+          {activeJob ? (
+            <JobProgress
+              label={activeJob.label}
+              detail={activeJob.detail}
+              percent={activeJob.percent}
+            />
+          ) : null}
           <Button
             size="sm"
             variant="danger"
             icon={<Trash2 className="size-3.5" aria-hidden />}
             loading={removeVideo.isPending}
+            disabled={!!activeJob}
             onClick={() => removeVideo.mutate()}
           >
             Remove
@@ -329,7 +316,7 @@ function JobProgress({
   );
 }
 
-/** Mic/facecam switches and the two record buttons, for whichever slot is being filled. */
+/** Mic/facecam switches and the record button, for whichever slot is being filled. */
 function RecordControls({
   slot,
   idPrefix,
@@ -349,10 +336,10 @@ function RecordControls({
 
   const blocked = !inTauri || recordingBusy || starting || (permissions.data ? !screenOk : false);
 
-  const run = async (mode: "instant" | "studio") => {
+  const run = async () => {
     setStarting(true);
     try {
-      await start(mode, slot, { facecam, mic });
+      await start(slot, { facecam, mic });
     } catch (e) {
       toast({ title: "Couldn't start recording", description: errorMessage(e), variant: "error" });
     } finally {
@@ -394,7 +381,7 @@ function RecordControls({
               <Camera className="size-3.5" aria-hidden /> Facecam
             </span>
           }
-          description="Instant: the preview bubble is captured on screen. Studio: recorded as its own track."
+          description="The preview bubble is captured on screen."
         />
       </div>
       <div className="flex flex-wrap gap-2">
@@ -402,18 +389,10 @@ function RecordControls({
           icon={<Video className="size-4" aria-hidden />}
           disabled={blocked}
           loading={starting}
-          onClick={() => void run("instant")}
-          title="One take: stops, uploads and attaches immediately"
+          onClick={() => void run()}
+          title="Stops, uploads and attaches immediately"
         >
-          Record (Instant)
-        </Button>
-        <Button
-          icon={<Monitor className="size-4" aria-hidden />}
-          disabled={blocked}
-          onClick={() => void run("studio")}
-          title="Record, then trim and cut before publishing"
-        >
-          Record (Studio)
+          Record
         </Button>
       </div>
       {recordingBusy ? (
@@ -421,9 +400,6 @@ function RecordControls({
           A recording is in progress — stop it from the pill first.
         </p>
       ) : null}
-      <p className="text-xs text-zinc-500">
-        Instant publishes as soon as you stop. Studio opens an editor to trim and cut first.
-      </p>
     </div>
   );
 }

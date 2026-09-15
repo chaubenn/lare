@@ -89,7 +89,6 @@ pub struct CompletedPayload {
     pub mode: RecordingMode,
     pub project_path: PathBuf,
     pub output_mp4: Option<PathBuf>,
-    pub mic_track: Option<PathBuf>,
     pub started_at: u64,
     pub ended_at: u64,
     pub post_id: Option<String>,
@@ -237,7 +236,7 @@ impl Recorder {
 
     pub async fn prepare_upload(&self, tus: lare_bunny::TusCredentials) -> Result<String, String> {
         // The desktop prepares immediately before demo start. Consume this once, even
-        // when starting fails or the chosen mode is studio, so it cannot leak to a later take.
+        // when starting fails, so it cannot leak to a later take.
         let mut pending = self.prepared_upload.lock().await;
         *pending = None;
         let upload_url = lare_bunny::create_deferred_upload(&lare_bunny::http_client(), &tus)
@@ -368,20 +367,10 @@ impl Recorder {
         }
     }
 
-    fn resolve_camera(&self, want_camera: bool) -> Option<String> {
-        if !want_camera {
-            return None;
-        }
-        self.settings()
-            .camera_id
-            .or_else(|| lare_recording::devices::list_cameras().into_iter().next().map(|c| c.id))
-    }
-
     /// Start a recording. `hub` is set for extension-driven interviews so the extension is kept
     /// informed with `recording.state` frames.
     pub async fn start(self: &Arc<Self>, spec: StartSpec, hub: Option<WsHub>) -> Result<StatePayload, String> {
         let StartSpec {
-            mode,
             facecam,
             ref session_id,
             ..
@@ -398,10 +387,10 @@ impl Recorder {
             *starting = true;
         }
         *self.last_finish.lock().await = None;
-        // Instant mode has no camera track: the facecam preview window is captured as part
-        // of the screen, so it must be on screen before capture starts.
+        // There is no camera track: the facecam preview window is captured as part of the
+        // screen, so it must be on screen before capture starts.
         let display_id = self.settings().display_id;
-        if facecam && mode == RecordingMode::Instant {
+        if facecam {
             if let Err(e) = crate::windows::open_camera(&self.app, display_id.as_deref()) {
                 warn!(%e, "camera preview window failed to open");
             }
@@ -453,11 +442,8 @@ impl Recorder {
         let recording_id = uuid_like();
         let dir = self.recordings_dir.join(&recording_id);
         let settings = self.settings();
-        // Instant mode captures the on-screen camera preview window instead of a camera track.
-        let camera_id = match mode {
-            RecordingMode::Studio => self.resolve_camera(facecam),
-            RecordingMode::Instant => None,
-        };
+        // The on-screen camera preview window is captured instead of a camera track.
+        let camera_id = None;
         let req = StartRequest {
             mode,
             dir: dir.clone(),
@@ -605,15 +591,12 @@ impl Recorder {
         // A failed stop is not a lost recording: the fragments Cap already wrote are the whole
         // take bar the final mux, so finish them from disk before giving up.
         let finished = match result {
-            Ok(done) => Ok((done.project_path, done.output_mp4, done.mic_track, done.ended_at_epoch_ms)),
+            Ok(done) => Ok((done.project_path, done.output_mp4, done.ended_at_epoch_ms)),
             Err(e) => {
                 warn!(error = %format!("{e:#}"), "stopping the recording failed; salvaging the project");
                 match salvage(mode, project_path.clone()).await {
-                    // An instant recording is only salvaged if the mux actually produced the MP4;
-                    // a studio project has no single output until the exporter runs either way.
-                    Ok(output) if mode == RecordingMode::Studio || output.is_some() => {
-                        Ok((project_path.clone(), output, mic_track(mode, &project_path), now_ms()))
-                    }
+                    // A recording is only salvaged if the mux actually produced the MP4.
+                    Ok(output) if output.is_some() => Ok((project_path.clone(), output, now_ms())),
                     Ok(_) => Err(format!(
                         "Stopping the recording failed: {e:#} (there was nothing left on disk to recover)"
                     )),
@@ -623,7 +606,7 @@ impl Recorder {
                 }
             }
         };
-        let (project_path, output_mp4, mic_track, ended_at) = match finished {
+        let (project_path, output_mp4, ended_at) = match finished {
             Ok(parts) => parts,
             Err(msg) => {
                 error!(%msg);
@@ -643,7 +626,6 @@ impl Recorder {
             mode,
             project_path: project_path.clone(),
             output_mp4,
-            mic_track,
             started_at: started,
             ended_at,
             post_id: active.post_id,
@@ -748,7 +730,7 @@ impl Recorder {
                     continue;
                 }
             };
-            if mode == RecordingMode::Instant && output_mp4.is_none() {
+            if output_mp4.is_none() {
                 warn!(dir = %dir.display(), "nothing recoverable in the project");
                 write_unrecoverable(&dir, "no display segments were written before the process died");
                 continue;
@@ -769,7 +751,6 @@ impl Recorder {
                 mode,
                 project_path: dir.clone(),
                 output_mp4,
-                mic_track: mic_track(mode, &dir),
                 started_at: started.started_at,
                 ended_at,
                 post_id: started.post_id,
@@ -820,7 +801,7 @@ impl RecordingBackend for CapRecordingBackend {
                 .start(
                     StartSpec {
                         purpose: Purpose::Interview,
-                        mode: RecordingMode::Studio,
+                        mode: RecordingMode::Instant,
                         session_id: Some(req.session_id.clone()),
                         post_id: None,
                         facecam: req.facecam,
@@ -888,14 +869,6 @@ async fn salvage(mode: RecordingMode, project_path: PathBuf) -> Result<Option<Pa
         .await
         .map_err(|e| format!("recovery task panicked: {e}"))?
         .map_err(|e| format!("{e:#}"))
-}
-
-/// Studio projects keep the microphone as its own track; instant recordings mux it into the MP4.
-fn mic_track(mode: RecordingMode, project_path: &Path) -> Option<PathBuf> {
-    match mode {
-        RecordingMode::Studio => lare_recording::find_mic_track(project_path),
-        RecordingMode::Instant => None,
-    }
 }
 
 fn uuid_like() -> String {

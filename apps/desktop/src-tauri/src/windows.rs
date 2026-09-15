@@ -338,9 +338,8 @@ pub fn hide_recorder(app: &AppHandle) {
     });
 }
 
-/// Show the facecam preview (bottom-right of the recorded display, above the Dock). Captured as
-/// part of the screen in instant mode, so it must sit on the display being recorded; purely a
-/// preview in studio mode.
+/// Show the facecam preview (bottom-right of the recorded display, above the Dock). It is
+/// captured as part of the screen, so it must sit on the display being recorded.
 pub fn open_camera(app: &AppHandle, display_id: Option<&str>) -> Result<(), String> {
     let display_id = display_id.map(str::to_owned);
     on_main(app, move |app| {

@@ -8,8 +8,8 @@ videos, and run AI-graded mock interviews.
 
 | Part | Stack | Responsibility |
 | --- | --- | --- |
-| `apps/extension` | Chrome MV3, WXT, React | Passive practice capture (every problem opened, every submission judged — nothing to start or stop), Monaco edit log, mock-interview trigger. On-page UI is one recording dot, shown only while an interview records; the popup is the control surface. Writes to Supabase directly; talks to the desktop over `ws://127.0.0.1:47831`. |
-| `apps/desktop` | Tauri 2, React 19, Rust | Drafts and publishing, screen/camera/mic recording (recycled from Cap), whisper.cpp transcription, Bunny TUS uploads, studio editor, interview review. |
+| `apps/extension` | Chrome MV3, WXT, React | Passive practice capture (every problem opened, every submission judged — nothing to start or stop), Monaco edit log, mock-interview start/pause/end sent to the desktop app. On-page UI is one recording dot, shown only while an interview records; the side panel is the control surface. Writes to Supabase directly; talks to the desktop over `ws://127.0.0.1:47831`. |
+| `apps/desktop` | Tauri 2, React 19, Rust | Drafts and publishing, screen/camera/mic recording (recycled from Cap), whisper.cpp transcription, Bunny TUS uploads, interview review. |
 | `apps/web` | Next.js 16, Vercel (`syd1`) | Public post pages `/p/[id]`, profiles `/u/[handle]`, follower feed, follow requests. |
 | `supabase/` | Postgres + RLS, Auth, Storage, Realtime, Edge Functions (Deno) | Source of truth for users, sessions, posts, videos; Bunny signing; OpenAI review. |
 | Bunny Stream | library `lare` (id 743884) | Video storage, encoding, delivery. Embed token authentication is on. |
@@ -23,11 +23,11 @@ flowchart LR
   end
   subgraph desktop [Lare desktop]
     WS["axum WebSocket 127.0.0.1:47831 + OAuth loopback"]
-    Rec["lare-recording (Cap instant/studio actors)"]
+    Rec["lare-recording (Cap instant actor)"]
     Exp["cap-export headless render"]
     Whisper["lare-transcribe (whisper-rs)"]
     Tus["lare-bunny TUS uploader"]
-    UI["React: drafts, studio, recordings, session review"]
+    UI["React: drafts, recordings, session review"]
   end
   subgraph cloud [Backend]
     SB["Supabase"]
@@ -103,14 +103,13 @@ already in media time; edit events (wall-clock epoch from Monaco) and submission
 
 1. Extension `session.start` (kind interview) or the draft editor's *Record* button.
 2. `Recorder` (`apps/desktop/src-tauri/src/recorder.rs`) starts Cap's **instant** actor (single
-   MP4; facecam preview window is captured as part of the screen) or **studio** actor (display,
-   camera and mic tracks per pause/resume clip). Overlay windows: recorder pill and camera preview.
+   MP4; facecam preview window is captured as part of the screen). Overlay windows: recorder pill
+   and camera preview.
    Both are built once and thereafter only shown and hidden — the pill's stop button lives inside
    its own webview, and destroying that webview under an in-flight `recording_stop` aborts the
    process. `destroy_overlays` closes them when the main window goes, which is also what quits the
    app now that the overlays outlive every recording.
-3. On stop, studio projects are remuxed (`RecoveryManager::remux_if_needed`) so every clip has a
-   `display.mp4`; the `recording:completed` event hands the recording to the React pipeline.
+3. On stop, the `recording:completed` event hands the recording to the React pipeline.
    `stop` and `cancel` are serialised on one mutex and idempotent — the pill's stop button and the
    extension's `session.end` race on every interview ended from the browser, and the second caller
    gets the first one's payload rather than an error. The completed manifest
@@ -121,12 +120,9 @@ already in media time; edit events (wall-clock epoch from Monaco) and submission
 4. `features/recording/pipeline.ts`:
    - instant demo -> `publishVideo` (create Bunny video via `bunny-create-upload`, thumbnail to
      Storage, TUS upload from Rust with progress events, attach to the draft);
-   - interview -> render (`cap-export`, facecam PiP if one was recorded) -> transcribe the render
-     with whisper -> upload -> captions (`bunny-captions`) -> attach to the session's draft. The
-     facecam is optional and so is the render: if it fails, the transcript is still taken from the
-     raw mic track and saved before the failure is reported, so the AI review is never lost with
-     the video;
-   - studio -> editor (`/studio/:recordingId`) -> `exportAndPublish` with the user's edit.
+   - interview -> transcribe the MP4 with whisper -> upload -> captions (`bunny-captions`) ->
+     attach to the session's draft. A failed transcription marks the session ungraded and the
+     video still uploads.
 5. Bunny calls `bunny-webhook` (HMAC) as it encodes; `videos.status` flips to `ready` and the web
    and desktop players pick it up over Realtime. Playback URLs come from `bunny-playback-token`
    after an RLS visibility check.

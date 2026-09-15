@@ -4,7 +4,6 @@ import { LoginPage } from "@/features/auth/LoginPage";
 import { RequireAuth } from "@/features/auth/RequireAuth";
 import { FeedPage } from "@/features/feed/FeedPage";
 import { FriendsPage } from "@/features/friends/FriendsPage";
-import { StudioEditorPage } from "@/features/media/studio/StudioEditorPage";
 import { NotificationsPage } from "@/features/notifications/NotificationsPage";
 import { ProfileEditor } from "@/features/profile/ProfileEditor";
 import { ProfilePage } from "@/features/profile/ProfilePage";
@@ -49,11 +48,10 @@ export const router = createMemoryRouter([
               { path: "/posts/:id", element: <PostPage /> },
               { path: "/posts/:id/edit", element: <PostEditPage /> },
               { path: "/drafts", element: <DraftsPage /> },
-              { path: "/drafts/:id", element: <DraftEditorPage /> },
+              // The editor has its own step rail, so it starts at the sidebar instead of centring.
+              { path: "/drafts/:id", element: <DraftEditorPage />, handle: { fullWidth: true } },
               { path: "/sessions", element: <SessionsPage /> },
               { path: "/sessions/:id", element: <SessionReviewPage /> },
-              { path: "/studio/:videoId", element: <StudioEditorPage /> },
-              { path: "/studio/local/:recordingId", element: <StudioEditorPage /> },
               { path: "/profile", element: <ProfilePage /> },
               { path: "/profile/edit", element: <ProfileEditor /> },
               { path: "/u/:handle", element: <UserProfilePage /> },

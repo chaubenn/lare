@@ -1,23 +1,19 @@
-//! Tauri commands for recording, devices, permissions, export, upload and transcription.
+//! Tauri commands for recording, devices, permissions, upload and transcription.
 //!
-//! Long jobs report progress through events (`upload:progress`, `export:progress`,
-//! `transcribe:progress`) keyed by a caller-supplied `jobId`, so the React side can show
+//! Long jobs report progress through events (`upload:progress`, `transcribe:progress`) keyed by a caller-supplied `jobId`, so the React side can show
 //! several jobs at once and survive re-renders.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use lare_recording::devices::{CameraInfo, DisplayInfo, MicrophoneInfo};
-use lare_recording::edit::StudioEdit;
 use lare_recording::permissions::{PermissionStatus, Permissions};
 use lare_recording::thumbnail::MediaInfo;
-use lare_recording::{ExportQuality, ExportRequest, ProjectConfiguration};
 use lare_transcribe::{ModelKind, Progress, Segment, TranscribeOptions};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::recorder::{CompletedPayload, DemoStart, Recorder, RecorderSettings, StatePayload};
 use crate::windows;
@@ -26,18 +22,6 @@ type Rec<'a> = State<'a, Arc<Recorder>>;
 
 fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
-}
-
-#[tauri::command]
-pub fn configure_pcm(
-    service: State<'_, Arc<crate::pcm::PcmService>>,
-    rec: Rec<'_>,
-    auth: Option<crate::pcm::CloudAuth>,
-) -> Result<(), String> {
-    *service.auth.lock().map_err(err)? = auth;
-    let kind = rec.settings().whisper_model.unwrap_or(ModelKind::SmallEn);
-    *service.model.lock().map_err(err)? = Some(rec.models_dir().join(kind.file_name()));
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -110,21 +94,7 @@ pub fn recorder_settings(rec: Rec<'_>) -> RecorderSettings {
 }
 
 #[tauri::command]
-pub fn set_recorder_settings(
-    rec: Rec<'_>,
-    pcm: State<'_, Arc<crate::pcm::PcmService>>,
-    settings: RecorderSettings,
-) {
-    if let Ok(mut model) = pcm.model.lock() {
-        *model = Some(
-            rec.models_dir().join(
-                settings
-                    .whisper_model
-                    .unwrap_or(ModelKind::SmallEn)
-                    .file_name(),
-            ),
-        );
-    }
+pub fn set_recorder_settings(rec: Rec<'_>, settings: RecorderSettings) {
     rec.set_settings(settings);
 }
 
@@ -316,266 +286,6 @@ pub async fn make_thumbnail(req: ThumbnailRequest) -> Result<PathBuf, String> {
     .map_err(err)?
 }
 
-/// One recording clip of a studio project (a pause/resume creates a new clip).
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClipInfo {
-    pub display_path: PathBuf,
-    pub duration_ms: u64,
-    /// Start of this clip on the concatenated timeline.
-    pub offset_ms: u64,
-}
-
-/// Facts about a studio project the editor needs.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StudioProjectInfo {
-    pub project_path: PathBuf,
-    /// First clip's display track (preview poster / single-clip preview).
-    pub display_path: Option<PathBuf>,
-    pub camera_path: Option<PathBuf>,
-    pub mic_path: Option<PathBuf>,
-    /// Total duration across clips.
-    pub duration_ms: u64,
-    pub width: Option<u32>,
-    pub height: Option<u32>,
-    pub clips: Vec<ClipInfo>,
-}
-
-#[tauri::command]
-pub async fn studio_project_info(project_path: PathBuf) -> Result<StudioProjectInfo, String> {
-    tokio::task::spawn_blocking(move || {
-        // Interrupted recordings may still hold DASH fragments; finish them first.
-        if let Err(e) = lare_recording::remux_studio_if_needed(&project_path) {
-            warn!(%e, "remux failed");
-        }
-        let tracks = lare_recording::clip_tracks(&project_path);
-        let mut offset = 0u64;
-        let clips: Vec<ClipInfo> = tracks
-            .iter()
-            .map(|(path, secs)| {
-                let duration_ms = (secs * 1000.0).round() as u64;
-                let clip = ClipInfo {
-                    display_path: path.clone(),
-                    duration_ms,
-                    offset_ms: offset,
-                };
-                offset += duration_ms;
-                clip
-            })
-            .collect();
-        let display_path = clips.first().map(|c| c.display_path.clone());
-        let info = display_path
-            .as_deref()
-            .and_then(|p| lare_recording::thumbnail::probe(p).ok());
-        let camera_path = lare_recording::find_camera_track(&project_path);
-        // Falls back to the untranscoded track: a preview that may not play beats no preview.
-        let mic_path = lare_recording::find_mic_track(&project_path).map(|p| {
-            match lare_recording::ensure_playable_audio(&p) {
-                Ok(playable) => playable,
-                Err(e) => {
-                    warn!(%e, path = %p.display(), "could not transcode mic for preview");
-                    p
-                }
-            }
-        });
-        Ok(StudioProjectInfo {
-            camera_path,
-            mic_path,
-            duration_ms: offset,
-            width: info.and_then(|i| i.width),
-            height: info.and_then(|i| i.height),
-            display_path,
-            project_path,
-            clips,
-        })
-    })
-    .await
-    .map_err(err)?
-}
-
-// ---------------------------------------------------------------------------
-// Export (studio projects -> MP4)
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportJob {
-    pub job_id: String,
-    pub project_path: PathBuf,
-    #[serde(default)]
-    pub edit: StudioEdit,
-    /// Output file; defaults to `<project>/output/result.mp4`.
-    pub output: Option<PathBuf>,
-    #[serde(default = "default_quality")]
-    pub quality: ExportQuality,
-    #[serde(default = "default_fps")]
-    pub fps: u32,
-    /// Longest-edge cap, e.g. 1920. `None` keeps the source size.
-    pub max_edge: Option<u32>,
-}
-
-fn default_quality() -> ExportQuality {
-    ExportQuality::Social
-}
-
-fn default_fps() -> u32 {
-    30
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportProgress {
-    pub job_id: String,
-    pub frame: u32,
-    pub total: u32,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportResult {
-    pub output: PathBuf,
-    pub duration_ms: Option<u64>,
-    pub width: Option<u32>,
-    pub height: Option<u32>,
-    pub size_bytes: u64,
-}
-
-/// Cancellation flags for running exports, keyed by job id.
-#[derive(Default)]
-pub struct Jobs {
-    cancel: std::sync::Mutex<std::collections::HashMap<String, Arc<AtomicBool>>>,
-}
-
-impl Jobs {
-    fn register(&self, id: &str) -> Arc<AtomicBool> {
-        let flag = Arc::new(AtomicBool::new(false));
-        if let Ok(mut m) = self.cancel.lock() {
-            m.insert(id.to_string(), flag.clone());
-        }
-        flag
-    }
-
-    fn finish(&self, id: &str) {
-        if let Ok(mut m) = self.cancel.lock() {
-            m.remove(id);
-        }
-    }
-
-    pub fn cancel(&self, id: &str) -> bool {
-        self.cancel
-            .lock()
-            .ok()
-            .and_then(|m| m.get(id).cloned())
-            .map(|f| {
-                f.store(true, Ordering::Relaxed);
-                true
-            })
-            .unwrap_or(false)
-    }
-}
-
-#[tauri::command]
-pub async fn export_studio(
-    app: AppHandle,
-    jobs: State<'_, Jobs>,
-    job: ExportJob,
-) -> Result<ExportResult, String> {
-    let output = job
-        .output
-        .clone()
-        .unwrap_or_else(|| job.project_path.join("output").join("result.mp4"));
-    if let Some(parent) = output.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(err)?;
-    }
-    let project_path = job.project_path.clone();
-    let (base_cfg, source, clip_durations) = tokio::task::spawn_blocking({
-        let project_path = project_path.clone();
-        move || {
-            if let Err(e) = lare_recording::remux_studio_if_needed(&project_path) {
-                warn!(%e, "remux failed");
-            }
-            let cfg = ProjectConfiguration::load(&project_path).unwrap_or_default();
-            let source = lare_recording::find_display_track(&project_path)
-                .and_then(|p| lare_recording::thumbnail::probe(&p).ok());
-            let clips: Vec<f64> = lare_recording::clip_tracks(&project_path)
-                .into_iter()
-                .map(|(_, d)| d)
-                .collect();
-            (cfg, source, clips)
-        }
-    })
-    .await
-    .map_err(err)?;
-    let config = lare_recording::edit::apply_edit(base_cfg, &job.edit, &clip_durations);
-    // Persist so a re-export (or Cap itself) sees the same edit.
-    if let Err(e) = config.write(&project_path) {
-        warn!(%e, "could not save project-config.json");
-    }
-
-    let resolution_base = match (
-        job.max_edge,
-        source.and_then(|s| Some((s.width?, s.height?))),
-    ) {
-        (Some(max), Some((w, h))) if w.max(h) > max => {
-            let scale = max as f64 / w.max(h) as f64;
-            Some((
-                ((w as f64 * scale) as u32) & !1,
-                ((h as f64 * scale) as u32) & !1,
-            ))
-        }
-        _ => None,
-    };
-
-    let flag = jobs.register(&job.job_id);
-    let job_id = job.job_id.clone();
-    let emitter = app.clone();
-    info!(job = %job_id, project = %project_path.display(), "export started");
-    let result = lare_recording::export_studio(
-        ExportRequest {
-            project_path,
-            config: Some(config),
-            output: output.clone(),
-            fps: job.fps,
-            resolution_base,
-            quality: job.quality,
-        },
-        move |frame, total| {
-            let _ = emitter.emit(
-                "export:progress",
-                ExportProgress {
-                    job_id: job_id.clone(),
-                    frame,
-                    total,
-                },
-            );
-            !flag.load(Ordering::Relaxed)
-        },
-    )
-    .await;
-    jobs.finish(&job.job_id);
-    let output = result.map_err(|e| format!("{e:#}"))?;
-    let meta = tokio::fs::metadata(&output).await.map_err(err)?;
-    let info = {
-        let p = output.clone();
-        tokio::task::spawn_blocking(move || lare_recording::thumbnail::probe(&p).ok())
-            .await
-            .map_err(err)?
-    };
-    Ok(ExportResult {
-        size_bytes: meta.len(),
-        duration_ms: info.and_then(|i| i.duration_ms),
-        width: info.and_then(|i| i.width),
-        height: info.and_then(|i| i.height),
-        output,
-    })
-}
-
-#[tauri::command]
-pub fn cancel_job(jobs: State<'_, Jobs>, job_id: String) -> bool {
-    jobs.cancel(&job_id)
-}
-
 // ---------------------------------------------------------------------------
 // Upload (TUS to Bunny with credentials from the Edge Function)
 // ---------------------------------------------------------------------------
@@ -655,7 +365,7 @@ pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Re
     .await
     .map_err(err)?;
     info!(job = %job_id, path = %job.path.display(), size_bytes, "upload started");
-    // Studio renders and retries are closed files. Instant captures join their live tailer above.
+    // Retries are closed files. Instant captures join their live tailer above.
     let (_finished, completion) = tokio::sync::watch::channel(true);
     let upload_url = lare_bunny::upload_growing_file(
         &client,
@@ -785,7 +495,7 @@ pub async fn ensure_whisper_model(
 #[serde(rename_all = "camelCase")]
 pub struct TranscribeJob {
     pub job_id: String,
-    /// Any media file with an audio track (studio mic track, instant MP4, ...).
+    /// Any media file with an audio track (an instant MP4).
     pub input: PathBuf,
     pub model: Option<ModelKind>,
 }
@@ -855,7 +565,7 @@ pub async fn read_file_bytes(path: PathBuf) -> Result<tauri::ipc::Response, Stri
     Ok(tauri::ipc::Response::new(bytes))
 }
 
-/// Delete a file inside the recordings directory (e.g. a rendered export).
+/// Delete a file inside the recordings directory.
 #[tauri::command]
 pub fn delete_file(rec: Rec<'_>, path: PathBuf) -> Result<(), String> {
     if !path.starts_with(rec.recordings_dir()) {
