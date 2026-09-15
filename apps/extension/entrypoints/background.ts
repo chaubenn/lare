@@ -16,6 +16,7 @@ import {
   captureCommand,
   captureWindowAlive,
   closeCaptureWindow,
+  compactCaptureWindow,
   ensureCaptureWindow,
   getCapture,
 } from "@/src/capture";
@@ -426,6 +427,7 @@ async function startInterview(
     // before any session row exists, so cancelling the dialog leaves nothing behind.
     await ensureCaptureWindow();
     await captureCommand("pick");
+    await compactCaptureWindow();
     if (signal.aborted) throw new Error("Start cancelled");
     await syncSessionStart(session, userId, req.graded);
     if (tp) await syncProblemOpen(sessionId, tp, req.question);

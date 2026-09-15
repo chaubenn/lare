@@ -396,6 +396,11 @@ test("a mock interview records the picked screen in the recorder window and save
   expect(res, JSON.stringify(res)).toMatchObject({ ok: true });
   expect(await capture()).toBe("recording");
   expect(await popupCount()).toBe(1);
+  // Opened big enough for Chrome's share dialog, then shrunk to the compact recorder.
+  const popupWidth = await sw.evaluate(
+    async () => (await chrome.windows.getAll({ windowTypes: ["popup"] }))[0]?.width,
+  );
+  expect(popupWidth).toBeLessThan(500);
   await expect(dotOn(problem)).toHaveCount(1);
   await expect
     .poll(

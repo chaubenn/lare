@@ -22,6 +22,10 @@ export async function getCapture(): Promise<CaptureState | null> {
 // offscreen document, which cannot show that dialog.
 // ---------------------------------------------------------------------------
 const WINDOW_KEY = "lare:capture-window";
+// Chrome draws the share dialog inside the window that asked for it, so the window opens big
+// enough for the dialog and shrinks to the compact recorder once a screen is picked.
+const PICKER_WIDTH = 860;
+const PICKER_HEIGHT = 680;
 const WIDTH = 380;
 const HEIGHT = 300;
 
@@ -54,18 +58,21 @@ export function ensureCaptureWindow(): Promise<void> {
       await chrome.windows.update(existing, { focused: true });
       return;
     }
-    // Top-right of the current window, out of the way of the problem.
+    // Centred on the current window while the share dialog is up.
     const current = await chrome.windows.getLastFocused().catch(() => null);
     const left =
       current?.left !== undefined && current.width !== undefined
-        ? Math.max(0, current.left + current.width - WIDTH - 24)
+        ? Math.max(0, Math.round(current.left + (current.width - PICKER_WIDTH) / 2))
         : undefined;
-    const top = current?.top !== undefined ? current.top + 80 : undefined;
+    const top =
+      current?.top !== undefined && current.height !== undefined
+        ? Math.max(0, Math.round(current.top + (current.height - PICKER_HEIGHT) / 2))
+        : undefined;
     const base = {
       url: chrome.runtime.getURL("capture.html"),
       type: "popup" as const,
-      width: WIDTH,
-      height: HEIGHT,
+      width: PICKER_WIDTH,
+      height: PICKER_HEIGHT,
       focused: true,
     };
     // Chrome rejects bounds that are mostly off-screen (multi-monitor, odd window positions):
@@ -89,6 +96,24 @@ export function ensureCaptureWindow(): Promise<void> {
     opening = null;
   });
   return opening;
+}
+
+/** After the share dialog: the compact recorder, tucked into the top-right of the browser. */
+export async function compactCaptureWindow(): Promise<void> {
+  const id = await captureWindowId();
+  if (id === null) return;
+  const browser =
+    (await chrome.windows.getAll({ windowTypes: ["normal"] })).find((w) => w.focused) ??
+    (await chrome.windows.getLastFocused({ windowTypes: ["normal"] }).catch(() => null));
+  const left =
+    browser?.left !== undefined && browser.width !== undefined
+      ? Math.max(0, browser.left + browser.width - WIDTH - 24)
+      : undefined;
+  const top = browser?.top !== undefined ? browser.top + 80 : undefined;
+  await chrome.windows
+    .update(id, { width: WIDTH, height: HEIGHT, left, top })
+    .catch(() => chrome.windows.update(id, { width: WIDTH, height: HEIGHT }))
+    .catch(() => undefined);
 }
 
 export async function closeCaptureWindow(): Promise<void> {
