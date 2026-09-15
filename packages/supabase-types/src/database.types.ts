@@ -103,6 +103,68 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          actor_id: string
+          comment_id: string | null
+          created_at: string
+          id: string
+          post_id: string | null
+          read_at: string | null
+          recipient_id: string
+          type: Database["public"]["Enums"]["notification_type"]
+        }
+        Insert: {
+          actor_id: string
+          comment_id?: string | null
+          created_at?: string
+          id?: string
+          post_id?: string | null
+          read_at?: string | null
+          recipient_id: string
+          type: Database["public"]["Enums"]["notification_type"]
+        }
+        Update: {
+          actor_id?: string
+          comment_id?: string | null
+          created_at?: string
+          id?: string
+          post_id?: string | null
+          read_at?: string | null
+          recipient_id?: string
+          type?: Database["public"]["Enums"]["notification_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_comments: {
         Row: {
           body: string
@@ -342,6 +404,41 @@ export type Database = {
             columns: ["video_id"]
             isOneToOne: false
             referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      practice_goals: {
+        Row: {
+          created_at: string
+          min_difficulty: Database["public"]["Enums"]["problem_difficulty"] | null
+          period: "day" | "week"
+          target: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          min_difficulty?: Database["public"]["Enums"]["problem_difficulty"] | null
+          period: "day" | "week"
+          target: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          min_difficulty?: Database["public"]["Enums"]["problem_difficulty"] | null
+          period?: "day" | "week"
+          target?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "practice_goals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -784,10 +881,19 @@ export type Database = {
         Returns: string
       }
       toggle_post_like: { Args: { post: string }; Returns: Json }
+      goal_progress: { Args: Record<PropertyKey, never>; Returns: Json }
+      mark_notifications_read: { Args: { ids?: string[] | null }; Returns: number }
+      weekly_leaderboard: { Args: { week_offset?: number }; Returns: Json }
     }
     Enums: {
       capture_source: "desktop" | "extension" | "web"
       follow_status: "pending" | "accepted"
+      notification_type:
+        | "post_like"
+        | "post_comment"
+        | "follow"
+        | "follow_request"
+        | "follow_accepted"
       post_status: "draft" | "published"
       post_visibility: "public" | "private"
       problem_difficulty: "Easy" | "Medium" | "Hard"
@@ -939,6 +1045,7 @@ export const Constants = {
     Enums: {
       follow_status: ["pending", "accepted"],
       capture_source: ["desktop", "extension", "web"],
+      notification_type: ["post_like", "post_comment", "follow", "follow_request", "follow_accepted"],
       post_status: ["draft", "published"],
       post_visibility: ["public", "private"],
       problem_difficulty: ["Easy", "Medium", "Hard"],

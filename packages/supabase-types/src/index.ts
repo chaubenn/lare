@@ -18,6 +18,8 @@ export type PostLike = PublicSchema["Tables"]["post_likes"]["Row"];
 export type PostComment = PublicSchema["Tables"]["post_comments"]["Row"];
 export type Transcript = PublicSchema["Tables"]["transcripts"]["Row"];
 export type InterviewReview = PublicSchema["Tables"]["interview_reviews"]["Row"];
+export type NotificationRow =PublicSchema["Tables"]["notifications"]["Row"];
+export type PracticeGoal = PublicSchema["Tables"]["practice_goals"]["Row"];
 
 export type SessionInsert = PublicSchema["Tables"]["sessions"]["Insert"];
 export type SessionProblemInsert = PublicSchema["Tables"]["session_problems"]["Insert"];
