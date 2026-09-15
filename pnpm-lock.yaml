@@ -117,9 +117,6 @@ importers:
       '@fontsource/ibm-plex-mono':
         specifier: ^5.3.0
         version: 5.3.0
-      '@lare/capture':
-        specifier: workspace:*
-        version: link:../../packages/capture
       '@lare/shared':
         specifier: workspace:*
         version: link:../../packages/shared

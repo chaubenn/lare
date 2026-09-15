@@ -3,7 +3,6 @@
 
 pub mod commands;
 pub mod deeplink;
-pub mod pcm;
 pub mod recorder;
 pub mod recording;
 pub mod shutdown;
@@ -142,7 +141,6 @@ pub fn run() {
     let current_user = Arc::new(Mutex::new(None));
     let server_ctx = ServerContext::new(hub.clone(), current_user.clone(), env!("CARGO_PKG_VERSION"));
     let backend_ctx = server_ctx.clone();
-    let pcm = server_ctx.pcm.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -163,9 +161,7 @@ pub fn run() {
             ws: hub,
             initial_deeplink: Mutex::new(None),
         })
-        .manage(pcm)
         .invoke_handler(tauri::generate_handler![
-            commands::configure_pcm,
             commands::prepare_bunny_upload,
             set_current_user,
             ws_status,

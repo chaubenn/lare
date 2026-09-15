@@ -31,11 +31,8 @@ export function RecordingDot({ controller }: { controller: PageController }) {
   useEffect(() => controller.subscribe(() => setState(controller.getState())), [controller]);
 
   const recording = state.snapshot?.recording ?? null;
-  const capture = state.snapshot?.capture;
   const live =
-    forced ||
-    (!!capture && ["starting", "recording", "paused"].includes(capture.state)) ||
-    recording?.state === "recording";
+    forced || (!!recording && ["starting", "recording", "paused"].includes(recording.state));
   if (!live) return null;
 
   return (

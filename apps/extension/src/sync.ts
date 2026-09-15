@@ -252,8 +252,6 @@ export async function syncSessionEnd(
       .sendMessage(session.tabId, { type: "LARE_FLUSH_EDITS" })
       .catch(() => undefined);
   const supabase = getSupabase();
-  const { getCapture } = await import("./capture");
-  const capture = await getCapture();
   const total = activeMs(session.events, endedAt);
 
   for (const tp of session.problems) {
@@ -291,7 +289,6 @@ export async function syncSessionEnd(
       status: "ended",
       ended_at: iso(endedAt),
       active_ms: total,
-      graded: capture?.sessionId === session.sessionId && capture.graded === true,
     })
     .eq("id", session.sessionId);
   if (sessErr) throw new Error(`sessions end: ${sessErr.message}`);
@@ -304,12 +301,6 @@ export async function finalizeSession(
 ): Promise<string> {
   await syncSessionEnd(session, userId, endedAt);
   const supabase = getSupabase();
-  const { getCapture } = await import("./capture");
-  const capture = await getCapture();
-  const videoId =
-    capture?.sessionId === session.sessionId && capture.state === "complete"
-      ? capture.videoId
-      : undefined;
 
   const first = session.problems[0];
   const title =
@@ -330,8 +321,8 @@ export async function finalizeSession(
         status: "draft",
         visibility: "public",
         title,
-        video_kind: videoId ? "full" : "none",
-        ...(videoId ? { video_id: videoId } : {}),
+        // The desktop app attaches the interview video when its upload lands; a retried sync must
+        // not detach it, so the video columns are left to their defaults here.
         include_ai_insights: false,
       },
       { onConflict: "session_id" },

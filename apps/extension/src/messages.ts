@@ -46,7 +46,6 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
     problem: ProblemInfoSchema.nullable(),
     question: QuestionDetailsSchema.nullable(),
     facecam: z.boolean().default(false),
-    graded: z.boolean(),
     tabId: z.number().nullable().default(null),
   }),
   /** Load the content scripts into a LeetCode tab that has none (opened before an update). */
@@ -78,7 +77,6 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("OPEN_APP"), path: z.string().optional() }),
   z.object({ type: z.literal("CANCEL_START") }),
   z.object({ type: z.literal("RETRY_SYNC") }),
-  z.object({ type: z.literal("DISCARD_RECORDING") }),
   z.object({ type: z.literal("PUBLISH_PROBLEMS"), ids: z.array(z.string().uuid()).min(1) }),
   /** Remove tracked problems from the inbox without posting them (all of them when omitted). */
   z.object({ type: z.literal("CLEAR_TRACKED"), ids: z.array(z.string().uuid()).optional() }),
@@ -91,12 +89,12 @@ export interface RecordingInfo {
 }
 
 export interface RuntimeSnapshot {
-  capture?: import("./capture").CaptureState | null;
   state: z.infer<typeof ExtensionStateSchema>;
   auth: AuthInfo;
+  /** The desktop app is running, signed in as this user, and able to record. */
   appConnected: boolean;
-  /** Why a graded interview cannot start right now; null when it can. */
-  gradingBlocker: string | null;
+  /** Why a mock interview cannot start right now; null when it can. */
+  desktopBlocker: string | null;
   /** The service worker's build; null from a worker older than this field. */
   buildId: string | null;
   recording: RecordingInfo | null;
@@ -108,10 +106,9 @@ export function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | nul
     state: res.state,
     auth: res.auth ?? null,
     appConnected: res.appConnected ?? false,
-    gradingBlocker: res.gradingBlocker ?? null,
+    desktopBlocker: res.desktopBlocker ?? null,
     buildId: res.buildId ?? null,
     recording: res.recording ?? null,
-    capture: res.capture ?? null,
   };
 }
 

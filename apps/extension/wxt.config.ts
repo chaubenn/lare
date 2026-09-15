@@ -19,7 +19,7 @@ export default defineConfig({
     name: mode === "development" ? "Lare for LeetCode (dev)" : "Lare for LeetCode",
     short_name: "Lare",
     description:
-      "Log LeetCode sessions with a pausable timer, capture submissions, and run AI-graded mock interviews with the Lare desktop app.",
+      "Track LeetCode problems and submissions, and run AI-graded mock interviews recorded by the Lare desktop app.",
     key: process.env.LARE_EXTENSION_KEY ?? EXTENSION_PUBLIC_KEY,
     permissions: [
       "storage",
@@ -28,9 +28,6 @@ export default defineConfig({
       "tabs",
       "activeTab",
       "sidePanel",
-      "tabGroups",
-      // Interviews record the whole screen through Chrome's share dialog, in the recorder window.
-      "desktopCapture",
       // Loads the content scripts into LeetCode tabs opened before an install or update.
       "scripting",
     ],
@@ -39,7 +36,6 @@ export default defineConfig({
       "https://leetcode.com/*",
       "https://jndqrvwkwoyvzoqcveev.supabase.co/*",
       "http://127.0.0.1/*",
-      "https://video.bunnycdn.com/*",
       // Local fixture page + mocked backend for e2e tests (dev/e2e builds only).
       ...(mode === "production" ? [] : ["http://localhost/*"]),
     ],

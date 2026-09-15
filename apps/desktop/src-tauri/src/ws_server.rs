@@ -38,7 +38,9 @@ use serde_json::json;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing::{debug, error, info, warn};
 
-use crate::recording::{RecordingBackend, SharedRecordingBackend};
+use crate::recording::{
+    RECORDING_UNAVAILABLE_MESSAGE, RecordingBackend, RecordingRequest, SharedRecordingBackend,
+};
 
 /// Chrome extension id (pinned by the `key` in `apps/extension/wxt.config.ts`).
 pub const EXTENSION_ID: &str = "koplffaeeahehnfikinmldhhmmldghhl";
@@ -135,12 +137,10 @@ impl WsHub {
 /// Everything the HTTP/WS handlers need. Cheap to clone (all `Arc`s).
 #[derive(Clone)]
 pub struct ServerContext {
-    pub pcm: Arc<crate::pcm::PcmService>,
-    pcm_clients: Arc<Mutex<HashMap<String, u64>>>,
     pub hub: WsHub,
     /// Supabase user id of the signed-in desktop user (set by the frontend via `set_current_user`).
     pub current_user: Arc<Mutex<Option<String>>>,
-    /// Optional recorder; `None` until the recording phase ships (see `recording.rs`).
+    /// Recorder for interview sessions; `None` until the app registers one (see `recording.rs`).
     pub recording: SharedRecordingBackend,
     pub app_version: String,
     /// Debug builds accept any `chrome-extension://*` origin and requests without an `Origin`
@@ -155,8 +155,6 @@ impl ServerContext {
         app_version: impl Into<String>,
     ) -> Self {
         Self {
-            pcm: Arc::new(crate::pcm::PcmService::default()),
-            pcm_clients: Arc::new(Mutex::new(HashMap::new())),
             hub,
             current_user,
             recording: Arc::new(std::sync::RwLock::new(None)),
@@ -421,19 +419,7 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
         user_id: current_user,
         recording_capable: ctx.recording_capable(),
     };
-    let mut ack = serde_json::to_value(ack).unwrap();
-    ack["recordingCapable"] = json!(false);
-    ack["capabilities"] =
-        if ctx.pcm.capable() && ext_user.is_some() && ext_user == ctx.current_user() {
-            json!(["pcm16k-f32-v1"])
-        } else {
-            json!([])
-        };
-    if socket
-        .send(Message::Text(ack.to_string().into()))
-        .await
-        .is_err()
-    {
+    if send_frame(&mut socket, &ack).await.is_err() {
         return;
     }
     info!(ext_version, "extension connected");
@@ -442,15 +428,15 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
     //    channel, the loop below reads frames.
     let (tx, mut rx) = mpsc::unbounded_channel::<AppToExt>();
     let client_id = ctx.hub.register(tx.clone());
-    let (pcm_tx, mut pcm_rx) = mpsc::channel::<serde_json::Value>(8);
-    let mut pcm_session: Option<String> = None;
     let (mut sink, mut stream) = socket.split();
     let writer = tokio::spawn(async move {
-        loop {
-            let text = tokio::select! {
-                Some(msg) = rx.recv() => serde_json::to_string(&msg).unwrap(),
-                Some(msg) = pcm_rx.recv() => msg.to_string(),
-                else => break,
+        while let Some(msg) = rx.recv().await {
+            let text = match serde_json::to_string(&msg) {
+                Ok(t) => t,
+                Err(err) => {
+                    error!(%err, "failed to serialise frame");
+                    continue;
+                }
             };
             if sink.send(Message::Text(text.into())).await.is_err() {
                 break;
@@ -461,104 +447,12 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
 
     while let Some(frame) = stream.next().await {
         match frame {
-            Ok(Message::Text(text)) => {
-                let value = serde_json::from_str::<serde_json::Value>(&text).unwrap_or_default();
-                if value["type"]
-                    .as_str()
-                    .is_some_and(|t| t.starts_with("pcm."))
-                {
-                    let result: anyhow::Result<Vec<serde_json::Value>> = async {
-                        let user = ext_user
-                            .as_deref()
-                            .ok_or_else(|| anyhow::anyhow!("Sign in before enabling grading"))?;
-                        anyhow::ensure!(
-                            ctx.current_user().as_deref() == Some(user),
-                            "Desktop account changed"
-                        );
-                        if value["type"] == "pcm.start" {
-                            anyhow::ensure!(
-                                pcm_session.is_none(),
-                                "Only one PCM session per socket"
-                            );
-                            let id = ctx.pcm.start(&value, user).await?;
-                            {
-                                let mut owners = ctx
-                                    .pcm_clients
-                                    .lock()
-                                    .map_err(|_| anyhow::anyhow!("PCM clients lock"))?;
-                                anyhow::ensure!(
-                                    !owners.contains_key(&id),
-                                    "PCM session already connected"
-                                );
-                                owners.insert(id.clone(), client_id);
-                            }
-                            pcm_session = Some(id.clone());
-                            let next = ctx.pcm.next_sample(&id).await?;
-                            Ok(vec![
-                                json!({"type":"pcm.ready","sessionId":id,"nextSample":next}),
-                            ])
-                        } else {
-                            let id = pcm_session
-                                .as_deref()
-                                .ok_or_else(|| anyhow::anyhow!("Send pcm.start first"))?;
-                            anyhow::ensure!(value["sessionId"] == id, "PCM session mismatch");
-                            match value["type"].as_str() {
-                                Some("pcm.end") => {
-                                    ctx.pcm
-                                        .push(
-                                            id,
-                                            user,
-                                            &[],
-                                            Some(value["totalSamples"].as_u64().ok_or_else(
-                                                || anyhow::anyhow!("Missing totalSamples"),
-                                            )?),
-                                            &ctx.hub,
-                                        )
-                                        .await
-                                }
-                                Some("pcm.pause" | "pcm.resume") => Ok(vec![]),
-                                _ => anyhow::bail!("Unknown PCM message"),
-                            }
-                        }
-                    }
-                    .await;
-                    match result {
-                        Ok(messages) => {
-                            for msg in messages {
-                                ctx.hub.emit(ServerEvent::ExtMessage(msg.clone()));
-                                let _ = pcm_tx.send(msg).await;
-                            }
-                        }
-                        Err(err) => {
-                            let _ = pcm_tx
-                                .send(json!({"type":"error","message":err.to_string()}))
-                                .await;
-                        }
-                    }
-                } else {
-                    handle_frame(&ctx, &tx, text.as_str());
-                }
-            }
-            Ok(Message::Binary(bytes)) => {
-                let result = match (pcm_session.as_deref(), ext_user.as_deref()) {
-                    (Some(id), Some(user)) if ctx.current_user().as_deref() == Some(user) => {
-                        ctx.pcm.push(id, user, &bytes, None, &ctx.hub).await
-                    }
-                    _ => Err(anyhow::anyhow!("Send authenticated pcm.start before audio")),
-                };
-                match result {
-                    Ok(messages) => {
-                        for msg in messages {
-                            ctx.hub.emit(ServerEvent::ExtMessage(msg.clone()));
-                            let _ = pcm_tx.send(msg).await;
-                        }
-                    }
-                    Err(err) => {
-                        let _ = pcm_tx
-                            .send(json!({"type":"error","message":err.to_string()}))
-                            .await;
-                    }
-                }
+            Ok(Message::Text(text)) => handle_frame(&ctx, &tx, text.as_str()),
+            Ok(Message::Binary(_)) => {
+                let _ = tx.send(error_frame(
+                    ErrorCode::BadMessage,
+                    "binary frames are not supported",
+                ));
             }
             Ok(Message::Ping(_) | Message::Pong(_)) => {}
             Ok(Message::Close(_)) => break,
@@ -571,12 +465,6 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
 
     info!("extension disconnected");
     ctx.hub.unregister(client_id);
-    if let Some(id) = pcm_session {
-        if let Ok(mut owners) = ctx.pcm_clients.lock() {
-            owners.remove(&id);
-        }
-    }
-    drop(pcm_tx);
     drop(tx);
     let _ = tokio::time::timeout(Duration::from_secs(2), writer).await;
 }
@@ -616,7 +504,7 @@ fn handle_frame(ctx: &ServerContext, tx: &mpsc::UnboundedSender<AppToExt>, raw: 
                 protocol: PROTOCOL_VERSION,
                 app_version: ctx.app_version.clone(),
                 user_id: ctx.current_user(),
-                recording_capable: false,
+                recording_capable: ctx.recording_capable(),
             });
         }
         ExtToApp::SessionStart {
@@ -626,18 +514,25 @@ fn handle_frame(ctx: &ServerContext, tx: &mpsc::UnboundedSender<AppToExt>, raw: 
             facecam,
             mic,
             ..
-        } => {
-            let _ = (started_at, facecam, mic);
-            let _ = tx.send(AppToExt::RecordingState {
-                session_id: Some(session_id),
-                state: RecordingState::Error,
-                started_at: None,
-                message: Some(
-                    "Interview capture belongs to the extension. Use pcm.start for local grading."
-                        .to_string(),
-                ),
-            });
-        }
+        } => match ctx.recording_backend() {
+            Some(backend) => backend.start(
+                &ctx.hub,
+                RecordingRequest {
+                    session_id,
+                    started_at,
+                    facecam,
+                    mic,
+                },
+            ),
+            None => {
+                let _ = tx.send(AppToExt::RecordingState {
+                    session_id: Some(session_id),
+                    state: RecordingState::Error,
+                    started_at: None,
+                    message: Some(RECORDING_UNAVAILABLE_MESSAGE.to_string()),
+                });
+            }
+        },
         ExtToApp::SessionPause { session_id, at } => {
             if let Some(backend) = ctx.recording_backend() {
                 backend.pause(&ctx.hub, &session_id, at);
@@ -798,7 +693,7 @@ mod tests {
         let mut client = connect(server.addr, Some(EXTENSION_ORIGIN)).await.unwrap();
         send_json(
             &mut client,
-            json!({ "type": "hello", "protocol": 1, "extVersion": "0.1.0", "userId": null }),
+            json!({ "type": "hello", "protocol": PROTOCOL_VERSION, "extVersion": "0.1.0", "userId": null }),
         )
         .await;
         assert_eq!(recv_json(&mut client).await["type"], "hello.ack");
@@ -842,22 +737,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pcm_without_authenticated_desktop_fails_explicitly() {
-        let server = start(true).await;
-        let (mut client, ack) = handshake(server.addr).await;
-        assert_eq!(ack["capabilities"], json!([]));
-        send_json(&mut client, json!({"type":"pcm.start", "sessionId":"s1", "userId":"u1", "sampleRate":16000, "channels":1, "format":"f32le", "resumeFrom":0})).await;
-        assert_eq!(recv_json(&mut client).await["type"], "error");
-        client
-            .send(tungstenite::Message::Binary(vec![0; 16].into()))
-            .await
-            .unwrap();
-        assert_eq!(recv_json(&mut client).await["type"], "error");
-        send_json(&mut client, json!({"type":"ping", "at":1})).await;
-        assert_eq!(recv_json(&mut client).await["type"], "pong");
-    }
-
-    #[tokio::test]
     async fn interview_session_start_without_recorder_reports_recording_error() {
         let mut server = start(true).await;
         let (mut client, _ack) = handshake(server.addr).await;
@@ -886,18 +765,56 @@ mod tests {
         assert_eq!(state["sessionId"], "s1");
         assert_eq!(state["state"], "error");
         assert_eq!(state["startedAt"], serde_json::Value::Null);
-        assert!(
-            state["message"]
-                .as_str()
-                .unwrap()
-                .contains("capture belongs to the extension")
-        );
+        assert_eq!(state["message"], RECORDING_UNAVAILABLE_MESSAGE);
 
         // The frame is also forwarded to the app layer verbatim.
         assert_eq!(
             next_event(&mut server.events).await,
             ServerEvent::ExtMessage(start)
         );
+    }
+
+    #[derive(Default)]
+    struct FakeRecorder {
+        started: Mutex<Vec<RecordingRequest>>,
+        stopped: Mutex<Vec<String>>,
+    }
+
+    impl RecordingBackend for FakeRecorder {
+        fn start(&self, _hub: &WsHub, req: RecordingRequest) {
+            self.started.lock().unwrap().push(req);
+        }
+        fn pause(&self, _hub: &WsHub, _session_id: &str, _at: u64) {}
+        fn resume(&self, _hub: &WsHub, _session_id: &str, _at: u64) {}
+        fn stop(&self, _hub: &WsHub, session_id: &str, _at: u64) {
+            self.stopped.lock().unwrap().push(session_id.to_string());
+        }
+    }
+
+    #[tokio::test]
+    async fn interview_session_start_and_end_reach_the_registered_recorder() {
+        let mut server = start(true).await;
+        let recorder = Arc::new(FakeRecorder::default());
+        server.ctx.set_recording_backend(Some(recorder.clone()));
+        let (mut client, ack) = handshake(server.addr).await;
+        assert_eq!(ack["recordingCapable"], true);
+        let _ = next_event(&mut server.events).await; // connected
+
+        send_json(
+            &mut client,
+            json!({ "type": "session.start", "sessionId": "s9", "kind": "interview", "scope": "problem",
+                    "startedAt": 42u64, "problem": null, "facecam": true, "mic": true }),
+        )
+        .await;
+        let _ = next_event(&mut server.events).await; // forwarded start
+        send_json(&mut client, json!({ "type": "session.end", "sessionId": "s9", "at": 50u64 })).await;
+        let _ = next_event(&mut server.events).await; // forwarded end
+
+        assert_eq!(
+            *recorder.started.lock().unwrap(),
+            vec![RecordingRequest { session_id: "s9".into(), started_at: 42, facecam: true, mic: true }]
+        );
+        assert_eq!(*recorder.stopped.lock().unwrap(), vec!["s9".to_string()]);
     }
 
     #[tokio::test]

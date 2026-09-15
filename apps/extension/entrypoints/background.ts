@@ -11,15 +11,6 @@ import {
 } from "@lare/shared";
 import { brand } from "@lare/ui/tokens";
 import { getAuthInfo, signInWithOtp, signInWithProvider, signOut, verifyOtp } from "@/src/auth";
-import {
-  CAPTURE_KEY,
-  captureCommand,
-  captureWindowAlive,
-  closeCaptureWindow,
-  compactCaptureWindow,
-  ensureCaptureWindow,
-  getCapture,
-} from "@/src/capture";
 import { appendEvents } from "@/src/editsDb";
 import {
   type CapturedSubmission,
@@ -41,13 +32,11 @@ import {
   resolveInboxSession,
   syncProblemClose,
   syncProblemOpen,
-  syncSessionEnd,
   syncSessionStart,
   syncSubmission,
   syncTimerEvent,
   trackInboxProblem,
 } from "@/src/sync";
-import { repairGroup, restoreGroup, startGroup } from "@/src/tabGroup";
 import { DesktopClient } from "@/src/ws";
 
 const TICK_ALARM = "lare-tick";
@@ -66,46 +55,21 @@ let startAbort: AbortController | null = null;
 export default defineBackground(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   chrome.tabs.onUpdated.addListener((id, change) => {
-    if (change.groupId !== undefined) void repairGroup().catch(console.warn);
     // Chrome reports "loading" for far more than a reload: subframes loading, in-page URL changes,
     // LeetCode's own Run. Ending on it stopped interviews mid-problem. Wait for the load to finish
     // and put the consent dot back; stop only when it cannot be shown, i.e. the page really left.
     if (change.status === "complete")
-      void getCapture()
-        .then(async (c) => {
-          if (c?.tabId !== id || !["recording", "paused"].includes(c.state)) return;
+      void loadState()
+        .then(async (s) => {
+          if (s.interview?.tabId !== id || timerStatus(s.interview.events) === "ended") return;
           if (!(await showIndicator(id))) return endSession();
         })
         .catch(console.warn);
   });
-  chrome.tabGroups.onRemoved.addListener(() => void repairGroup().catch(console.warn));
-  // The recorder window holds the only copy of the live media: closing it ends the interview with
-  // what already uploaded.
-  chrome.windows.onRemoved.addListener((windowId) => {
-    void (async () => {
-      const stored = (await chrome.storage.session.get("lare:capture-window"))[
-        "lare:capture-window"
-      ];
-      if (stored !== windowId) return;
-      await chrome.storage.session.remove("lare:capture-window");
-      const c = await getCapture();
-      if (c && ["starting", "recording", "paused"].includes(c.state)) {
-        await chrome.storage.local.set({
-          [CAPTURE_KEY]: {
-            ...c,
-            state: "error",
-            graded: false,
-            message: "The recording window was closed before the interview was saved.",
-          },
-        });
-        await endSession();
-      }
-    })().catch(console.warn);
-  });
   chrome.tabs.onRemoved.addListener((id) => {
-    void getCapture()
-      .then((c) => {
-        if (c?.tabId === id && (c.state === "recording" || c.state === "paused"))
+    void loadState()
+      .then((s) => {
+        if (s.interview?.tabId === id && timerStatus(s.interview.events) !== "ended")
           return endSession();
       })
       .catch(console.warn);
@@ -140,59 +104,6 @@ export default defineBackground(() => {
 
   chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id) return false;
-    if (
-      raw?.target === "background-capture" &&
-      sender.url === chrome.runtime.getURL("capture.html")
-    ) {
-      void (async () => {
-        if (raw.command === "prepare-review") {
-          const state = await loadState();
-          const userId = await currentUserId();
-          if (!state.interview || !userId) throw new Error("Session unavailable for review");
-          await syncSessionEnd(
-            state.interview,
-            userId,
-            state.interview.events.find((event) => event.type === "end")?.t ?? Date.now(),
-          );
-          return { ok: true };
-        }
-        if (raw.command === "state") {
-          const previous = await getCapture();
-          if (previous && previous.sessionId !== raw.state.sessionId)
-            throw new Error("Stale capture update");
-          await chrome.storage.local.set({ [CAPTURE_KEY]: raw.state });
-          if (raw.state.state === "recording" && previous?.state === "starting") {
-            const { error } = await getSupabase()
-              .from("sessions")
-              .update({ recording_started_at: new Date().toISOString() })
-              .eq("id", raw.state.sessionId);
-            if (error) console.warn("[lare] recording timestamp sync", error);
-          }
-          if (!raw.state.graded && previous?.graded !== false) {
-            const { error } = await getSupabase()
-              .from("sessions")
-              .update({ graded: false })
-              .eq("id", raw.state.sessionId);
-            if (error) console.warn("[lare] grading state sync", error);
-          }
-          void broadcast().catch(console.warn);
-          return { ok: true };
-        }
-        const name =
-          raw.command === "create"
-            ? "bunny-create-upload"
-            : raw.command === "finalize"
-              ? "bunny-finalize-recording"
-              : null;
-        if (!name) throw new Error("Unknown capture operation");
-        const { data, error } = await getSupabase().functions.invoke(name, { body: raw.body });
-        if (error) throw error;
-        return { ok: true, data };
-      })()
-        .then(sendResponse)
-        .catch((e) => sendResponse({ ok: false, error: String(e) }));
-      return true;
-    }
     const parsed = RuntimeRequestSchema.safeParse(raw);
     if (!parsed.success) {
       // Not for us (e.g. STATE_CHANGED broadcast echoing back).
@@ -207,8 +118,8 @@ export default defineBackground(() => {
       return false;
     handle(req, fromPage ? sender.tab?.id : undefined)
       .then((res) => {
-        if (res.ok && fromPage && res.capture?.tabId !== sender.tab?.id)
-          sendResponse({ ...res, capture: null, recording: null });
+        if (res.ok && fromPage && res.state?.interview?.tabId !== sender.tab?.id)
+          sendResponse({ ...res, recording: null });
         else sendResponse(res);
       })
       .catch((e: unknown) => {
@@ -226,25 +137,6 @@ export default defineBackground(() => {
 // ---------------------------------------------------------------------------
 async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<RuntimeResponse> {
   switch (req.type) {
-    case "DISCARD_RECORDING": {
-      const capture = await getCapture();
-      if (capture?.state !== "error")
-        throw new Error("Only a failed recording can be discarded here");
-      if (await captureWindowAlive()) {
-        await captureCommand("discard");
-        await closeCaptureWindow();
-      }
-      await chrome.storage.local.set({
-        [CAPTURE_KEY]: {
-          ...capture,
-          state: "complete",
-          videoId: undefined,
-          graded: false,
-          message: "Recording discarded. Session data retained.",
-        },
-      });
-      return endSession();
-    }
     case "PUBLISH_PROBLEMS": {
       const state = await loadState();
       if (
@@ -321,7 +213,7 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
       if (state.interview) throw new Error("End the mock interview before signing out");
       await signOut();
       desktop.close();
-      await chrome.storage.local.remove(["lare:state", CAPTURE_KEY]);
+      await chrome.storage.local.remove("lare:state");
       await refreshBadge();
       await broadcast();
       return { ok: true, ...(await snapshot()) };
@@ -387,21 +279,16 @@ async function startInterview(
 
   const sessionId = crypto.randomUUID();
   const problem = req.problem;
-  // Built once the screen is shared: time spent in Chrome's share dialog is not interview time.
+  const tabId = req.tabId;
   let session: ActiveSession | null = null;
+  let desktopStarted = false;
 
   await setRecording("starting");
   try {
-    if (req.graded && !(await probeDesktop(userId)))
-      throw new Error(
-        "Open an updated Lare desktop app, or explicitly turn off Transcript & AI review",
-      );
-    // The recorder window opens Chrome's share dialog itself and holds the stream. Picking comes
-    // before any session row exists, so cancelling the dialog leaves nothing behind.
-    await ensureCaptureWindow();
-    await captureCommand("pick");
-    await compactCaptureWindow();
-    if (signal.aborted) throw new Error("Start cancelled");
+    // The desktop app records the screen, microphone and camera bubble; nothing starts without it.
+    if (!(await probeDesktop(userId)))
+      throw new Error(desktop.blocker(userId) ?? "The Lare desktop app cannot record right now");
+
     const now = Date.now();
     const tp: TrackedProblem = {
       sessionProblemId: crypto.randomUUID(),
@@ -423,55 +310,56 @@ async function startInterview(
       ],
       problems: [tp],
       currentSlug: problem.slug,
-      tabId: req.tabId,
+      tabId,
       facecam: req.facecam,
       synced: false,
     };
     session = started;
-    await syncSessionStart(started, userId, req.graded);
+    // The desktop pipeline writes to this row when the recording finishes, so it must exist first.
+    await syncSessionStart(started, userId, true);
     await syncProblemOpen(sessionId, tp, req.question);
     started.synced = true;
     tp.synced = true;
     await withState(async (s) => ({ state: { ...s, interview: started }, result: undefined }));
-    if (signal.aborted) throw new Error("Start cancelled");
-    await chrome.storage.local.set({
-      [CAPTURE_KEY]: { sessionId, tabId: req.tabId, graded: req.graded, state: "starting" },
-    });
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
     // Consent indicator must be acknowledged by the recorded page before any media starts.
-    const indicator = await chrome.tabs.sendMessage(req.tabId, {
+    const indicator = await chrome.tabs.sendMessage(tabId, {
       type: "LARE_RECORDING_INDICATOR",
       visible: true,
     });
     if (!indicator?.ok) throw new Error("Cannot show the recording indicator on this tab");
-    await startGroup(req.tabId).catch((e) => console.warn("[lare] tab outline unavailable", e));
-    await captureCommand("start", {
-      sessionId,
-      tabId: req.tabId,
-      userId,
-      graded: req.graded,
-      facecam: req.facecam,
-    });
-    if (signal.aborted) return await endSession();
-    // Back to the problem: the recorder window has done its part and can sit to the side.
-    try {
-      const tab = await chrome.tabs.update(req.tabId, { active: true });
-      if (tab?.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true });
-    } catch {
-      // Focus is a courtesy; the recording is already running.
-    }
-  } catch (e) {
-    const failedCapture = await getCapture();
+
+    const answer = desktop.waitFor(
+      (m): m is Extract<AppToExt, { type: "recording.state" }> =>
+        m.type === "recording.state" &&
+        m.sessionId === sessionId &&
+        (m.state === "recording" || m.state === "error"),
+      30_000,
+      signal,
+    );
     if (
-      failedCapture?.sessionId === sessionId &&
-      ["recording", "paused", "uploading"].includes(failedCapture.state)
-    ) {
-      return await endSession();
-    }
-    await restoreGroup().catch(console.warn);
+      !desktop.send({
+        type: "session.start",
+        sessionId,
+        kind: "interview",
+        scope: "problem",
+        startedAt: now,
+        problem,
+        facecam: req.facecam,
+        mic: true,
+      })
+    )
+      throw new Error("Lost the connection to the Lare desktop app");
+    desktopStarted = true;
+    const state = await answer;
+    if (state.state === "error")
+      throw new Error(state.message ?? "The desktop app could not start recording");
+  } catch (e) {
+    if (desktopStarted) desktop.send({ type: "session.end", sessionId, at: Date.now() });
     await chrome.tabs
-      .sendMessage(req.tabId, { type: "LARE_RECORDING_INDICATOR", visible: false })
+      .sendMessage(tabId, { type: "LARE_RECORDING_INDICATOR", visible: false })
       .catch(() => undefined);
-    await chrome.storage.local.remove(CAPTURE_KEY);
     await withState(async (s) => ({
       state: { ...s, interview: s.interview?.sessionId === sessionId ? null : s.interview },
       result: undefined,
@@ -482,8 +370,9 @@ async function startInterview(
         .from("sessions")
         .update({ status: "ended", ended_at: new Date().toISOString(), graded: false })
         .eq("id", sessionId);
-    await closeCaptureWindow();
-    await setRecording("error", e instanceof Error ? e.message : String(e));
+    const aborted = e instanceof DOMException && e.name === "AbortError";
+    await setRecording(aborted ? "idle" : "error", aborted ? null : errorText(e));
+    if (aborted) return { ok: true, ...(await snapshot()) };
     throw e;
   } finally {
     startAbort = null;
@@ -493,9 +382,13 @@ async function startInterview(
   await refreshBadge();
   await broadcast({
     kind: "success",
-    text: "Mock interview started. Recording.",
+    text: "Mock interview started. The desktop app is recording.",
   });
   return { ok: true, ...(await snapshot()) };
+}
+
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 /**
@@ -537,8 +430,8 @@ async function pauseOrResume(type: "pause" | "resume"): Promise<RuntimeResponse>
   const current = await loadState();
   if (!current.interview || timerStatus(current.interview.events) === "ended")
     throw new Error("No live interview");
-  await captureCommand(type);
   const now = Date.now();
+  desktop.send({ type: `session.${type}`, sessionId: current.interview.sessionId, at: now });
   const result = await withState(async (s) => {
     if (!s.interview) return { state: s, result: null };
     const status = timerStatus(s.interview.events);
@@ -582,21 +475,19 @@ async function finishSession(): Promise<RuntimeResponse> {
   if (!session) throw new Error("No active session");
 
   let postId: string | undefined;
+  const endedAt = session.events.find((event) => event.type === "end")?.t ?? now;
+  // The desktop stops recording, then transcribes and uploads on its own.
+  desktop.send({ type: "session.end", sessionId: session.sessionId, at: endedAt });
   try {
-    const capture = await getCapture();
-    if (capture?.state !== "complete")
-      await captureCommand(capture?.state === "error" ? "retry" : "stop");
-    await restoreGroup().catch(console.warn);
     if (session.tabId !== null)
       await chrome.tabs
         .sendMessage(session.tabId, { type: "LARE_RECORDING_INDICATOR", visible: false })
         .catch(() => undefined);
     if (!userId) throw new Error("Signed out");
     if (!session.synced) {
-      await syncSessionStart(session, userId, (await getCapture())?.graded ?? false);
+      await syncSessionStart(session, userId, true);
       for (const tp of session.problems) await syncProblemOpen(session.sessionId, tp, null);
     }
-    const endedAt = session.events.find((event) => event.type === "end")?.t ?? now;
     postId = await finalizeSession(session, userId, endedAt);
     await withState(async (s) => ({
       state: {
@@ -606,10 +497,11 @@ async function finishSession(): Promise<RuntimeResponse> {
       },
       result: undefined,
     }));
-    await closeCaptureWindow();
-    await broadcast({ kind: "success", text: "Session saved. Draft is ready in Lare." });
+    await broadcast({
+      kind: "success",
+      text: "Session saved. The desktop app is processing the recording.",
+    });
   } catch (e) {
-    await restoreGroup().catch(console.warn);
     if (session.tabId !== null)
       await chrome.tabs
         .sendMessage(session.tabId, { type: "LARE_RECORDING_INDICATOR", visible: false })
@@ -626,7 +518,6 @@ async function finishSession(): Promise<RuntimeResponse> {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 
-  if (session.kind !== "interview") desktop.close();
   await setRecording("idle");
   await chrome.alarms.clear(TICK_ALARM);
   await refreshBadge();
@@ -987,19 +878,30 @@ async function submission(
 // ---------------------------------------------------------------------------
 async function probeDesktop(userId: string | null): Promise<boolean> {
   try {
-    // Capabilities are fixed at handshake time, so a connection made before the app signed in or
-    // downloaded its speech model would report "unavailable" forever. Handshake again instead.
-    if (desktop.connected && !desktop.gradingAvailable(userId) && !(await loadState()).interview)
+    // What the app can do is fixed at handshake time, so a connection made before it signed in or
+    // was allowed to record would say "unavailable" forever. Handshake again instead.
+    if (desktop.connected && !desktop.recordingAvailable(userId) && !(await loadState()).interview)
       desktop.close();
     await desktop.connect(userId, 3000);
-    return desktop.gradingAvailable(userId);
+    return desktop.recordingAvailable(userId);
   } catch {
     return false;
   }
 }
 
 async function onDesktopMessage(msg: AppToExt): Promise<void> {
-  if (msg.type === "hello.ack") await broadcast();
+  if (msg.type === "hello.ack") return broadcast();
+  if (msg.type !== "recording.state") return;
+  const { interview } = await loadState();
+  if (!interview || msg.sessionId !== interview.sessionId || startAbort) return;
+  if (msg.state === "error") {
+    const text = msg.message ?? "The desktop app stopped recording";
+    await setRecording("error", text);
+    await broadcast({ kind: "error", text });
+    return;
+  }
+  if (msg.state === "recording" || msg.state === "paused" || msg.state === "stopping")
+    await setRecording(msg.state, msg.message);
 }
 
 async function setRecording(state: RecordingState, message?: string | null): Promise<void> {
@@ -1018,34 +920,8 @@ async function retrySync(): Promise<RuntimeResponse> {
 }
 
 async function resumeAfterRestart(): Promise<void> {
-  const capture = await getCapture();
-  if (capture && ["recording", "paused", "starting", "uploading"].includes(capture.state)) {
-    const alive = await captureWindowAlive();
-    if (alive) await repairGroup().catch(console.warn);
-    else {
-      await chrome.storage.local.set({
-        [CAPTURE_KEY]: {
-          ...capture,
-          state: "error",
-          graded: false,
-          message:
-            "Browser capture was interrupted. Unsaved media cannot be recovered after a browser restart.",
-        },
-      });
-      await restoreGroup().catch(console.warn);
-    }
-  }
   const state = await loadState();
-  if (state.interview) {
-    const sessionId = state.interview.sessionId;
-    if (capture && !(await captureWindowAlive()) && capture.state !== "complete") {
-      await withState(async (s) => ({
-        state: { ...s, pendingSync: [...new Set([...s.pendingSync, sessionId])] },
-        result: undefined,
-      }));
-    }
-    await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 0.5 });
-  }
+  if (state.interview) await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 0.5 });
   const userId = await currentUserId();
   await probeDesktop(userId);
   await refreshBadge();
@@ -1057,30 +933,15 @@ async function resumeAfterRestart(): Promise<void> {
 // ---------------------------------------------------------------------------
 async function snapshot(): Promise<RuntimeSnapshot> {
   const [state, auth] = await Promise.all([loadState(), getAuthInfo().catch(() => null)]);
-  const capture = await getCapture();
-  const appConnected = desktop.gradingAvailable(auth?.userId ?? null);
+  const userId = auth?.userId ?? null;
+  const appConnected = desktop.recordingAvailable(userId);
   return {
     state: { ...state, appConnected },
     auth,
     appConnected,
-    gradingBlocker: desktop.gradingBlocker(auth?.userId ?? null),
+    desktopBlocker: desktop.blocker(userId),
     buildId: __BUILD_ID__,
-    capture,
-    // A start that failed before capture existed is newer than whatever the last capture left.
-    recording:
-      recording?.state === "error"
-        ? recording
-        : capture
-          ? {
-              state:
-                capture.state === "complete"
-                  ? "idle"
-                  : capture.state === "uploading"
-                    ? "stopping"
-                    : capture.state,
-              message: capture.message,
-            }
-          : recording,
+    recording,
   };
 }
 
@@ -1094,7 +955,7 @@ async function broadcast(toast?: StateBroadcast["toast"]): Promise<void> {
         ? chrome.tabs
             .sendMessage(
               t.id,
-              t.id === snap.capture?.tabId ? msg : { ...msg, capture: null, recording: null },
+              t.id === snap.state.interview?.tabId ? msg : { ...msg, recording: null },
             )
             .catch(() => undefined)
         : undefined,

@@ -1,7 +1,6 @@
 import { activeMs, formatDuration, timerStatus } from "@lare/shared";
 import { Emblem } from "@lare/ui/brand";
 import { useCallback, useEffect, useState } from "react";
-import { hasMediaPermission, requestMediaPermission } from "@/src/mediaPermission";
 import { type RuntimeSnapshot, type StateBroadcast, sendRuntime, toSnapshot } from "@/src/messages";
 import { PAGE_PROBLEM_REQUEST, type PageProblemReply } from "@/src/pageController";
 
@@ -22,9 +21,6 @@ export function App() {
   const [otp, setOtp] = useState("");
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
-  // Follows whether the desktop app can grade until the user picks, so a fresh install without the
-  // app is not stuck on a disabled Start button.
-  const [gradedChoice, setGraded] = useState<boolean | null>(null);
   const [facecam, setFacecam] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>("tracking");
@@ -107,28 +103,13 @@ export function App() {
       setError("Open a LeetCode problem tab first.");
       return;
     }
-    // The side panel cannot show a permission prompt, so ask from a tab (see mediaPermission.ts).
-    if (!(await hasMediaPermission(facecam))) {
-      setBusy(true);
-      try {
-        const result = await requestMediaPermission(facecam);
-        if (!result.granted) {
-          setError(result.error ?? "Microphone access is required for a mock interview.");
-          return;
-        }
-      } finally {
-        setBusy(false);
-      }
-      await chrome.tabs.update(tab.id, { active: true }).catch(() => undefined);
-    }
-    // The background opens the recorder window, which shows Chrome's share dialog.
+    // The background asks the desktop app to record and waits until it is.
     await run(() =>
       sendRuntime({
         type: "START_INTERVIEW",
         problem: reply.problem,
         question: reply.question,
         facecam,
-        graded,
         tabId: tab.id ?? null,
       }),
     );
@@ -146,8 +127,7 @@ export function App() {
   // A start can fail in the background after the panel request returned.
   const shownError =
     error ?? (!interview && recording?.state === "error" ? (recording.message ?? null) : null);
-  const graded = gradedChoice ?? !!snap?.appConnected;
-  const gradingBlocker = snap?.gradingBlocker ?? null;
+  const desktopBlocker = snap?.desktopBlocker ?? null;
   // Ids posted or cleared elsewhere must not stay selected.
   const selectedIds = selected.filter((id) => tracked.some((p) => p.sessionProblemId === id));
 
@@ -173,7 +153,11 @@ export function App() {
         </div>
         <span
           className={`app-status ${snap?.appConnected ? "on" : ""}`}
-          title={snap?.appConnected ? "Desktop app connected" : "Desktop app not detected"}
+          title={
+            snap?.appConnected
+              ? "Desktop app connected"
+              : (desktopBlocker ?? "Desktop app not detected")
+          }
         >
           <span className="app-dot" aria-hidden />
           {snap?.appConnected ? "Desktop" : "No desktop"}
@@ -426,29 +410,9 @@ export function App() {
                   <div className="timer" role="timer">
                     {formatDuration(activeMs(interview.events, Date.now()))}
                   </div>
-                  <p className="note">
-                    {snap.capture?.graded
-                      ? "Graded: local Whisper and AI review"
-                      : "Ungraded: video only, no transcript or AI review"}
-                  </p>
-                  {snap.capture?.message && (
-                    <p className="muted" role="status">
-                      {snap.capture.message}
-                    </p>
-                  )}
-                  {!!snap.capture?.recordedBytes && (
-                    <p className="muted">
-                      {((snap.capture.uploadedBytes ?? 0) / 1048576).toFixed(1)} /{" "}
-                      {(snap.capture.recordedBytes / 1048576).toFixed(1)} MB uploaded
-                    </p>
-                  )}
-                  {snap.capture?.transcript && (
-                    <section className="transcript" aria-label="Live transcript">
-                      {snap.capture.transcript}
-                    </section>
-                  )}
+                  <p className="note">The desktop app is recording your screen and microphone.</p>
                   {recording?.state === "recording" && (
-                    <p className="muted">Recording. A red dot shows on the problem page.</p>
+                    <p className="muted">A red dot shows on the problem page while it records.</p>
                   )}
                   <ul className="problems">
                     {interview.problems.map((p) => (
@@ -517,25 +481,10 @@ export function App() {
               ) : (
                 <>
                   <p className="muted">
-                    Records your screen and microphone while you solve. Camera is optional.
+                    The Lare desktop app records your screen and microphone while you solve, then
+                    transcribes it locally for the AI review. Camera is optional.
                   </p>
                   <div className="options">
-                    <div className="option">
-                      <label className="option-row">
-                        Transcript &amp; AI review
-                        <input
-                          type="checkbox"
-                          className="switch"
-                          checked={graded}
-                          onChange={(e) => setGraded(e.target.checked)}
-                        />
-                      </label>
-                      <p className="option-hint">
-                        {graded
-                          ? "Transcribed by local Whisper in the desktop app, then AI reviewed."
-                          : "Ungraded: video only. Disables both transcript and AI review; desktop is not required."}
-                      </p>
-                    </div>
                     <div className="option">
                       <label className="option-row">
                         Include camera
@@ -548,24 +497,32 @@ export function App() {
                       </label>
                     </div>
                   </div>
-                  {graded && gradingBlocker && (
+                  {desktopBlocker && (
                     <p className="error" role="status">
-                      Can't grade yet: {gradingBlocker} Or untick Transcript &amp; AI review to
-                      record without it.
+                      {desktopBlocker}
                     </p>
                   )}
                   <button
                     type="button"
                     className="btn btn-primary"
-                    disabled={busy || starting || (graded && !!gradingBlocker)}
+                    disabled={busy || starting || !!desktopBlocker}
                     onClick={() => void startInterview()}
                   >
                     Start mock interview
                   </button>
                   {starting && (
-                    <p className="muted" role="status">
-                      Choose what to share in the Lare window. The timer starts once you share.
-                    </p>
+                    <div className="row">
+                      <p className="muted" role="status">
+                        Waiting for the desktop app to start recording…
+                      </p>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => void run(() => sendRuntime({ type: "CANCEL_START" }))}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   )}
                   <button
                     type="button"
@@ -573,7 +530,7 @@ export function App() {
                     disabled={busy}
                     onClick={() => void run(() => sendRuntime({ type: "PROBE_APP" }))}
                   >
-                    Check desktop grading connection
+                    Check desktop connection
                   </button>
                 </>
               )}
@@ -594,41 +551,6 @@ export function App() {
                   >
                     Retry sync
                   </button>
-                  {snap.capture?.state === "error" && (
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      disabled={busy}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            "Permanently discard the failed video and save the session without video, transcript or AI review?",
-                          )
-                        )
-                          void run(() => sendRuntime({ type: "DISCARD_RECORDING" }));
-                      }}
-                    >
-                      Discard failed video and keep session
-                    </button>
-                  )}
-                </section>
-              )}
-
-              {!interview && snap.capture?.state === "complete" && (
-                <section className="card" aria-label="Last recording">
-                  <div className="card-title">
-                    {snap.capture.graded ? "Graded interview saved" : "Ungraded session saved"}
-                  </div>
-                  {snap.capture.message && <p role="status">{snap.capture.message}</p>}
-                  <p className="muted">
-                    {snap.capture.graded
-                      ? "Local transcript and AI review included."
-                      : "No transcript or AI review included."}{" "}
-                    Upload acknowledgement does not mean playback encoding is finished.
-                  </p>
-                  <a href={`${SITE_URL}/drafts`} target="_blank" rel="noreferrer" className="link">
-                    Review and publish your draft
-                  </a>
                 </section>
               )}
             </section>

@@ -24,18 +24,6 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
-#[tauri::command]
-pub fn configure_pcm(
-    service: State<'_, Arc<crate::pcm::PcmService>>,
-    rec: Rec<'_>,
-    auth: Option<crate::pcm::CloudAuth>,
-) -> Result<(), String> {
-    *service.auth.lock().map_err(err)? = auth;
-    let kind = rec.settings().whisper_model.unwrap_or(ModelKind::SmallEn);
-    *service.model.lock().map_err(err)? = Some(rec.models_dir().join(kind.file_name()));
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Devices, permissions, settings
 // ---------------------------------------------------------------------------
@@ -106,21 +94,7 @@ pub fn recorder_settings(rec: Rec<'_>) -> RecorderSettings {
 }
 
 #[tauri::command]
-pub fn set_recorder_settings(
-    rec: Rec<'_>,
-    pcm: State<'_, Arc<crate::pcm::PcmService>>,
-    settings: RecorderSettings,
-) {
-    if let Ok(mut model) = pcm.model.lock() {
-        *model = Some(
-            rec.models_dir().join(
-                settings
-                    .whisper_model
-                    .unwrap_or(ModelKind::SmallEn)
-                    .file_name(),
-            ),
-        );
-    }
+pub fn set_recorder_settings(rec: Rec<'_>, settings: RecorderSettings) {
     rec.set_settings(settings);
 }
 

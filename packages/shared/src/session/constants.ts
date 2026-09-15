@@ -8,7 +8,7 @@ export const AUTH_CALLBACK_URL = `http://127.0.0.1:${WS_PORT}${AUTH_CALLBACK_PAT
 export const DEEP_LINK_SCHEME = "lare";
 
 /** Protocol version exchanged in the `hello` handshake. Bump on breaking changes. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /** Bunny Stream library used for all videos. */
 export const BUNNY_LIBRARY_ID = 743884;

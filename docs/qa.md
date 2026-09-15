@@ -24,7 +24,7 @@ their own when you touch the capture/upload or socket paths:
 
 ```sh
 cargo test --manifest-path crates/lare-recording/stream-tests/Cargo.toml      # muxer + live TUS
-cargo test --manifest-path apps/desktop/src-tauri/protocol-tests/Cargo.toml   # socket + PCM
+cargo test --manifest-path apps/desktop/src-tauri/protocol-tests/Cargo.toml   # socket
 ```
 
 Edge functions (`cd supabase/functions`):
@@ -49,10 +49,8 @@ going through Bunny.
 - Recording is no longer serial. Bytes upload **during** the recording, so stop should feel
   instant regardless of length. A 45-minute interview and a 45-second one should finish in about
   the same time after stop.
-- The extension's toolbar icon opens a **side panel**, not a popup, and the extension — not the
-  desktop app — captures interviews.
-- Interviews are **graded** (desktop app running, local Whisper, AI review) or **ungraded**
-  (cloud only, no transcript, no AI). Nothing degrades silently.
+- The extension's toolbar icon opens a **side panel**, not a popup. Mock interviews are started
+  from it and recorded by the desktop app.
 - There is no Recordings page. Local files are cleaned up once the cloud confirms receipt.
 - The website has the desktop app's shell, plus drafts, sessions and browser recording.
 
@@ -81,58 +79,32 @@ going through Bunny.
 - Content-script fragility: capture survives LeetCode's SPA navigation and a hard reload
   (state restored from `chrome.storage.local`).
 - Service worker restart (click *Service worker* -> stop in `chrome://extensions`): the next
-  problem opened and the next submission are still captured, and a recording in progress keeps
-  its red dot **and** its red tab group.
+  problem opened and the next submission are still captured, and an interview in progress keeps
+  its red dot.
 
-### Interview capture (the extension owns this now)
+### Mock interviews (recorded by the desktop app)
 
-- **Screen capture**: **Start** opens a small **Lare · Recording** window, which opens Chrome's share
-  dialog. Pick Entire Screen (tick system audio if wanted): the window says Recording with a timer,
-  focus returns to the problem, and the whole display records at up to 2560x1440 / 30 fps / 8 Mbps.
-  Cancel the dialog: nothing starts, nothing is written, the window closes. **End & save** in the
-  panel or the window saves and closes it. Closing the window mid-interview ends it with what
-  already uploaded. Chrome's **Stop sharing** bar also ends it.
+- **No desktop app**: the Mock interview tab says to open the desktop app and **Start** is
+  disabled. Signed in to a different account, or without screen recording permission, the panel
+  names that instead. Fix it and press **Check desktop connection**.
+- **Start** with the desktop app open: the red dot appears on the problem page, the desktop's
+  recording pill appears, and the panel timer runs. With **Include camera** on, the camera bubble
+  is on screen and in the recording.
 - **Detection without a refresh**: open leetcode.com, then a problem from the list (in-page
   navigation): Start still finds it. Reload the extension with a problem tab already open: Start
   finds that tab too.
 - **Run, and reloads, mid-interview**: press Run and Submit repeatedly, then reload the problem
   tab. The recording carries on and the red dot comes back after the reload.
-- **First interview on a fresh profile**: Chrome cannot show a permission prompt in a side
-  panel, so **Start** opens a small Lare tab that asks for the mic (and camera, if ticked),
-  closes itself once allowed, and the interview starts. Deny it: the panel says what to change.
-  On macOS with Chrome switched off under Privacy & Security → Microphone, the message says so
-  instead of a bare "Permission denied".
-- **Transcript & AI review** starts ticked only when the desktop app can grade. Tick it without
-  one and the panel names the blocker: app not running, signed out, a different account, or no
-  speech model. Fix it and press **Check desktop grading connection**: it reconnects and clears.
-- **Graded, desktop app running**: start a mock interview from the side panel with **Transcript &
-  AI review** on.
-  - The red dot appears on the problem page and Chrome's tab strip turns red
-    ("Lare • Recording").
-  - Upload progresses *while recording*. Watch the network panel or the panel's progress.
-  - Stop: the video should finalize within a couple of seconds, and the transcript should
-    already be there — the AI review fires immediately rather than after a Whisper pass.
-- **Word seams.** Whisper runs in ~30 s windows with ~2 s overlap. Listen specifically for
-  clipped or duplicated words at window boundaries; this is the known risk of the design.
-- **Ungraded**: untick **Transcript & AI review** (or close the desktop app) and start. The panel
-  must say plainly that this disables the AI review. On stop: video, no transcript, no review,
-  and the session reads as deliberately ungraded rather than as a failed graded one.
-- **Desktop disappears mid-interview**: quit the app while recording. The extension buffers audio
-  (up to five minutes unacknowledged) and resumes if the app comes back. If it does not come back
-  within 45 s of stop, the session is marked ungraded with a visible explanation **and the video
-  is still saved**. It must never fail the recording.
-- **Stale desktop build**: an old app that advertises `recordingCapable: true` but not
-  `pcm16k-f32-v1` must read as "not available for grading", not error.
-- **Tab group, the destructive case**: put the LeetCode tab into one of your *own* tab groups
-  first, then record. On stop, the tab must go back into **your** group with its original title,
-  colour and collapsed state — not be left ungrouped.
-- Drag the tab out of the Lare group mid-recording: it is re-applied once, and if you drag it out
-  again it is left alone. The on-page dot stays up throughout — that is the consent signal, the
-  tab group is decoration.
-- Close the recorded tab mid-recording: the recording stops and finalizes with what has streamed,
-  which should be nearly everything.
-- Incognito (with the extension allowed): `tabGroups` may be unavailable. Degrade to the on-page
-  dot; do not fail the recording.
+- **Pause / Resume** in the panel pause and resume the desktop recording; the pill's timer only
+  counts recorded stretches.
+- **End & save**: the desktop stops, transcribes the recording with the local speech model, and
+  uploads it; the extension creates the draft. Sessions -> the session shows video, transcript,
+  code timeline and the AI review.
+- **No speech model**: the interview still records and uploads; the session reads as having no
+  transcript rather than failing.
+- **Recording error** (deny screen recording, or quit the desktop mid-start): the panel shows the
+  desktop's message, the dot goes away, and no interview is left running.
+- Close the recorded tab mid-recording: the interview ends and the desktop saves what it recorded.
 - There is no summary/demo recorder in the extension; that is draft work in the desktop app and
   the web.
 
@@ -156,9 +128,8 @@ going through Bunny.
     once the receipt is confirmed.
   - Pull the network cable mid-upload. The upload must fail visibly, the local source must be
     **kept**, and the draft's Media step must offer a retry that works.
-- Mock interview started from the extension: the desktop shows the live transcript as it is
-  spoken. On stop, Sessions -> the session shows video, transcript, code timeline and the AI
-  review. The 5/day limit surfaces as a toast.
+- Mock interview started from the extension: on stop, Sessions -> the session shows video,
+  transcript, code timeline and the AI review. The 5/day limit surfaces as a toast.
 - Mock interview with **facecam off**: same pipeline, no camera track, transcript and review must
   still work.
 - Stopping never takes the app with it: stop a take from the pill, and end an interview from the extension while the pill is still on screen. In each case the pill

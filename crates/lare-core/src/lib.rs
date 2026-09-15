@@ -11,4 +11,4 @@ pub const WS_PORT: u16 = 47831;
 /// Path on the same server that receives the OAuth loopback redirect.
 pub const AUTH_CALLBACK_PATH: &str = "/auth/callback";
 /// Protocol version exchanged in the `hello` handshake.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;

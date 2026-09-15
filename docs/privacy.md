@@ -7,11 +7,9 @@ Lare records people's screens, voices and faces. These are the rules the product
 - **Speech transcription runs locally** with whisper.cpp. Audio never leaves the machine for
   transcription, and only the resulting text is stored in Supabase (`transcripts`). This is the
   one thing the desktop app does that the web cannot, and it is not moving to the cloud.
-  - For an interview, the extension captures the microphone and streams it to the desktop app as
-    raw 16 kHz mono PCM over the loopback socket (`ws://127.0.0.1:47831`). Loopback means the
-    audio does not leave the machine; no other process can reach that socket from outside it.
-    The app transcribes in rolling windows while the interview runs, so the transcript is ready
-    when it ends.
+  - For an interview, the desktop app records the screen and microphone itself and transcribes
+    the recording after it stops. The extension only tells it when to start, pause and end, over
+    the loopback socket (`ws://127.0.0.1:47831`).
 - Local recordings are temporary — see below.
 
 ## What is uploaded, and when
@@ -32,15 +30,10 @@ Lare records people's screens, voices and faces. These are the rules the product
   practice inbox and is visible to nobody until they explicitly publish a post. The extension's
   side panel lists everything held, and removing the extension stops the capture.
 - **Nothing is recorded** — screen, camera or microphone — until the user starts a recording, or
-  starts a mock interview from the extension's side panel. The draft editor states which mode
-  uploads immediately ("Instant publishes as soon as you stop"). While an interview is recording,
-  a red dot sits on the LeetCode page for its whole duration: the extension shows no other
-  on-page UI, but **it never records without one**.
-  - Chrome's own tab strip also turns red, via a one-tab tab group titled "Lare • Recording".
-    That is **decoration, not consent** — the user can drag the tab out of it at any time, and
-    the recording continues. The on-page dot is the guarantee; the tab group is an extra signal
-    that survives tabbing away. When the recording ends, whatever grouping the tab had before is
-    put back.
+  starts a mock interview from the extension's side panel. While an interview is recording, a
+  red dot sits on the LeetCode page for its whole duration and the desktop app shows its recording
+  pill: the extension shows no other on-page UI, but **it never starts a recording without the
+  dot**.
 - Each video records which surface produced it (`videos.capture_source`: `desktop`, `extension`
   or `web`) so quality complaints can be diagnosed. It is metadata about the capture path, not
   about the user.
@@ -77,21 +70,12 @@ needs Bunny's DRM, which is a paid enterprise feature, and is not part of v1.
 - Problem descriptions are stored for the owner's draft view and shown on public pages as an
   excerpt with a link to LeetCode.
 
-## Graded and ungraded interviews
+## Interview transcripts
 
-A mock interview is one or the other, and the user picks before it starts:
-
-- **Graded** — the desktop app is running and signed in to the same account. The microphone is
-  transcribed locally and the AI review is generated from that transcript.
-- **Ungraded** — no desktop app, or the user turned **Transcript & AI review** off. The interview
-  runs entirely in the cloud: video only, no transcript, no AI review. The toggle says so
-  outright rather than degrading quietly.
-
-`sessions.graded` records which one it was. A session that was downgraded mid-interview (the
-desktop app went away and did not come back) cannot have a review written to it afterwards — the
-database rejects the write, including from the service role, so an AI request that was already
-in flight cannot resurrect grading behind the user's back. Audio is still inside the video track
-of an ungraded interview; what ungraded means is that Lare never turns it into text.
+Every mock interview is recorded by the desktop app and transcribed there with whisper.cpp.
+`sessions.graded` is true when that transcript exists; if transcription fails (for example no
+speech model is installed), the session is marked ungraded, the video is still saved, and no AI
+review can be written to it — the database rejects the write, including from the service role.
 
 ## Visibility
 

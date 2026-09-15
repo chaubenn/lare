@@ -203,7 +203,9 @@ function SessionReview({ session }: { session: SessionDetail }) {
           <KindBadge kind={session.kind} />
           <SessionStatusBadge status={session.status} />
           {isInterview && (
-            <span>{session.graded ? "Local transcript & AI review" : "Ungraded: video only"}</span>
+            <span>
+              {session.graded ? "Local transcript & AI review" : "No transcript: video only"}
+            </span>
           )}
           <span>{formatDurationHuman(session.active_ms)} active</span>
           <span aria-hidden>·</span>
@@ -213,7 +215,7 @@ function SessionReview({ session }: { session: SessionDetail }) {
         </div>
         {isInterview && !videoPending && !video.data ? (
           <p className="mt-2 text-xs text-zinc-500">
-            Keep the extension recording page open until its upload finishes.
+            The desktop app uploads the interview after it stops recording.
           </p>
         ) : null}
       </header>
@@ -247,8 +249,8 @@ function SessionReview({ session }: { session: SessionDetail }) {
                 description={
                   isInterview ? (
                     <>
-                      The extension uploads the interview during capture. Check its recording page
-                      for progress or retry.
+                      The desktop app uploads the interview after it stops recording. Check the jobs
+                      tray for progress or retry from the draft.
                     </>
                   ) : (
                     "No recording was made for this session."

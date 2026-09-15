@@ -6,7 +6,6 @@ import {
   PROTOCOL_VERSION,
   WS_URL,
 } from "@lare/shared";
-import { gradingCapable } from "./pcm";
 
 type HelloAck = Extract<AppToExt, { type: "hello.ack" }>;
 type Listener = (msg: AppToExt) => void;
@@ -22,19 +21,21 @@ export class DesktopClient {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private helloAck: HelloAck | null = null;
   private connecting: Promise<HelloAck> | null = null;
-  private rawAck: unknown = null;
-  gradingAvailable(userId: string | null): boolean {
-    return this.connected && gradingCapable(this.rawAck, userId);
+
+  /** The desktop app can record a mock interview for `userId` right now. */
+  recordingAvailable(userId: string | null): boolean {
+    return this.blocker(userId) === null;
   }
 
-  /** Why grading is unavailable, in words the side panel can show, or null when it is available. */
-  gradingBlocker(userId: string | null): string | null {
-    if (this.gradingAvailable(userId)) return null;
-    if (!this.connected) return "The Lare desktop app isn't running.";
-    const appUser = (this.rawAck as { userId?: string | null } | null)?.userId ?? null;
-    if (!appUser) return "Sign in to the Lare desktop app.";
-    if (appUser !== userId) return "The desktop app is signed in to a different account.";
-    return "Download a speech model in the desktop app (Settings → Recording), or update the app.";
+  /** Why a mock interview cannot start, in words the side panel can show, or null when it can. */
+  blocker(userId: string | null): string | null {
+    const ack = this.connected ? this.helloAck : null;
+    if (!ack) return "Open the Lare desktop app to record a mock interview.";
+    if (!ack.userId) return "Sign in to the Lare desktop app.";
+    if (ack.userId !== userId) return "The desktop app is signed in to a different account.";
+    if (!ack.recordingCapable)
+      return "Allow screen recording for Lare in the desktop app (Settings → Recording).";
+    return null;
   }
 
   get connected(): boolean {
@@ -85,7 +86,6 @@ export class DesktopClient {
       const onMessage = (ev: MessageEvent) => {
         const msg = decodeAppToExt(String(ev.data));
         if (msg?.type === "hello.ack") {
-          this.rawAck = JSON.parse(String(ev.data));
           cleanup();
           resolve(msg);
         } else if (msg?.type === "error") {
@@ -178,7 +178,6 @@ export class DesktopClient {
   }
 
   close(): void {
-    this.rawAck = null;
     this.stopPing();
     const ws = this.ws;
     this.ws = null;
