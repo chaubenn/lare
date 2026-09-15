@@ -29,9 +29,10 @@ export function FeedPage() {
   const likedIds = likes.data ?? new Set<string>();
 
   return (
-    // Feed column and side column centred together, so the header lines up with the posts.
-    <div className="mx-auto grid w-full max-w-5xl gap-8 lg:grid-cols-[minmax(0,36rem)_17rem] lg:justify-center">
-      <div className="min-w-0">
+    // Feed column and side column centred together. The header sits above the posts only, and the
+    // side column starts level with the first post rather than with the page title.
+    <div className="mx-auto grid w-full max-w-5xl gap-x-8 lg:grid-cols-[minmax(0,36rem)_17rem] lg:justify-center">
+      <div className="min-w-0 lg:col-start-1 lg:row-start-1">
         <PageHeader
           title="Feed"
           subtitle={
@@ -49,9 +50,11 @@ export function FeedPage() {
             items={SCOPES}
           />
         </div>
+      </div>
 
-        {/* 36rem is the web feed's column width (components/feed.tsx, `max-w-xl`). The card and
+      {/* 36rem is the web feed's column width (components/feed.tsx, `max-w-xl`). The card and
           the carousel are shared verbatim, so matching the column keeps a post the same size. */}
+      <div className="min-w-0 lg:col-start-1 lg:row-start-2">
         <div className="w-full">
           {feed.isPending ? (
             <PageSpinner />
@@ -104,7 +107,7 @@ export function FeedPage() {
           )}
         </div>
       </div>
-      <div className="hidden lg:block">
+      <div className="hidden lg:col-start-2 lg:row-start-2 lg:block">
         <div className="sticky top-0">
           <FeedSidebar posts={posts} />
         </div>
