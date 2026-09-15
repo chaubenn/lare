@@ -20,7 +20,7 @@ export function SessionsPage() {
   const [latest, ...earlier] = sittings;
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div>
       <PageHeader title="Sessions" subtitle="Your practice and mock interviews, by sitting." />
       {sessions.isPending ? (
         <ListSkeleton />
@@ -38,7 +38,7 @@ export function SessionsPage() {
           {bucket(earlier).map(([heading, group]) => (
             <section key={heading} className="mt-8" aria-label={heading}>
               <h2 className="mb-3 text-sm font-semibold text-[var(--text)]">{heading}</h2>
-              <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)]">
+              <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]">
                 {group.map((sitting) => (
                   <EarlierSitting key={sitting.key} sitting={sitting} />
                 ))}
@@ -57,7 +57,7 @@ function LatestSitting({ sitting }: { sitting: Sitting<SessionRow> }) {
   return (
     <section
       aria-label="Latest sitting"
-      className="rounded-[var(--lare-r-4)] border border-[var(--border)]"
+      className="rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]"
     >
       <div className="flex flex-wrap items-start justify-between gap-3 p-5">
         <div className="min-w-0">
