@@ -8,7 +8,7 @@ same-account desktop handshake advertising `pcm16k-f32-v1`; old
 
 ## Capture
 
-Interviews capture the screen picked in Chrome's share dialog (desktopCapture) in an offscreen document, microphone audio, optional
+Interviews capture the screen picked in Chrome's share dialog (desktopCapture) in a small recorder window, microphone audio, optional
 camera composition, and `@lare/capture` for MediaRecorder/OPFS/live TUS upload.
 The side panel asks for microphone/camera permission before the hidden document
 uses them. Open the toolbar on the problem tab first so Chrome grants tab capture.

@@ -29,9 +29,10 @@ export default defineConfig({
       "activeTab",
       "sidePanel",
       "tabGroups",
-      "offscreen",
-      // Interviews record the whole screen through Chrome's share dialog.
+      // Interviews record the whole screen through Chrome's share dialog, in the recorder window.
       "desktopCapture",
+      // Loads the content scripts into LeetCode tabs opened before an install or update.
+      "scripting",
     ],
     side_panel: { default_path: "sidepanel.html" },
     host_permissions: [

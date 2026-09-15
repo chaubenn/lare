@@ -48,7 +48,9 @@ interface MonacoNamespace {
   };
 }
 
-const MATCHES = ["https://leetcode.com/problems/*", "https://leetcode.com/contest/*/problems/*"];
+// All of leetcode.com, not just problem URLs: LeetCode navigates in-page, so a script that only
+// loads on /problems/* never arrives when a problem is opened from the list or the home page.
+const MATCHES = ["https://leetcode.com/*"];
 const fixtureOrigin = import.meta.env.WXT_DEV_FIXTURE_ORIGIN;
 if (import.meta.env.MODE !== "production" && fixtureOrigin) MATCHES.push(`${fixtureOrigin}/*`);
 
@@ -58,6 +60,11 @@ export default defineContentScript({
   allFrames: true,
   runAt: "document_start",
   main() {
+    // The background re-injects into tabs opened before an update; this world outlives extension
+    // reloads, so a second copy would report every edit and submission twice.
+    const flag = window as unknown as { __lareMainInstalled?: boolean };
+    if (flag.__lareMainInstalled) return;
+    flag.__lareMainInstalled = true;
     const post = (msg: DistributiveOmit<MainToIsolated, typeof BRIDGE_MARK>) => {
       const payload = { [BRIDGE_MARK]: 1, ...msg };
       window.postMessage(payload, window.location.origin);

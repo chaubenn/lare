@@ -488,6 +488,21 @@ label.problem:hover {
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
+/* Recorder window. */
+.rec-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--space-2);
+  border-radius: var(--lare-r-5);
+  background: var(--lare-status-stop);
+  vertical-align: 1px;
+}
+.timer-sm {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
 .transcript {
   max-height: 140px;
   overflow-y: auto;

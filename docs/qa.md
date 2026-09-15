@@ -86,10 +86,15 @@ going through Bunny.
 
 ### Interview capture (the extension owns this now)
 
-- **Screen capture**: **Start** opens Chrome's share dialog. Pick Entire Screen (tick system
-  audio if wanted): the whole display records at up to 2560x1440 / 30 fps and 8 Mbps, and code in
-  the video stays readable. Cancel the dialog: nothing starts and nothing is written. Chrome's
-  own **Stop sharing** bar ends the interview like **End & save**.
+- **Screen capture**: **Start** opens a small **Lare · Recording** window, which opens Chrome's share
+  dialog. Pick Entire Screen (tick system audio if wanted): the window says Recording with a timer,
+  focus returns to the problem, and the whole display records at up to 2560x1440 / 30 fps / 8 Mbps.
+  Cancel the dialog: nothing starts, nothing is written, the window closes. **End & save** in the
+  panel or the window saves and closes it. Closing the window mid-interview ends it with what
+  already uploaded. Chrome's **Stop sharing** bar also ends it.
+- **Detection without a refresh**: open leetcode.com, then a problem from the list (in-page
+  navigation): Start still finds it. Reload the extension with a problem tab already open: Start
+  finds that tab too.
 - **Run, and reloads, mid-interview**: press Run and Submit repeatedly, then reload the problem
   tab. The recording carries on and the red dot comes back after the reload.
 - **First interview on a fresh profile**: Chrome cannot show a permission prompt in a side

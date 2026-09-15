@@ -81,14 +81,20 @@ export function App() {
       setError("Open a LeetCode problem tab first.");
       return;
     }
-    let reply: PageProblemReply | undefined;
-    try {
-      reply = (await chrome.tabs.sendMessage(tab.id, { type: PAGE_PROBLEM_REQUEST })) as
-        | PageProblemReply
-        | undefined;
-    } catch {
-      setError("Open a LeetCode problem tab first.");
-      return;
+    const tabId = tab.id;
+    const ask = () =>
+      chrome.tabs
+        .sendMessage(tabId, { type: PAGE_PROBLEM_REQUEST })
+        .then((r) => r as PageProblemReply | undefined)
+        .catch(() => undefined);
+    let reply = await ask();
+    // A LeetCode tab opened before the extension loaded has no content script: add it, ask again.
+    if (!reply?.problem && tab.url?.startsWith("https://leetcode.com/")) {
+      await sendRuntime({ type: "INJECT_PAGE", tabId });
+      for (let attempt = 0; attempt < 10 && !reply?.problem; attempt++) {
+        await new Promise((r) => setTimeout(r, 300));
+        reply = await ask();
+      }
     }
     if (!reply?.problem) {
       setError("Open a LeetCode problem tab first.");
@@ -108,17 +114,7 @@ export function App() {
       }
       await chrome.tabs.update(tab.id, { active: true }).catch(() => undefined);
     }
-    // Chrome's own share dialog: pick Entire Screen (and optionally system audio). It records the
-    // whole display at full resolution, and unlike tab capture needs no toolbar-icon click first.
-    const picked = await new Promise<{ streamId: string; systemAudio: boolean }>((resolve) =>
-      chrome.desktopCapture.chooseDesktopMedia(["screen", "audio"], (streamId, options) =>
-        resolve({ streamId, systemAudio: !!options?.canRequestAudioTrack }),
-      ),
-    );
-    if (!picked.streamId) {
-      setError("Recording needs a screen to share. Press Start and pick Entire Screen.");
-      return;
-    }
+    // The background opens the recorder window, which shows Chrome's share dialog.
     await run(() =>
       sendRuntime({
         type: "START_INTERVIEW",
@@ -127,8 +123,6 @@ export function App() {
         facecam,
         graded,
         tabId: tab.id ?? null,
-        screenStreamId: picked.streamId,
-        systemAudio: picked.systemAudio,
       }),
     );
   };

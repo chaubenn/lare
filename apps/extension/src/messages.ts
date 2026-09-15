@@ -48,11 +48,9 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
     facecam: z.boolean().default(false),
     graded: z.boolean(),
     tabId: z.number().nullable().default(null),
-    /** From chrome.desktopCapture in the side panel: the screen the user chose to share. */
-    screenStreamId: z.string().min(1),
-    /** Whether the user also ticked "share system audio" in Chrome's dialog. */
-    systemAudio: z.boolean().default(false),
   }),
+  /** Load the content scripts into a LeetCode tab that has none (opened before an update). */
+  z.object({ type: z.literal("INJECT_PAGE"), tabId: z.number() }),
   z.object({ type: z.literal("PAUSE_SESSION") }),
   z.object({ type: z.literal("RESUME_SESSION") }),
   z.object({ type: z.literal("END_SESSION") }),
