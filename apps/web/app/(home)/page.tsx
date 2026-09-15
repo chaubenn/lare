@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Feed } from "@/components/feed";
 import { Landing } from "@/components/landing";
+import { ProgressPanel } from "@/components/progress-panel";
 import { PostCardSkeleton } from "@/components/skeleton";
 import { TabNav } from "@/components/tab-nav";
 import { GITHUB_RELEASES_URL } from "@/lib/env";
@@ -24,43 +25,59 @@ export default async function HomePage({
   const scope = parseFeedScope((await searchParams).scope);
 
   return (
-    <Container width="page">
-      <PageHeader
-        title="Feed"
-        actions={
-          <Link
-            href={`/u/${viewer.profile.handle}`}
-            className="text-sm text-[var(--text-tertiary)] hover:text-[var(--text)]"
-          >
-            My profile →
-          </Link>
-        }
-      />
+    <Container width="wide">
+      {/* Same shape as Friends: the side column starts level with the feed, and stacks above it
+          on smaller screens. */}
+      <div className="grid gap-x-8 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <PageHeader
+            title="Feed"
+            actions={
+              <Link
+                href={`/u/${viewer.profile.handle}`}
+                className="text-sm text-[var(--text-tertiary)] hover:text-[var(--text)]"
+              >
+                My profile →
+              </Link>
+            }
+          />
 
-      <div className="mb-4">
-        <TabNav
-          label="Feed filter"
-          active={scope}
-          items={[
-            { key: "all", label: "Everyone", href: "/" },
-            { key: "following", label: "Following", href: "/?scope=following" },
-          ]}
-        />
-      </div>
-
-      {/* The page frame — header and filter — paints while the feed's queries are still in
-          flight, so switching Everyone/Following moves immediately instead of blanking. */}
-      <Suspense
-        key={scope}
-        fallback={
-          <div className="mx-auto w-full max-w-xl space-y-4" role="status" aria-busy="true">
-            <PostCardSkeleton />
-            <PostCardSkeleton />
+          <div className="mb-4">
+            <TabNav
+              label="Feed filter"
+              active={scope}
+              items={[
+                { key: "all", label: "Everyone", href: "/" },
+                { key: "following", label: "Following", href: "/?scope=following" },
+              ]}
+            />
           </div>
-        }
-      >
-        <FeedSection scope={scope} viewerId={viewer.id} />
-      </Suspense>
+        </div>
+
+        <div className="mb-6 min-w-0 lg:col-start-2 lg:row-start-2 lg:mb-0">
+          <div className="lg:sticky lg:top-4">
+            <Suspense fallback={<div className="lare-skel h-32 rounded-[var(--lare-r-4)]" />}>
+              <ProgressPanel handle={viewer.profile.handle} />
+            </Suspense>
+          </div>
+        </div>
+
+        <div className="min-w-0 lg:col-start-1 lg:row-start-2">
+          {/* The page frame — header and filter — paints while the feed's queries are still in
+              flight, so switching Everyone/Following moves immediately instead of blanking. */}
+          <Suspense
+            key={scope}
+            fallback={
+              <div className="mx-auto w-full max-w-xl space-y-4" role="status" aria-busy="true">
+                <PostCardSkeleton />
+                <PostCardSkeleton />
+              </div>
+            }
+          >
+            <FeedSection scope={scope} viewerId={viewer.id} />
+          </Suspense>
+        </div>
+      </div>
     </Container>
   );
 }

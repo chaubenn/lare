@@ -11,6 +11,7 @@ import { copyText } from "@/lib/clipboard";
 import { errorMessage } from "@/lib/supabase";
 import { appVersion, inTauri } from "@/lib/tauri";
 import { checkForUpdate, installUpdate, useUpdateState } from "@/lib/updater";
+import { NotificationsPanel } from "./NotificationsPanel";
 import { RecordingPanel } from "./RecordingPanel";
 
 const EXTENSION_ID = "koplffaeeahehnfikinmldhhmmldghhl";
@@ -22,6 +23,7 @@ export function SettingsPage() {
       <div className="space-y-4">
         <ExtensionPanel />
         <RecordingPanel />
+        <NotificationsPanel />
         <AccountPanel />
       </div>
     </>

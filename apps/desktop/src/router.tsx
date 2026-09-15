@@ -5,6 +5,7 @@ import { RequireAuth } from "@/features/auth/RequireAuth";
 import { FeedPage } from "@/features/feed/FeedPage";
 import { FriendsPage } from "@/features/friends/FriendsPage";
 import { StudioEditorPage } from "@/features/media/studio/StudioEditorPage";
+import { NotificationsPage } from "@/features/notifications/NotificationsPage";
 import { ProfileEditor } from "@/features/profile/ProfileEditor";
 import { ProfilePage } from "@/features/profile/ProfilePage";
 import { UserProfilePage } from "@/features/profile/UserProfilePage";
@@ -57,6 +58,7 @@ export const router = createMemoryRouter([
               { path: "/profile/edit", element: <ProfileEditor /> },
               { path: "/u/:handle", element: <UserProfilePage /> },
               { path: "/friends", element: <FriendsPage /> },
+              { path: "/notifications", element: <NotificationsPage /> },
               // Follow requests moved into the friends tab.
               { path: "/requests", element: <Navigate to="/friends?tab=requests" replace /> },
               { path: "/settings", element: <SettingsPage /> },

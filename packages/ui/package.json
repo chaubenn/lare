@@ -19,6 +19,7 @@
     "./primitives": "./src/primitives/index.ts",
     "./cn": "./src/cn.ts",
     "./ActivityChart": "./src/ActivityChart.tsx",
+    "./GoalSummary": "./src/GoalSummary.tsx",
     "./RuntimeChart": "./src/RuntimeChart.tsx",
     "./CodeBlock": "./src/CodeBlock.tsx",
     "./DifficultyBadge": "./src/DifficultyBadge.tsx",

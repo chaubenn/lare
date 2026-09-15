@@ -1,4 +1,4 @@
-import { Inbox, type LucideIcon, Rss, Settings, SquarePen, User, Users } from "lucide-react";
+import { Bell, Inbox, type LucideIcon, Rss, Settings, SquarePen, User, Users } from "lucide-react";
 
 export interface NavItem {
   to: string;
@@ -19,5 +19,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/sessions", label: "Sessions", icon: Inbox, shortcut: "⌘3" },
   { to: "/profile", label: "Profile", icon: User, shortcut: "⌘4" },
   { to: "/friends", label: "Friends", icon: Users, shortcut: "⌘5" },
-  { to: "/settings", label: "Settings", icon: Settings, shortcut: "⌘6" },
+  { to: "/notifications", label: "Notifications", icon: Bell, shortcut: "⌘6" },
+  { to: "/settings", label: "Settings", icon: Settings, shortcut: "⌘7" },
 ];

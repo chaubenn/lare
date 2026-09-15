@@ -3,7 +3,7 @@
 import { Wordmark } from "@lare/ui/brand";
 import { cn } from "@lare/ui/cn";
 import { buttonClass, Container } from "@lare/ui/primitives";
-import { House, LogIn, Users } from "lucide-react";
+import { Bell, House, LogIn, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -17,13 +17,21 @@ export interface SiteViewer {
   handle: string | null;
 }
 
-export function SiteChrome({ viewer, pending }: { viewer: SiteViewer | null; pending: number }) {
+export function SiteChrome({
+  viewer,
+  pending,
+  unread,
+}: {
+  viewer: SiteViewer | null;
+  pending: number;
+  unread: number;
+}) {
   const pathname = usePathname();
   const onLogin = pathname === "/login";
 
   return (
     <>
-      {viewer && <Sidebar viewer={viewer} pending={pending} />}
+      {viewer && <Sidebar viewer={viewer} pending={pending} unread={unread} />}
       <header className={cn("lare-material-regular sticky top-0 z-30", viewer && "md:hidden")}>
         <Container width="wide" className="flex h-12 items-center justify-between gap-4">
           <div className="flex items-center gap-5">
@@ -44,11 +52,23 @@ export function SiteChrome({ viewer, pending }: { viewer: SiteViewer | null; pen
           </div>
 
           {viewer ? (
-            <AvatarMenu
-              avatarUrl={viewer.avatarUrl}
-              displayName={viewer.displayName}
-              handle={viewer.handle}
-            />
+            <div className="flex items-center gap-4">
+              <Link
+                href="/notifications"
+                aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
+                className="relative text-[var(--text-tertiary)] hover:text-[var(--text)]"
+              >
+                <Bell className="size-5" aria-hidden />
+                {unread > 0 ? (
+                  <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--accent)]" />
+                ) : null}
+              </Link>
+              <AvatarMenu
+                avatarUrl={viewer.avatarUrl}
+                displayName={viewer.displayName}
+                handle={viewer.handle}
+              />
+            </div>
           ) : onLogin ? null : (
             <Link
               href="/login"

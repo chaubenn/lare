@@ -18,6 +18,7 @@ import {
 import { errorMessage } from "@/lib/supabase";
 import { FollowButton } from "./FollowButton";
 import { FriendsSidebar, useSuggestedPeople } from "./FriendsSidebar";
+import { LeaderboardTab } from "./LeaderboardTab";
 import {
   type FollowState,
   type PersonSummary,
@@ -28,10 +29,11 @@ import {
 } from "./queries";
 import { personName } from "./UserRow";
 
-const TABS = ["following", "followers", "requests", "find"] as const;
+const TABS = ["leaderboard", "following", "followers", "requests", "find"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
+  leaderboard: "Leaderboard",
   following: "Following",
   followers: "Followers",
   requests: "Requests",
@@ -69,6 +71,7 @@ export function FriendsPage() {
       </div>
 
       <div className="min-w-0 lg:col-start-1 lg:row-start-2">
+        {tab === "leaderboard" ? <LeaderboardTab onFind={() => setTab("find")} /> : null}
         {tab === "following" ? <FollowingTab onFind={() => setTab("find")} /> : null}
         {tab === "followers" ? <FollowersTab /> : null}
         {tab === "requests" ? <RequestsTab /> : null}

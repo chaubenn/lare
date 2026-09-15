@@ -5,6 +5,7 @@ import Link from "next/link";
 import { type ReactNode, Suspense } from "react";
 import { Avatar } from "@/components/avatar";
 import type { FollowState } from "@/components/follow-button";
+import { LeaderboardTab, parseLeaderboardWeek } from "@/components/leaderboard";
 import { PendingButton } from "@/components/pending-button";
 import {
   displayNameOf,
@@ -23,7 +24,7 @@ import { acceptFollowRequest, declineFollowRequest } from "./actions";
 
 export const metadata: Metadata = { title: "Friends" };
 
-const TABS = ["following", "followers", "requests", "find"] as const;
+const TABS = ["leaderboard", "following", "followers", "requests", "find"] as const;
 type Tab = (typeof TABS)[number];
 
 const PERSON_COLUMNS = "id, handle, display_name, avatar_url, is_private";
@@ -46,7 +47,13 @@ function sanitiseQuery(raw: string | string[] | undefined): string {
     .slice(0, 40);
 }
 
-type Params = { searchParams: Promise<{ tab?: string | string[]; q?: string | string[] }> };
+type Params = {
+  searchParams: Promise<{
+    tab?: string | string[];
+    q?: string | string[];
+    week?: string | string[];
+  }>;
+};
 
 export default async function FriendsPage({ searchParams }: Params) {
   const viewer = await requireViewer("/friends");
@@ -74,6 +81,7 @@ export default async function FriendsPage({ searchParams }: Params) {
               label="Friends sections"
               active={tab}
               items={[
+                { key: "leaderboard", label: "Leaderboard", href: href("leaderboard") },
                 { key: "following", label: "Following", href: href("following") },
                 { key: "followers", label: "Followers", href: href("followers") },
                 { key: "requests", label: "Requests", href: href("requests"), badge: pendingCount },
@@ -84,6 +92,9 @@ export default async function FriendsPage({ searchParams }: Params) {
         </div>
 
         <div className="min-w-0 lg:col-start-1 lg:row-start-2">
+          {tab === "leaderboard" && (
+            <LeaderboardTab viewerId={viewer.id} week={parseLeaderboardWeek(params.week)} />
+          )}
           {tab === "following" && <FollowingTab viewerId={viewer.id} />}
           {tab === "followers" && <FollowersTab viewerId={viewer.id} />}
           {tab === "requests" && <RequestsTab viewerId={viewer.id} />}

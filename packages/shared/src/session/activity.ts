@@ -223,6 +223,8 @@ export interface ActivitySummary {
   last7: number;
   /** Consecutive days with a solve, ending today (or yesterday, while today is still open). */
   streak: number;
+  /** Longest run of consecutive days with a solve inside the window (at most a year back). */
+  longestStreak: number;
   /** Days with at least one solve in the last 30. */
   activeDays30: number;
   /** Most problems solved in a single day across the window. */
@@ -241,9 +243,16 @@ export function summarizeActivity(days: readonly ActivityDay[]): ActivitySummary
     streak += 1;
     i -= 1;
   }
+  let longestStreak = 0;
+  let run = 0;
+  for (const d of days) {
+    run = d.count > 0 ? run + 1 : 0;
+    longestStreak = Math.max(longestStreak, run);
+  }
   return {
     last7: sum(days.length - 7),
     streak,
+    longestStreak,
     activeDays30: days.slice(Math.max(0, days.length - 30)).filter((d) => d.count > 0).length,
     bestDay: days.reduce((n, d) => Math.max(n, d.count), 0),
   };

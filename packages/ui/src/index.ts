@@ -2,6 +2,7 @@ export { ActivityChart } from "./ActivityChart";
 export { CodeBlock } from "./CodeBlock";
 export { cn } from "./cn";
 export { DifficultyBadge } from "./DifficultyBadge";
+export { GoalRing, GoalSummary } from "./GoalSummary";
 export { project, rubberband, useDraggable, useDragToPage } from "./gesture";
 export { SPRING } from "./motion";
 export * from "./primitives";

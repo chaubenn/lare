@@ -3,6 +3,7 @@ import { Emblem, Wordmark } from "@lare/ui/brand";
 import { motion } from "motion/react";
 import { NavLink } from "react-router";
 import { CountBadge } from "@/components/ui/Badge";
+import { useUnreadNotificationCount } from "@/features/notifications/queries";
 import { useDrafts } from "@/features/publishing/drafts/queries";
 import { useFollowRequests } from "@/features/requests/queries";
 import { NAV_ITEMS } from "./nav";
@@ -10,9 +11,11 @@ import { NAV_ITEMS } from "./nav";
 export function Sidebar() {
   const drafts = useDrafts();
   const requests = useFollowRequests();
+  const unread = useUnreadNotificationCount();
   const counts: Partial<Record<string, number>> = {
     "/drafts": drafts.data?.length ?? 0,
     "/friends": requests.data?.length ?? 0,
+    "/notifications": unread.data ?? 0,
   };
 
   return (
