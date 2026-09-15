@@ -107,17 +107,28 @@ function FloatingCard({
   const card = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  // Below the anchor when it fits, otherwise above; always inside the window.
+  // Below the anchor when it fits, otherwise above; always inside the window. Re-measured when
+  // the content loads and the card grows.
   useLayoutEffect(() => {
-    const height = card.current?.offsetHeight ?? 0;
-    const below = anchor.bottom + GAP;
-    const top =
-      below + height > window.innerHeight - GAP ? Math.max(GAP, anchor.top - GAP - height) : below;
-    const left = Math.min(
-      Math.max(GAP, anchor.left),
-      Math.max(GAP, window.innerWidth - CARD_WIDTH - GAP),
-    );
-    setPos({ top, left });
+    const el = card.current;
+    if (!el) return;
+    const place = () => {
+      const height = el.offsetHeight;
+      const below = anchor.bottom + GAP;
+      const top =
+        below + height > window.innerHeight - GAP
+          ? Math.max(GAP, anchor.top - GAP - height)
+          : below;
+      const left = Math.min(
+        Math.max(GAP, anchor.left),
+        Math.max(GAP, window.innerWidth - CARD_WIDTH - GAP),
+      );
+      setPos({ top, left });
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [anchor]);
 
   return (
