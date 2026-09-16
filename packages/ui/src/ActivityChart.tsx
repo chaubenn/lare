@@ -38,6 +38,7 @@ function describeWeekPage(bars: ActivityWeek[]): string {
   return `${total} problem${total === 1 ? "" : "s"} over the last ${bars.length} weeks`;
 }
 
+/** Chart paging arrow. Sits over the bars and fades out rather than moving them when it can't page. */
 function NavButton({
   side,
   disabled,
@@ -67,7 +68,7 @@ function NavButton({
 }
 
 /**
- * Hevy-style solve chart. Toggle between the last 7 days and the last 4 weeks (about a month); swipe
+ * Solve chart. Toggle between the last 7 days and the last 4 weeks (about a month); swipe
  * (drag, arrows, or keyboard) to page back through history.
  */
 export function ActivityChart({

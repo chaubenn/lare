@@ -28,8 +28,8 @@ export function SubmissionCard({
       : null;
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+    <div className="rounded-[var(--lare-r-3)] border border-[var(--border)] bg-[var(--surface-raised)] p-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
         <Badge tone={submission.accepted ? "emerald" : "rose"}>{status}</Badge>
         <span>{languageLabel(submission.lang, submission.lang_verbose)}</span>
         <span aria-hidden>·</span>

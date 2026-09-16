@@ -1,7 +1,15 @@
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
+ * design-system: design.md (locked ink/bone) · genre: modern-minimal
+ * macrostructure: Long Document — one column: header + caption → one deck (the feed's
+ *   carousel, arrows + dots) carrying media AND problems AND the review → hairline →
+ *   meta → thread. No tab strip anywhere.
+ * tone: utilitarian · anchor hue: neutral (bone on ink; --lare-danger is the only chromatic note)
+ * enrichment: none (the post's own video is the media)
+ */
 import { formatDurationHuman, formatLocalTimestamp, postStateOf } from "@lare/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -11,12 +19,13 @@ import { Button, buttonClass } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
-import { VideoEmbed } from "@/components/VideoEmbed";
 import { useUser } from "@/features/auth/AuthProvider";
+import { PostCarousel } from "@/features/feed/PostCarousel";
+import { LabelledSlide, TextSlide } from "@/features/feed/PostSlides";
+import { VideoSlide } from "@/features/feed/VideoSlide";
 import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { formatDateTime, plural } from "@/lib/format";
-import { usePostMedia } from "./media";
 import { CommentsSection, PostActions } from "./PostSocial";
 import { type PostDetail, useInterviewReview, usePost } from "./queries";
 import { useDeletePostFlow } from "./useDeletePostFlow";
@@ -33,7 +42,7 @@ export function PostPage() {
         title="Post not found"
         description="It may have been deleted, or you don't have access to it."
         action={
-          <Link to="/" className="text-sm text-zinc-200 underline underline-offset-2">
+          <Link to="/" className="text-sm text-[var(--text)] underline underline-offset-2">
             Back to feed
           </Link>
         }
@@ -43,17 +52,18 @@ export function PostPage() {
   return <PostView post={post.data} />;
 }
 
+/**
+ * A loaded post, read top to bottom: who wrote it, what they made, then the
+ * conversation. Everything it carries lives in one deck, so the comments sit a
+ * fixed distance below the title no matter how much the session holds.
+ */
 function PostView({ post }: { post: PostDetail }) {
   // The route lives under RequireAuth, so the viewer is always signed in here.
   const { userId } = useUser();
   const _queryClient = useQueryClient();
   const review = useInterviewReview(post.sessions?.graded ? post.session_id : null);
-  const media = usePostMedia(post.id);
-  const mediaRows = media.data ?? [];
-  const photos = mediaRows.filter((m) => m.kind !== "og");
   const author = post.profiles;
   const session = post.sessions;
-  const problems = session?.session_problems ?? [];
   const name = author?.display_name ?? (author?.handle ? `@${author.handle}` : "Someone");
   const isMine = post.user_id === userId;
 
@@ -69,7 +79,10 @@ function PostView({ post }: { post: PostDetail }) {
         </Link>
       </div>
 
-      <article className="min-w-0 space-y-6">
+      {/* Deliberate rhythm rather than one uniform gap: the media block gets room,
+          then a hairline turns the meta, the note and the thread into one quiet
+          run — a notebook entry, not five evenly spaced cards. */}
+      <article className="min-w-0">
         <header>
           <div className="flex items-start gap-3">
             <ProfileHoverCard handle={author?.handle} className="shrink-0">
@@ -129,82 +142,28 @@ function PostView({ post }: { post: PostDetail }) {
             </h1>
           ) : null}
           {post.body ? (
-            <p className="mt-3 max-w-prose select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)]">
-              {post.body}
-            </p>
+            <div className="mt-3">
+              <PostBody body={post.body} />
+            </div>
           ) : null}
-          <div className="mt-3">
-            <PostActions
-              postId={post.id}
-              userId={userId}
-              likeCount={post.like_count}
-              commentCount={post.comment_count}
-            />
-          </div>
         </header>
 
-        {photos.length > 0 ? (
-          <section>
-            <SectionTitle>Photos</SectionTitle>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {photos.map((image) =>
-                image.url ? (
-                  <li key={image.id} className="overflow-hidden rounded-xl border border-zinc-800">
-                    <img
-                      src={image.url}
-                      alt={image.caption ?? ""}
-                      className="aspect-video w-full object-cover"
-                    />
-                    {image.caption ? (
-                      <p className="border-t border-zinc-800 px-3 py-2 text-xs text-zinc-400">
-                        {image.caption}
-                      </p>
-                    ) : null}
-                  </li>
-                ) : null,
-              )}
-            </ul>
-          </section>
-        ) : null}
+        <div className="mt-6">
+          <PostContent post={post} isMine={isMine} review={review.data ?? null} />
+        </div>
 
-        {post.demo_videos && (post.show_demo_video || isMine) ? (
-          <section>
-            <SectionTitle>Summary video</SectionTitle>
-            <VideoEmbed video={post.demo_videos} />
-            {!post.show_demo_video && isMine ? <HiddenNote postId={post.id} /> : null}
-          </section>
-        ) : null}
+        <div className="mt-6 border-t border-[var(--border)] pt-3">
+          <PostActions
+            postId={post.id}
+            userId={userId}
+            likeCount={post.like_count}
+            commentCount={post.comment_count}
+          />
+        </div>
 
-        {(post.video_kind !== "none" || post.videos) && (post.show_video || isMine) ? (
-          <section>
-            <SectionTitle>
-              {post.video_kind === "highlights" ? "Highlights" : "Demo video"}
-            </SectionTitle>
-            {post.videos ? (
-              <>
-                <VideoEmbed video={post.videos} />
-                {!post.show_video && isMine ? <HiddenNote postId={post.id} /> : null}
-              </>
-            ) : (
-              <div className="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500">
-                No video attached.
-              </div>
-            )}
-          </section>
-        ) : null}
-
-        {problems.length > 0 ? (
-          <section className="space-y-3">
-            <SectionTitle>Problems</SectionTitle>
-            {problems.map((p) => (
-              <ProblemSection key={p.id} problem={p} />
-            ))}
-          </section>
-        ) : null}
-
-        {review.data ? <AiReviewSection review={review.data} /> : null}
-
-        <CommentsSection postId={post.id} userId={userId} isPostOwner={isMine} />
+        <div className="mt-8">
+          <CommentsSection postId={post.id} userId={userId} isPostOwner={isMine} />
+        </div>
       </article>
 
       {session ? (
@@ -213,6 +172,130 @@ function PostView({ post }: { post: PostDetail }) {
             <SessionPanel session={session} />
           </div>
         </aside>
+      ) : null}
+    </div>
+  );
+}
+
+type ReviewData = NonNullable<ReturnType<typeof useInterviewReview>["data"]>;
+
+/**
+ * The post's body as one swipe deck: the summary clip, the recording, the problems and
+ * the review. Deliberately narrower than the feed's deck — no photos, and no session
+ * card or breakdown slide, because the Session panel beside it already carries those.
+ */
+function PostContent({
+  post,
+  isMine,
+  review,
+}: {
+  post: PostDetail;
+  isMine: boolean;
+  review: ReviewData | null;
+}) {
+  const problems = post.sessions?.session_problems ?? [];
+  const summary = post.demo_videos;
+  const video = post.videos;
+
+  // The owner keeps sight of a clip they have hidden; the note under the deck is
+  // what tells them it is hidden from everyone else.
+  const showSummary = Boolean(summary) && (post.show_demo_video || isMine);
+  const showVideo = Boolean(video) && post.video_kind !== "none" && (post.show_video || isMine);
+  const hiddenFromOthers =
+    isMine && ((video && !post.show_video) || (summary && !post.show_demo_video));
+  const bothClips = showSummary && showVideo;
+
+  if (!showSummary && !showVideo && problems.length === 0 && !review) return null;
+
+  const title = post.title ?? "Post";
+  return (
+    <section>
+      <PostCarousel label={`${title} — contents`} fitActiveSlide>
+        {showSummary && summary ? (
+          <LabelledSlide label={bothClips ? "Summary" : null} className="relative w-full">
+            <VideoSlide
+              videoId={summary.id}
+              status={summary.status}
+              bunnyVideoId={summary.bunny_video_id}
+              durationMs={summary.duration_ms}
+              title={`${title} — summary`}
+              className="rounded-none border-0"
+            />
+          </LabelledSlide>
+        ) : null}
+        {showVideo && video ? (
+          <LabelledSlide
+            label={bothClips ? (post.video_kind === "highlights" ? "Highlights" : "Demo") : null}
+            className="relative w-full"
+          >
+            <VideoSlide
+              videoId={video.id}
+              status={video.status}
+              bunnyVideoId={video.bunny_video_id}
+              durationMs={video.duration_ms}
+              title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "demo"}`}
+              className="rounded-none border-0"
+            />
+          </LabelledSlide>
+        ) : null}
+        {problems.length > 0 ? (
+          <TextSlide label={`Problems · ${problems.length}`}>
+            <div className="space-y-4">
+              {problems.map((p) => (
+                <ProblemSection key={p.id} problem={p} />
+              ))}
+            </div>
+          </TextSlide>
+        ) : null}
+        {review ? (
+          <TextSlide label="AI review">
+            <AiReviewSection review={review} />
+          </TextSlide>
+        ) : null}
+      </PostCarousel>
+      {hiddenFromOthers ? <HiddenNote postId={post.id} /> : null}
+    </section>
+  );
+}
+
+/** Clamped like a video description, since the comments sit right underneath it. */
+function PostBody({ body }: { body: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+
+  useLayoutEffect(() => {
+    // An expanded paragraph never reports overflow, which would pull the
+    // control out from under the reader mid-read. Only measure while clamped.
+    if (expanded) return;
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded]);
+
+  return (
+    <div>
+      <p
+        ref={ref}
+        className={`max-w-prose select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)] ${
+          expanded ? "" : "line-clamp-3"
+        }`}
+      >
+        {body}
+      </p>
+      {overflows ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="mt-1 rounded-[var(--lare-r-1)] text-sm font-medium text-[var(--text-tertiary)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
       ) : null}
     </div>
   );

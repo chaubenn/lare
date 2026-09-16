@@ -12,6 +12,7 @@ import { inTauri } from "@/lib/tauri";
 import { useAuth } from "./AuthProvider";
 import { type OAuthProvider, sendEmailOtp, signInWithProvider, verifyEmailOtp } from "./oauth";
 
+/** Sign-in screen. Waits out the session check, then bounces anyone already signed in. */
 export function LoginPage() {
   const { session } = useAuth();
   if (session === undefined) return <PageSpinner />;
@@ -22,7 +23,7 @@ export function LoginPage() {
         <Wordmark className="justify-center text-xl text-zinc-50" markClassName="size-8" />
         <h1 className="mt-6 text-xl font-medium">Sign in to Lare</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          Hevy for LeetCode. Log sessions, share what you learned.
+          Social progress tracking for LeetCode. Log sessions, share what you learned.
         </p>
       </div>
       <LoginForm />

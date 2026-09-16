@@ -22,12 +22,15 @@ const FEATURES = [
   },
 ] as const;
 
+/** The marketing page: what Lare is, the download links and the feature rundown. */
 export function Landing() {
   return (
     <Container width="page" className="py-10 sm:py-16">
       <section className="lare-reveal max-w-xl">
         <Wordmark className="text-2xl text-[var(--text)]" markClassName="size-8" />
-        <h1 className="lare-display mt-8 text-[var(--text)]">Hevy for LeetCode</h1>
+        <h1 className="lare-display mt-8 text-[var(--text)]">
+          Social progress tracking for LeetCode
+        </h1>
         <p className="lare-body mt-4 text-[var(--text-secondary)]">
           Track your practice like a workout. Log sessions, share the solve, follow friends and see
           how everyone is progressing.

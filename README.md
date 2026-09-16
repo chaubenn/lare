@@ -2,7 +2,7 @@
 
 <img src="brand/wordmark.png" alt="Lare" width="260">
 
-**Hevy for LeetCode.**
+**Social progress tracking for LeetCode.**
 Your practice logs itself — every problem opened, every submission judged, with code,
 runtime and memory percentiles and the runtime distribution graph.
 

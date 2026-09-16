@@ -3,6 +3,7 @@ import { Container } from "@lare/ui/primitives";
 import { GITHUB_REPO_URL } from "@/lib/env";
 import { GitHubIcon } from "./brand-icons";
 
+/** Wordmark, one-line pitch and a link back to the repo. */
 export function SiteFooter() {
   return (
     <footer className="border-t border-[var(--border)] pb-16 md:pb-0">
@@ -15,7 +16,7 @@ export function SiteFooter() {
             markClassName="size-3.5 text-[var(--text-tertiary)]"
             className="text-[var(--text-tertiary)]"
           />
-          <span>· Hevy for LeetCode</span>
+          <span>· Social progress tracking for LeetCode</span>
         </p>
         <a
           href={GITHUB_REPO_URL}

@@ -18,7 +18,14 @@ import {
   useViewerLike,
 } from "./social";
 
-/** Like button + comment count, mirroring the row the web feed shows. */
+/** Where the composer lives, so the comment tally can hand focus straight to it. */
+const COMPOSER_ID = "post-comment-composer";
+
+/**
+ * The meta row under the post: one tally you can press to like, one that jumps to
+ * the thread. Padded for the hit target, then pulled back by the same amount so the
+ * icons align to the text column rather than sitting nudged inside it.
+ */
 export function PostActions({
   postId,
   userId,
@@ -37,8 +44,11 @@ export function PostActions({
   const count = toggle.data?.like_count ?? likeCount;
   const isLiked = toggle.data?.liked ?? liked.data ?? false;
 
+  const tally =
+    "inline-flex items-center gap-1.5 rounded-[var(--lare-r-1)] px-2 py-1 text-[var(--text-secondary)] transition-colors duration-[var(--duration-quick)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] disabled:opacity-60";
+
   return (
-    <div className="flex items-center gap-4 text-sm text-zinc-400">
+    <div className="-ml-2 flex items-center gap-1 text-sm">
       <button
         type="button"
         aria-pressed={isLiked}
@@ -51,17 +61,22 @@ export function PostActions({
           })
         }
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:text-zinc-100",
-          isLiked && "text-rose-400 hover:text-rose-300",
+          tally,
+          isLiked && "text-[var(--lare-danger)] hover:text-[var(--lare-danger)]",
         )}
       >
         <Heart className={cn("size-4", isLiked && "fill-current")} aria-hidden />
         <span className="tabular-nums">{count}</span>
       </button>
-      <span className="inline-flex items-center gap-1.5 px-2 py-1">
+      <button
+        type="button"
+        className={tally}
+        aria-label={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}, go to the thread`}
+        onClick={() => document.getElementById(COMPOSER_ID)?.focus()}
+      >
         <MessageCircle className="size-4" aria-hidden />
         <span className="tabular-nums">{commentCount}</span>
-      </span>
+      </button>
     </div>
   );
 }
@@ -88,9 +103,8 @@ export function CommentsSection({
 
   return (
     <section className="space-y-3">
-      <SectionTitle>
-        {list.length} {list.length === 1 ? "comment" : "comments"}
-      </SectionTitle>
+      {/* The tally lives in the action row; repeating it here was the same number twice. */}
+      <SectionTitle>Comments</SectionTitle>
 
       <form
         className="space-y-2"
@@ -104,6 +118,7 @@ export function CommentsSection({
         }}
       >
         <Textarea
+          id={COMPOSER_ID}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           maxLength={2000}
@@ -162,8 +177,8 @@ function CommentRow({
     <li className="flex gap-3">
       <Avatar url={author?.avatar_url} name={name} size={28} />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-zinc-500">
-          <span className="font-medium text-zinc-200">{name}</span>
+        <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-[var(--text-tertiary)]">
+          <span className="font-medium text-[var(--text)]">{name}</span>
           <span>{formatLocalTimestamp(comment.created_at)}</span>
           {comment.edited_at ? <span>· edited</span> : null}
         </div>
@@ -204,18 +219,18 @@ function CommentRow({
             </div>
           </div>
         ) : (
-          <p className="mt-1 select-text whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+          <p className="mt-1 select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]">
             {comment.body}
           </p>
         )}
 
         {(canEdit || canDelete) && !editing ? (
-          <div className="mt-1 flex gap-3 text-xs text-zinc-500">
+          <div className="mt-1 flex gap-3 text-xs text-[var(--text-tertiary)]">
             {canEdit ? (
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="inline-flex items-center gap-1 hover:text-zinc-300"
+                className="inline-flex items-center gap-1 rounded-[var(--lare-r-1)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
               >
                 <Pencil className="size-3" aria-hidden />
                 Edit
@@ -228,7 +243,7 @@ function CommentRow({
                 onClick={() =>
                   remove.mutate(comment.id, { onError: fail("Couldn't delete the comment") })
                 }
-                className="inline-flex items-center gap-1 hover:text-rose-300"
+                className="inline-flex items-center gap-1 rounded-[var(--lare-r-1)] hover:text-[var(--lare-danger)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
               >
                 <Trash2 className="size-3" aria-hidden />
                 Delete

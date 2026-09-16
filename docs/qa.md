@@ -182,9 +182,38 @@ going through Bunny.
 
 ## Database
 
+### Running a fixture
+
+Each fixture mounts its migration at `/migration.sql` and applies it twice, so a throwaway
+Postgres container is the whole harness — no Supabase project, no credentials, and nothing
+that can reach real data:
+
+```bash
+docker run -d --name fx -e POSTGRES_PASSWORD=postgres postgres:16
+until docker exec fx pg_isready -U postgres; do sleep 1; done
+docker cp supabase/migrations/0019_hidden_videos_stay_hidden.sql fx:/migration.sql
+docker cp supabase/functions/_tests/hidden_videos.sql fx:/fixture.sql
+docker exec fx psql -U postgres -v ON_ERROR_STOP=1 -q -f /fixture.sql
+docker rm -f fx
+```
+
+A pass prints `<name> fixture passed` and exits 0; a failed assertion exits 3 with the message.
+**Use a fresh container per fixture** — the fixtures `create role anon`, and roles are
+cluster-wide, so a second fixture in the same container dies on `role "anon" already exists`.
+On Git Bash, prefix the `docker exec` calls with `MSYS_NO_PATHCONV=1` or `/fixture.sql` is
+rewritten to a Windows path.
+
 `0018_pending_posts.sql` is idempotent; `supabase/functions/_tests/pending_posts.sql` is its
 isolated fixture (pending, hidden videos, drafts, the ready trigger, swapping a video back to
 pending). Run it the same way as the others, never against real data.
+
+`0019_hidden_videos_stay_hidden.sql` is idempotent;
+`supabase/functions/_tests/hidden_videos.sql` is its isolated fixture. It proves a clip the
+author switched off is not selectable by a viewer of the post — which matters because the GUID
+in that row is a permanent link to the file — while the author still sees their own hidden
+clips. Same rules: disposable database only. Verified against the old `0010` definition too —
+the fixture fails there on the hidden-video assertion, so it catches the regression rather than
+passing whatever it is given.
 
 `0015_v1.sql` is idempotent — apply it twice against a disposable database and confirm both the
 second run and these behaviours. `supabase/functions/_tests/v1_schema.sql` is the isolated

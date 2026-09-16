@@ -2,7 +2,7 @@
   "name": "lare",
   "private": true,
   "version": "0.1.0",
-  "description": "Hevy for LeetCode: log sessions, share demo videos, and get AI-graded mock interviews.",
+  "description": "Social progress tracking for LeetCode: log sessions, share demo videos, and get AI-graded mock interviews.",
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@11.25.0",
   "engines": {

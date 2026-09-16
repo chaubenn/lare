@@ -1,6 +1,6 @@
 # Lare architecture
 
-Hevy for LeetCode: log practice sessions with a pausable timer, capture submissions (code, runtime
+Social progress tracking for LeetCode: log practice sessions with a pausable timer, capture submissions (code, runtime
 and memory percentiles, the runtime distribution graph), share posts with followers, attach demo
 videos, and run AI-graded mock interviews.
 
@@ -124,9 +124,29 @@ recorder manifest only carries the post id.
 
 ## Post carousel
 
-`apps/desktop/src/features/feed/PostSlides.tsx`:
+Two decks, one mechanism. `PostCarousel` is the swipe deck itself — native scroll-snap for the
+swiping, arrows and dots for pointer users — and both the feed and the post page compose their own
+slides into it.
+
+The feed's deck, `apps/desktop/src/features/feed/PostSlides.tsx`:
 
     session card -> session breakdown -> summary video -> photos -> demo/full video
+
+The post page builds its own in `PostPage.tsx`, deliberately narrower:
+
+    summary video -> demo/highlights video -> problems -> AI review
+
+No photos and no session card or breakdown, because the Session panel beside the post already
+carries the session; photos are a feed thing. The problems and the review are slides rather than
+sections down the page, which is what keeps the comments a fixed distance from the title however
+much a session holds.
+
+The two differ in shape as well as contents. The feed holds one aspect ratio so every card is the
+same size; the post deck passes `fitActiveSlide`, which measures the current slide and sizes the
+frame to it (a `ResizeObserver`, because "Show code" and the problem description collapsible change
+height on their own). That is why the post deck's videos keep their natural `aspect-video` instead
+of filling the frame. When a post carries both clips, `LabelledSlide` names them in the corner —
+the player's `title` only ever reached screen readers.
 
 The session card (`SessionCardSlide`) is drawn from the session, not stored. It was a PNG once —
 rendered by a Next route with `next/og` and saved to a bucket by an `og-snapshot` function — because
