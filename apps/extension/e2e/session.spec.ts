@@ -255,19 +255,29 @@ test("a mock interview needs the desktop app, and the panel says so", async () =
   await problem.close();
 });
 
-test("publish selected cloud inbox problems opens a draft without desktop", async () => {
+test("publish selected cloud inbox problems hands the draft to the desktop app", async () => {
   await fetch(`${BASE}/__reset`);
   await resetExtensionState();
   const problem = await openProblem();
   const panel = await openPanel();
   await panel.getByRole("checkbox", { name: "Select Two Sum" }).check();
-  const draftPromise = context.waitForEvent("page");
+  // The hand-off is a `lare://` deep link now — the website is a landing page and has no drafts
+  // page to open. A custom scheme never becomes a Playwright page, so record what the worker asks
+  // Chrome to open instead of waiting for a tab that will not navigate.
+  await sw.evaluate(() => {
+    (globalThis as unknown as { __opened: string[] }).__opened = [];
+    chrome.tabs.create = ((info: { url?: string }) => {
+      (globalThis as unknown as { __opened: string[] }).__opened.push(info.url ?? "");
+      return Promise.resolve({} as chrome.tabs.Tab);
+    }) as typeof chrome.tabs.create;
+  });
   await panel.getByRole("button", { name: "Create draft from selected problems" }).click();
-  const draft = await draftPromise;
-  await expect.poll(() => draft.url()).toContain("/drafts/");
+  await expect
+    .poll(() => sw.evaluate(() => (globalThis as unknown as { __opened?: string[] }).__opened ?? []))
+    .toEqual([expect.stringMatching(/^lare:\/\/drafts\/.+/)]);
+  // The draft itself is still made without the desktop app running: only the hand-off needs it.
   const request = (await recorded()).find((r) => r.path.includes("publish_practice_problems"));
   expect(request?.body).toMatchObject({ problem_ids: [expect.any(String)] });
-  await draft.close();
   await panel.close();
   await problem.close();
 });
