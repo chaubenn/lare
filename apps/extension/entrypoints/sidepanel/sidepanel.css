@@ -643,17 +643,6 @@ label.problem:hover {
   gap: var(--space-2);
 }
 
-/* ---- Footer links ------------------------------------------------------ */
-
-.links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
-}
-.links .link {
-  white-space: nowrap;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .btn:active:not(:disabled) {
     transform: none;

@@ -15,7 +15,7 @@ export function SiteFooter() {
             markClassName="size-3.5 text-[var(--text-tertiary)]"
             className="text-[var(--text-tertiary)]"
           />
-          <span>· Hevy for LeetCode</span>
+          <span>· Social progress tracking for LeetCode</span>
         </p>
         <a
           href={GITHUB_REPO_URL}

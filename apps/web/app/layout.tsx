@@ -20,7 +20,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(env.siteUrl),
-  title: { default: "Lare — Hevy for LeetCode", template: "%s · Lare" },
+  title: { default: "Lare — Social progress tracking for LeetCode", template: "%s · Lare" },
   description:
     "Log LeetCode sessions, capture submissions, record demo videos and run AI-graded mock interviews. Desktop app and Chrome extension.",
   openGraph: { siteName: "Lare", type: "website" },

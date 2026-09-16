@@ -4,8 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { type RuntimeSnapshot, type StateBroadcast, sendRuntime, toSnapshot } from "@/src/messages";
 import { PAGE_PROBLEM_REQUEST, type PageProblemReply } from "@/src/pageController";
 
-const SITE_URL: string = import.meta.env.WXT_SITE_URL ?? "https://lare-one.vercel.app";
-
 type Tab = "tracking" | "interview";
 const TABS: { id: Tab; label: string }[] = [
   { id: "tracking", label: "Tracking" },
@@ -149,7 +147,7 @@ export function App() {
         <Emblem className="logo" />
         <div className="brand">
           <div className="title">Lare</div>
-          <div className="subtitle">Hevy for LeetCode</div>
+          <div className="subtitle">Progress tracking for LeetCode</div>
         </div>
         <span
           className={`app-status ${snap?.appConnected ? "on" : ""}`}
@@ -581,25 +579,6 @@ export function App() {
                 Sign out
               </button>
             </div>
-            <nav className="links" aria-label="Lare links">
-              <button
-                type="button"
-                className="link"
-                onClick={() => void sendRuntime({ type: "OPEN_APP" })}
-              >
-                Desktop app
-              </button>
-              <a href={SITE_URL} target="_blank" rel="noreferrer" className="link">
-                lare.app
-              </a>
-              <button
-                type="button"
-                className="link"
-                onClick={() => void sendRuntime({ type: "OPEN_APP", path: "drafts" })}
-              >
-                Drafts
-              </button>
-            </nav>
           </footer>
         </>
       )}

@@ -1,6 +1,6 @@
 # Lare architecture
 
-Hevy for LeetCode: log practice sessions with a pausable timer, capture submissions (code, runtime
+Social progress tracking for LeetCode: log practice sessions with a pausable timer, capture submissions (code, runtime
 and memory percentiles, the runtime distribution graph), share posts with followers, attach demo
 videos, and run AI-graded mock interviews.
 

@@ -67,7 +67,7 @@ function NavButton({
 }
 
 /**
- * Hevy-style solve chart. Toggle between the last 7 days and the last 4 weeks (about a month); swipe
+ * Solve chart. Toggle between the last 7 days and the last 4 weeks (about a month); swipe
  * (drag, arrows, or keyboard) to page back through history.
  */
 export function ActivityChart({
