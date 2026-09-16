@@ -72,7 +72,7 @@ insert into posts (id, user_id, status, visibility, video_id, video_kind, show_v
    'public', '00000000-0000-0000-0000-0000000000c5', 'none', true, null, true);
 
 -- A stranger reading the posts.
-set local request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
 do $$
 begin
   if not private.can_view_video('00000000-0000-0000-0000-0000000000c1') then
@@ -94,7 +94,7 @@ end $$;
 
 -- The author still sees every clip of their own, hidden or not: the draft editor and the
 -- owner's view of the post both depend on it.
-set local request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
 do $$
 begin
   if not private.can_view_video('00000000-0000-0000-0000-0000000000c2') then
@@ -106,7 +106,7 @@ begin
 end $$;
 
 -- Un-hiding restores access; hiding it again takes it away.
-set local request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
 update posts set show_video = true where id = '00000000-0000-0000-0000-0000000000e2';
 do $$
 begin
