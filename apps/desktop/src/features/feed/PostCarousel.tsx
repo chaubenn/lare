@@ -1,6 +1,6 @@
 import { cn } from "@lare/ui";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Children, type ReactNode, useRef, useState } from "react";
+import { Children, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * Instagram-style swipe deck. Native scroll-snap does the swiping (so touch, trackpad and
@@ -11,14 +11,36 @@ export function PostCarousel({
   children,
   label = "Post media",
   className,
+  fitActiveSlide = false,
 }: {
   children: ReactNode;
   label?: string;
   className?: string;
+  /**
+   * Size the frame to whatever the current slide needs instead of holding one
+   * aspect ratio. The feed wants the fixed frame — every card the same shape —
+   * but a deck carrying text wants the text to simply fit.
+   */
+  fitActiveSlide?: boolean;
 }) {
   const slides = Children.toArray(children);
   const trackRef = useRef<HTMLDivElement>(null);
+  const slideRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [index, setIndex] = useState(0);
+  const [height, setHeight] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!fitActiveSlide) return;
+    const el = slideRefs.current[index];
+    if (!el) return;
+    // Content inside a slide changes height on its own — "Show code", the problem
+    // description collapsible — so watch it rather than measuring once.
+    const measure = () => setHeight(el.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fitActiveSlide, index]);
 
   function goTo(next: number) {
     const track = trackRef.current;
@@ -47,14 +69,23 @@ export function PostCarousel({
         <div
           ref={trackRef}
           onScroll={onScroll}
-          // 4:3 on phones so the breakdown slide has room; the 1200x630 cover letterboxes into it.
-          className="flex aspect-[4/3] snap-x snap-mandatory sm:aspect-[1200/630] overflow-x-auto overflow-y-hidden scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          style={fitActiveSlide && height ? { height } : undefined}
+          className={cn(
+            "flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            // 4:3 on phones so the breakdown slide has room; the 1200x630 cover letterboxes into it.
+            fitActiveSlide
+              ? "items-start transition-[height] duration-[var(--duration-fast)]"
+              : "aspect-[4/3] sm:aspect-[1200/630]",
+          )}
         >
           {slides.map((slide, i) => (
             // biome-ignore lint/a11y/useSemanticElements: the ARIA carousel pattern wants role="group" on a slide, not a fieldset.
             <div
               // biome-ignore lint/suspicious/noArrayIndexKey: slides are a fixed, ordered deck.
               key={i}
+              ref={(el) => {
+                slideRefs.current[i] = el;
+              }}
               role="group"
               aria-roledescription="slide"
               aria-label={`${i + 1} of ${slides.length}`}

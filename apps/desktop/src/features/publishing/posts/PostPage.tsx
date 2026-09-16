@@ -21,7 +21,7 @@ import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { PostCarousel } from "@/features/feed/PostCarousel";
-import { LabelledSlide, ScrollSlide } from "@/features/feed/PostSlides";
+import { LabelledSlide, TextSlide } from "@/features/feed/PostSlides";
 import { VideoSlide } from "@/features/feed/VideoSlide";
 import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
@@ -210,22 +210,23 @@ function PostContent({
   const title = post.title ?? "Post";
   return (
     <section>
-      <PostCarousel label={`${title} — contents`}>
+      <PostCarousel label={`${title} — contents`} fitActiveSlide>
         {showSummary && summary ? (
-          <LabelledSlide label={bothClips ? "Summary" : null}>
+          <LabelledSlide label={bothClips ? "Summary" : null} className="relative w-full">
             <VideoSlide
               videoId={summary.id}
               status={summary.status}
               bunnyVideoId={summary.bunny_video_id}
               durationMs={summary.duration_ms}
               title={`${title} — summary`}
-              className="size-full rounded-none border-0"
+              className="rounded-none border-0"
             />
           </LabelledSlide>
         ) : null}
         {showVideo && video ? (
           <LabelledSlide
             label={bothClips ? (post.video_kind === "highlights" ? "Highlights" : "Demo") : null}
+            className="relative w-full"
           >
             <VideoSlide
               videoId={video.id}
@@ -233,23 +234,23 @@ function PostContent({
               bunnyVideoId={video.bunny_video_id}
               durationMs={video.duration_ms}
               title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "demo"}`}
-              className="size-full rounded-none border-0"
+              className="rounded-none border-0"
             />
           </LabelledSlide>
         ) : null}
         {problems.length > 0 ? (
-          <ScrollSlide label={`Problems · ${problems.length}`}>
+          <TextSlide label={`Problems · ${problems.length}`}>
             <div className="space-y-4">
               {problems.map((p) => (
                 <ProblemSection key={p.id} problem={p} />
               ))}
             </div>
-          </ScrollSlide>
+          </TextSlide>
         ) : null}
         {review ? (
-          <ScrollSlide label="AI review">
+          <TextSlide label="AI review">
             <AiReviewSection review={review} />
-          </ScrollSlide>
+          </TextSlide>
         ) : null}
       </PostCarousel>
       {hiddenFromOthers ? <HiddenNote postId={post.id} /> : null}

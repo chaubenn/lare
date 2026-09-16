@@ -108,13 +108,12 @@ export function PostSlides({
 }
 
 /**
- * A slide whose content is text, not media. The deck frame is a fixed aspect, so the
- * content scrolls inside it — that keeps every slide the same height instead of the
- * page jumping as you arrow between a video and a problem description.
+ * A slide whose content is text, not media. It takes the height its content needs and
+ * the deck sizes to it, rather than scrolling inside a frame it does not fill.
  */
-export function ScrollSlide({ label, children }: { label: string; children: ReactNode }) {
+export function TextSlide({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="size-full overflow-y-auto overscroll-contain bg-[var(--surface)] px-4 pb-8 pt-4">
+    <div className="w-full bg-[var(--surface)] px-4 pb-8 pt-4">
       <SectionTitle>{label}</SectionTitle>
       {children}
     </div>
@@ -126,9 +125,17 @@ export function ScrollSlide({ label, children }: { label: string; children: Reac
  * means the label survives every player state — ready, still processing, or a local
  * preview of a clip that has not uploaded yet.
  */
-export function LabelledSlide({ label, children }: { label: string | null; children: ReactNode }) {
+export function LabelledSlide({
+  label,
+  children,
+  className = "relative size-full",
+}: {
+  label: string | null;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="relative size-full">
+    <div className={className}>
       {children}
       {label ? (
         <span className="lare-label pointer-events-none absolute left-3 top-3 z-10 rounded-[var(--lare-r-1)] bg-[color-mix(in_oklab,var(--lare-ink)_72%,transparent)] px-2 py-1 text-[var(--text)] ring-1 ring-[var(--border)] backdrop-blur">
