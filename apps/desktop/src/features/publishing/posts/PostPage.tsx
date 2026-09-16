@@ -1,7 +1,7 @@
 import { formatDurationHuman, formatLocalTimestamp, postStateOf } from "@lare/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -10,13 +10,13 @@ import { Badge, KindBadge, PostStateBadge } from "@/components/ui/Badge";
 import { Button, buttonClass } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
+import { type SegmentedTab, SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { VideoEmbed } from "@/components/VideoEmbed";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { formatDateTime, plural } from "@/lib/format";
-import { usePostMedia } from "./media";
 import { CommentsSection, PostActions } from "./PostSocial";
 import { type PostDetail, useInterviewReview, usePost } from "./queries";
 import { useDeletePostFlow } from "./useDeletePostFlow";
@@ -48,12 +48,8 @@ function PostView({ post }: { post: PostDetail }) {
   const { userId } = useUser();
   const _queryClient = useQueryClient();
   const review = useInterviewReview(post.sessions?.graded ? post.session_id : null);
-  const media = usePostMedia(post.id);
-  const mediaRows = media.data ?? [];
-  const photos = mediaRows.filter((m) => m.kind !== "og");
   const author = post.profiles;
   const session = post.sessions;
-  const problems = session?.session_problems ?? [];
   const name = author?.display_name ?? (author?.handle ? `@${author.handle}` : "Someone");
   const isMine = post.user_id === userId;
 
@@ -128,54 +124,88 @@ function PostView({ post }: { post: PostDetail }) {
               {post.title}
             </h1>
           ) : null}
-          {post.body ? (
-            <p className="mt-3 max-w-prose select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)]">
-              {post.body}
-            </p>
-          ) : null}
-          <div className="mt-3">
-            <PostActions
-              postId={post.id}
-              userId={userId}
-              likeCount={post.like_count}
-              commentCount={post.comment_count}
-            />
-          </div>
         </header>
 
-        {photos.length > 0 ? (
-          <section>
-            <SectionTitle>Photos</SectionTitle>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {photos.map((image) =>
-                image.url ? (
-                  <li key={image.id} className="overflow-hidden rounded-xl border border-zinc-800">
-                    <img
-                      src={image.url}
-                      alt={image.caption ?? ""}
-                      className="aspect-video w-full object-cover"
-                    />
-                    {image.caption ? (
-                      <p className="border-t border-zinc-800 px-3 py-2 text-xs text-zinc-400">
-                        {image.caption}
-                      </p>
-                    ) : null}
-                  </li>
-                ) : null,
-              )}
-            </ul>
-          </section>
-        ) : null}
+        <PostContent post={post} isMine={isMine} review={review.data ?? null} />
 
-        {post.demo_videos && (post.show_demo_video || isMine) ? (
+        <PostActions
+          postId={post.id}
+          userId={userId}
+          likeCount={post.like_count}
+          commentCount={post.comment_count}
+        />
+
+        {post.body ? <PostBody body={post.body} /> : null}
+
+        <CommentsSection postId={post.id} userId={userId} isPostOwner={isMine} />
+      </article>
+
+      {session ? (
+        <aside className="mt-6 min-w-0 lg:mt-0" aria-label="Session details">
+          <div className="lg:sticky lg:top-0">
+            <SessionPanel session={session} />
+          </div>
+        </aside>
+      ) : null}
+    </div>
+  );
+}
+
+type ReviewData = NonNullable<ReturnType<typeof useInterviewReview>["data"]>;
+type ContentTab = "video" | "problems" | "review";
+
+/**
+ * Watch it, read it, or see the grade. Each of these runs long — problem
+ * descriptions and the AI review especially — so stacking them put the comments
+ * several screens below the video.
+ */
+function PostContent({
+  post,
+  isMine,
+  review,
+}: {
+  post: PostDetail;
+  isMine: boolean;
+  review: ReviewData | null;
+}) {
+  const panelId = useId();
+  const [picked, setPicked] = useState<ContentTab | null>(null);
+
+  const problems = post.sessions?.session_problems ?? [];
+  const summaryVideo =
+    post.demo_videos && (post.show_demo_video || isMine) ? post.demo_videos : null;
+  const showsMainVideo = (post.video_kind !== "none" || post.videos) && (post.show_video || isMine);
+  const hasVideo = Boolean(summaryVideo) || showsMainVideo;
+
+  const tabs: Array<SegmentedTab<ContentTab>> = [];
+  if (hasVideo) tabs.push({ key: "video", label: "Video" });
+  if (problems.length > 0) {
+    tabs.push({
+      key: "problems",
+      label: "Problems",
+      badge: <span className="text-[var(--text-tertiary)]">{problems.length}</span>,
+    });
+  }
+  if (review) tabs.push({ key: "review", label: "AI review" });
+
+  const first = tabs[0];
+  if (!first) return null;
+
+  // The review query resolves after the post, so the tab set grows underneath
+  // us. Deriving the active tab keeps a stale pick from blanking the panel.
+  const active = tabs.find((t) => t.key === picked)?.key ?? first.key;
+
+  const pane =
+    active === "video" ? (
+      <div className="space-y-6">
+        {summaryVideo ? (
           <section>
             <SectionTitle>Summary video</SectionTitle>
-            <VideoEmbed video={post.demo_videos} />
+            <VideoEmbed video={summaryVideo} />
             {!post.show_demo_video && isMine ? <HiddenNote postId={post.id} /> : null}
           </section>
         ) : null}
-
-        {(post.video_kind !== "none" || post.videos) && (post.show_video || isMine) ? (
+        {showsMainVideo ? (
           <section>
             <SectionTitle>
               {post.video_kind === "highlights" ? "Highlights" : "Demo video"}
@@ -192,27 +222,74 @@ function PostView({ post }: { post: PostDetail }) {
             )}
           </section>
         ) : null}
+      </div>
+    ) : active === "problems" ? (
+      <div className="space-y-3">
+        {problems.map((p) => (
+          <ProblemSection key={p.id} problem={p} />
+        ))}
+      </div>
+    ) : review ? (
+      <AiReviewSection review={review} />
+    ) : null;
 
-        {problems.length > 0 ? (
-          <section className="space-y-3">
-            <SectionTitle>Problems</SectionTitle>
-            {problems.map((p) => (
-              <ProblemSection key={p.id} problem={p} />
-            ))}
-          </section>
-        ) : null}
+  // A lone tab is just a label on the only thing there is.
+  if (tabs.length === 1) return <section>{pane}</section>;
 
-        {review.data ? <AiReviewSection review={review.data} /> : null}
+  return (
+    <section>
+      <SegmentedTabs
+        items={tabs}
+        value={active}
+        onChange={setPicked}
+        label="Post content"
+        className="mb-4"
+      />
+      <div id={panelId} role="tabpanel">
+        {pane}
+      </div>
+    </section>
+  );
+}
 
-        <CommentsSection postId={post.id} userId={userId} isPostOwner={isMine} />
-      </article>
+/** Clamped like a video description, since the comments sit right underneath it. */
+function PostBody({ body }: { body: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
 
-      {session ? (
-        <aside className="mt-6 min-w-0 lg:mt-0" aria-label="Session details">
-          <div className="lg:sticky lg:top-0">
-            <SessionPanel session={session} />
-          </div>
-        </aside>
+  useLayoutEffect(() => {
+    // An expanded paragraph never reports overflow, which would pull the
+    // control out from under the reader mid-read. Only measure while clamped.
+    if (expanded) return;
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded]);
+
+  return (
+    <div>
+      <p
+        ref={ref}
+        className={`max-w-prose select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)] ${
+          expanded ? "" : "line-clamp-3"
+        }`}
+      >
+        {body}
+      </p>
+      {overflows ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="mt-1 rounded-[var(--lare-r-1)] text-sm font-medium text-[var(--text-tertiary)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
       ) : null}
     </div>
   );

@@ -1,14 +1,16 @@
 import { formatDurationHuman, problemUrl } from "@lare/shared";
 import type { SessionProblem, Submission } from "@lare/supabase-types";
 import { DifficultyBadge } from "@lare/ui";
-import { ExternalLink } from "lucide-react";
-import { useMemo } from "react";
+import { Check, ExternalLink } from "lucide-react";
+import { useId, useMemo, useState } from "react";
 import { ProblemDescription } from "@/components/ProblemDescription";
 import { SubmissionCard } from "@/components/SubmissionCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { parseTopicTags, sortSubmissions } from "@/lib/json";
+import { type SegmentedTab, SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { parseTopicTags } from "@/lib/json";
 import { openExternal } from "@/lib/open";
+import { defaultSubmissionIndex, submissionsInAttemptOrder } from "@/lib/submissions";
 
 export type ProblemWithSubmissions = SessionProblem & { submissions: Submission[] };
 
@@ -20,7 +22,7 @@ export function ProblemSection({
   defaultShowCode?: boolean;
 }) {
   const tags = useMemo(() => parseTopicTags(problem.topic_tags), [problem.topic_tags]);
-  const submissions = useMemo(() => sortSubmissions(problem.submissions), [problem.submissions]);
+  const submissions = problem.submissions;
   const url = problem.url || problemUrl(problem.slug);
 
   return (
@@ -68,14 +70,61 @@ export function ProblemSection({
       ) : null}
 
       {submissions.length > 0 ? (
-        <div className="mt-3 space-y-3">
-          {submissions.map((s) => (
-            <SubmissionCard key={s.id} submission={s} defaultShowCode={defaultShowCode} />
-          ))}
-        </div>
+        <Submissions submissions={submissions} defaultShowCode={defaultShowCode} />
       ) : (
         <p className="mt-3 text-sm text-zinc-500">No submissions were captured for this problem.</p>
       )}
     </section>
+  );
+}
+
+/**
+ * One attempt at a time. Every accepted run carries a pair of runtime/memory
+ * distribution charts, so stacking them buries whatever follows the problem.
+ */
+function Submissions({
+  submissions,
+  defaultShowCode,
+}: {
+  submissions: Submission[];
+  defaultShowCode: boolean;
+}) {
+  const panelId = useId();
+  const ordered = useMemo(() => submissionsInAttemptOrder(submissions), [submissions]);
+  const [picked, setPicked] = useState<string | null>(null);
+  // Falling back rather than storing the resolved id keeps the pick honest when
+  // submissions refetch and the one that was selected is no longer there.
+  const active = ordered.find((s) => s.id === picked) ?? ordered[defaultSubmissionIndex(ordered)];
+  if (!active) return null;
+
+  if (ordered.length === 1) {
+    return (
+      <div className="mt-3">
+        <SubmissionCard submission={active} defaultShowCode={defaultShowCode} />
+      </div>
+    );
+  }
+
+  const tabs: Array<SegmentedTab<string>> = ordered.map((submission, i) => ({
+    key: submission.id,
+    label: `#${i + 1}`,
+    badge: submission.accepted ? (
+      <Check className="size-3 text-emerald-400" aria-label="Accepted" />
+    ) : null,
+  }));
+
+  return (
+    <div className="mt-3">
+      <SegmentedTabs
+        items={tabs}
+        value={active.id}
+        onChange={setPicked}
+        label="Submissions"
+        className="mb-3"
+      />
+      <div id={panelId} role="tabpanel" aria-label={`Submission ${ordered.indexOf(active) + 1}`}>
+        <SubmissionCard submission={active} defaultShowCode={defaultShowCode} />
+      </div>
+    </div>
   );
 }
