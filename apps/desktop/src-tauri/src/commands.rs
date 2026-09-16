@@ -85,6 +85,29 @@ pub async fn reset_screen_recording_permission(app: AppHandle) -> Result<Permiss
     .map_err(err)?
 }
 
+/// A URL the webview can play this device's copy of a recording from.
+///
+/// Served over the loopback server rather than `asset://` because WebKit cannot get through a
+/// fragmented MP4 over a custom scheme — see `preview.rs` for the measurements. Only paths inside
+/// the recordings directory are ever handed out, so this cannot be turned into a file server.
+#[tauri::command]
+pub fn preview_url(
+    rec: Rec<'_>,
+    previews: State<'_, crate::preview::PreviewFiles>,
+    path: String,
+) -> Result<String, String> {
+    let path = std::fs::canonicalize(&path).map_err(|e| format!("no such recording: {e}"))?;
+    let root = std::fs::canonicalize(rec.recordings_dir()).map_err(err)?;
+    if !path.starts_with(&root) {
+        return Err("path is not a recording".to_string());
+    }
+    let token = previews.register(&path);
+    Ok(format!(
+        "http://127.0.0.1:{}/preview/{token}",
+        lare_core::WS_PORT
+    ))
+}
+
 /// URL of the OS settings pane for a permission (macOS), if any.
 #[tauri::command]
 pub fn permission_settings_url(which: String) -> Option<String> {

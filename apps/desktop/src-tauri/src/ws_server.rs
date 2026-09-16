@@ -3,6 +3,7 @@
 //! * `GET /`               WebSocket used by the Chrome extension (protocol in `lare_core::protocol`).
 //! * `GET /health`         JSON status probe (`{"app":"lare", ...}`).
 //! * `GET /auth/callback`  OAuth loopback redirect; forwards the PKCE `code` to the webview.
+//! * `GET /preview/{token}` This device's copy of a recording, for the local preview (`preview`).
 //!
 //! The server knows nothing about Tauri: it reports what happened through [`ServerEvent`]s on a
 //! channel, and `lib.rs` turns those into Tauri events. That keeps the whole thing testable with a
@@ -38,6 +39,7 @@ use serde_json::json;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing::{debug, error, info, warn};
 
+use crate::preview::{self, PreviewFiles};
 use crate::recording::{
     RECORDING_UNAVAILABLE_MESSAGE, RecordingBackend, RecordingRequest, SharedRecordingBackend,
 };
@@ -146,6 +148,8 @@ pub struct ServerContext {
     /// Debug builds accept any `chrome-extension://*` origin and requests without an `Origin`
     /// header (local test clients). Release builds only accept [`EXTENSION_ORIGIN`].
     pub allow_any_extension_origin: bool,
+    /// Recordings this process has agreed to serve over `/preview/{token}`.
+    pub previews: PreviewFiles,
 }
 
 impl ServerContext {
@@ -153,6 +157,7 @@ impl ServerContext {
         hub: WsHub,
         current_user: Arc<Mutex<Option<String>>>,
         app_version: impl Into<String>,
+        previews: PreviewFiles,
     ) -> Self {
         Self {
             hub,
@@ -160,6 +165,7 @@ impl ServerContext {
             recording: Arc::new(std::sync::RwLock::new(None)),
             app_version: app_version.into(),
             allow_any_extension_origin: cfg!(debug_assertions),
+            previews,
         }
     }
 
@@ -200,6 +206,7 @@ pub fn router(ctx: ServerContext) -> Router {
         .route("/", get(ws_upgrade))
         .route("/health", get(health))
         .route(AUTH_CALLBACK_PATH, get(auth_callback))
+        .route("/preview/{token}", get(preview_file))
         .with_state(ctx)
 }
 
@@ -237,6 +244,17 @@ pub async fn run_forever(ctx: ServerContext) {
 // ---------------------------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------------------------
+
+/// This device's copy of a recording, for the preview shown while the cloud copy processes. The
+/// token is minted by the `preview_url` command, so only files the webview has asked for are
+/// reachable — the port itself is open to any page in the user's browser.
+async fn preview_file(
+    State(ctx): State<ServerContext>,
+    axum::extract::Path(token): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    preview::handle(&ctx.previews, &token, &headers).await
+}
 
 async fn health(State(ctx): State<ServerContext>) -> Response {
     let body = json!({
@@ -584,7 +602,12 @@ mod tests {
 
     async fn start(allow_any_origin: bool) -> TestServer {
         let (hub, events) = WsHub::new();
-        let mut ctx = ServerContext::new(hub, Arc::new(Mutex::new(None)), "0.0.0-test");
+        let mut ctx = ServerContext::new(
+            hub,
+            Arc::new(Mutex::new(None)),
+            "0.0.0-test",
+            PreviewFiles::new(),
+        );
         ctx.allow_any_extension_origin = allow_any_origin;
         let (listener, addr) = bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
         tokio::spawn(serve(listener, ctx.clone()));

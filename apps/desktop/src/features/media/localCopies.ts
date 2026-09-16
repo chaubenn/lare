@@ -5,7 +5,6 @@
 
 import type { Video } from "@lare/supabase-types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEffect } from "react";
 import { useUser } from "@/features/auth/AuthProvider";
 import { recorder } from "@/lib/recorder";
@@ -33,7 +32,9 @@ export function useLocalVideoSrc(
       const [metas, recordings] = await Promise.all([getAllRecordingMeta(), recorder.list()]);
       const path = localFileFor(videoId as string, status, Object.values(metas), recordings);
       if (!path || !(await recorder.pathExists(path))) return null;
-      return convertFileSrc(path);
+      // Not `convertFileSrc`: WebKit cannot get through a fragmented MP4 over `asset://`, which is
+      // what a recording is until the cloud copy exists. See src-tauri/src/preview.rs.
+      return recorder.previewUrl(path);
     },
   });
   return notReady ? (query.data ?? null) : null;

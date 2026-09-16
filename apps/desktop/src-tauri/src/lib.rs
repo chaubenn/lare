@@ -3,6 +3,7 @@
 
 pub mod commands;
 pub mod deeplink;
+pub mod preview;
 pub mod recorder;
 pub mod recording;
 pub mod shutdown;
@@ -139,7 +140,13 @@ pub fn run() {
 
     let (hub, events) = WsHub::new();
     let current_user = Arc::new(Mutex::new(None));
-    let server_ctx = ServerContext::new(hub.clone(), current_user.clone(), env!("CARGO_PKG_VERSION"));
+    let previews = preview::PreviewFiles::new();
+    let server_ctx = ServerContext::new(
+        hub.clone(),
+        current_user.clone(),
+        env!("CARGO_PKG_VERSION"),
+        previews.clone(),
+    );
     let backend_ctx = server_ctx.clone();
 
     tauri::Builder::default()
@@ -173,6 +180,7 @@ pub fn run() {
             commands::permission_settings_url,
             commands::open_permission_settings,
             commands::reset_screen_recording_permission,
+            commands::preview_url,
             commands::recorder_settings,
             commands::set_recorder_settings,
             commands::recorder_status,
@@ -220,6 +228,7 @@ pub fn run() {
                 }
             });
             app.manage(recorder);
+            app.manage(previews.clone());
 
             // Deep links. macOS registers the scheme via the bundle's Info.plist; Windows/Linux
             // need a runtime registration for unpackaged (dev) builds.
