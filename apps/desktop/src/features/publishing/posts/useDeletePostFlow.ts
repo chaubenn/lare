@@ -1,6 +1,6 @@
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router";
-import { useToast } from "@/components/toast/ToastProvider";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 import { useDeletePost } from "./queries";
@@ -23,17 +23,17 @@ async function confirmDelete(): Promise<boolean> {
 export function useDeletePostFlow(postId: string) {
   const remove = useDeletePost();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { notify } = useNotify();
 
   const deletePost = async () => {
     if (!(await confirmDelete())) return;
     remove.mutate(postId, {
       onSuccess: () => {
-        toast({ title: "Post deleted", variant: "success" });
+        notify({ title: "Post deleted", variant: "success" });
         void navigate("/profile", { replace: true });
       },
       onError: (e) =>
-        toast({ title: "Couldn't delete", description: errorMessage(e), variant: "error" }),
+        notify({ title: "Couldn't delete", description: errorMessage(e), variant: "error" }),
     });
   };
 

@@ -2,10 +2,10 @@ import { formatDuration, type TranscriptSegment } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Copy, MicOff } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { ErrorState, Spinner } from "@/components/ui/States";
+import { useNotify } from "@/features/notifications/notices";
 import { copyText } from "@/lib/clipboard";
 import { plural } from "@/lib/format";
 import { activeSegmentIndex, transcriptToText, withKeys } from "./media";
@@ -34,7 +34,7 @@ export function TranscriptList({
   currentTime: number;
   onSeek: (t: number) => void;
 }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const listRef = useRef<HTMLOListElement>(null);
   const list = segments ?? EMPTY;
   const keyed = useMemo(() => withKeys(list, (s) => `${s.s}-${s.e}`), [list]);
@@ -59,7 +59,7 @@ export function TranscriptList({
 
   const copy = async () => {
     const ok = await copyText(transcriptToText(list));
-    toast(
+    notify(
       ok
         ? { title: "Transcript copied", variant: "success" }
         : { title: "Couldn't copy the transcript", variant: "error" },

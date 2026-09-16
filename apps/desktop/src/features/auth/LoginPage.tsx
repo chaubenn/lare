@@ -2,10 +2,11 @@ import { Wordmark } from "@lare/ui/brand";
 import { Globe, KeyRound, Mail } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Navigate } from "react-router";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { FieldError, Input, Label } from "@/components/ui/Field";
 import { PageSpinner } from "@/components/ui/States";
+import { WindowScreen } from "@/components/ui/WindowScreen";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 import { useAuth } from "./AuthProvider";
@@ -16,29 +17,27 @@ export function LoginPage() {
   if (session === undefined) return <PageSpinner />;
   if (session) return <Navigate to="/" replace />;
   return (
-    <div className="flex h-full items-center justify-center p-8">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <Wordmark className="justify-center text-xl text-zinc-50" markClassName="size-8" />
-          <h1 className="mt-6 text-xl font-medium">Sign in to Lare</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Hevy for LeetCode. Log sessions, share what you learned.
-          </p>
-        </div>
-        <LoginForm />
-        {!inTauri ? (
-          <p className="mt-6 text-center text-xs text-zinc-600">
-            Running in a browser: OAuth needs the desktop app to receive the callback. Use the email
-            code instead.
-          </p>
-        ) : null}
+    <WindowScreen className="max-w-sm">
+      <div className="mb-8 text-center">
+        <Wordmark className="justify-center text-xl text-zinc-50" markClassName="size-8" />
+        <h1 className="mt-6 text-xl font-medium">Sign in to Lare</h1>
+        <p className="mt-1 text-sm text-zinc-400">
+          Hevy for LeetCode. Log sessions, share what you learned.
+        </p>
       </div>
-    </div>
+      <LoginForm />
+      {!inTauri ? (
+        <p className="mt-6 text-center text-xs text-zinc-600">
+          Running in a browser: OAuth needs the desktop app to receive the callback. Use the email
+          code instead.
+        </p>
+      ) : null}
+    </WindowScreen>
   );
 }
 
 function LoginForm() {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const [pending, setPending] = useState<OAuthProvider | null>(null);
   const [waiting, setWaiting] = useState<OAuthProvider | null>(null);
 
@@ -48,7 +47,7 @@ function LoginForm() {
       await signInWithProvider(provider);
       setWaiting(provider);
     } catch (err) {
-      toast({ title: "Couldn't start sign-in", description: errorMessage(err), variant: "error" });
+      notify({ title: "Couldn't start sign-in", description: errorMessage(err), variant: "error" });
     } finally {
       setPending(null);
     }
@@ -93,7 +92,7 @@ function LoginForm() {
 }
 
 function EmailOtpForm() {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [stage, setStage] = useState<"email" | "code">("email");
@@ -112,7 +111,7 @@ function EmailOtpForm() {
     try {
       await sendEmailOtp(trimmed);
       setStage("code");
-      toast({ title: "Code sent", description: `Check ${trimmed} for a 6-digit code.` });
+      notify({ title: "Code sent", description: `Check ${trimmed} for a 6-digit code.` });
     } catch (err) {
       setError(errorMessage(err));
     } finally {

@@ -22,7 +22,6 @@ export function ProfilePostGrid({ posts }: { posts: UserPost[] }) {
 }
 
 function PostTile({ post }: { post: UserPost }) {
-  const cover = post.cover_url ?? (post.include_og_card ? post.og_url : null);
   const session = post.sessions;
   const problems = session?.session_problems ?? [];
   const title = post.title?.trim() || problems[0]?.title || "Untitled session";
@@ -35,18 +34,11 @@ function PostTile({ post }: { post: UserPost }) {
       className="group flex h-full flex-col overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] transition-colors hover:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
     >
       <div className="relative aspect-[1200/630] overflow-hidden border-b border-[var(--border)] bg-[var(--surface)]">
-        {cover ? (
-          <img
-            src={cover}
-            alt=""
-            loading="lazy"
-            className={`size-full ${post.cover_url ? "object-cover" : "object-contain"} transition-transform duration-300 group-hover:scale-[1.02]`}
-          />
-        ) : (
-          <div className="flex size-full items-end p-4">
-            <span className="line-clamp-2 text-lg font-semibold text-[var(--text)]">{title}</span>
-          </div>
-        )}
+        {/* The session card is a component now, not a stored image, so a tile is drawn rather than
+            fetched: the title is what a grid needs at this size anyway. */}
+        <div className="flex size-full items-end p-4">
+          <span className="line-clamp-2 text-lg font-semibold text-[var(--text)]">{title}</span>
+        </div>
         {hasVideo ? (
           <span className="absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-[color-mix(in_oklab,var(--surface)_80%,transparent)] px-2 py-0.5 text-[11px] text-[var(--text)] backdrop-blur">
             <Play className="size-3" aria-hidden />

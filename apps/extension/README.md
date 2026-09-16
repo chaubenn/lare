@@ -1,4 +1,4 @@
-# Lare extension 0.4.7
+# Lare extension 0.4.8
 
 Chrome 116+. The toolbar opens a side panel, not a popup. OAuth/email sign-in, passive
 problem/submission capture and inbox draft creation do not require the desktop app.

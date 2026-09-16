@@ -1,9 +1,10 @@
 import { HANDLE_RE } from "@lare/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { FieldError, Input, Label, Toggle } from "@/components/ui/Field";
+import { WindowScreen } from "@/components/ui/WindowScreen";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { profileQueryKey, useAuth, useUser } from "./AuthProvider";
 
@@ -13,7 +14,7 @@ export function OnboardingPage() {
   const { userId, session } = useUser();
   const { signOut } = useAuth();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const suggested = (session.user.user_metadata as Record<string, unknown>)?.user_name;
   const suggestedName =
     (session.user.user_metadata as Record<string, unknown>)?.full_name ??
@@ -50,7 +51,7 @@ export function OnboardingPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
-      toast({ title: "Welcome to Lare", variant: "success" });
+      notify({ title: "Welcome to Lare", variant: "success" });
     },
     onError: (err) => setError(errorMessage(err)),
   });
@@ -66,8 +67,8 @@ export function OnboardingPage() {
   };
 
   return (
-    <div className="flex h-full items-center justify-center p-8">
-      <form onSubmit={submit} className="w-full max-w-sm space-y-4">
+    <WindowScreen className="max-w-sm">
+      <form onSubmit={submit} className="space-y-4">
         <div>
           <h1 className="text-xl font-semibold">Pick a handle</h1>
           <p className="mt-1 text-sm text-zinc-400">
@@ -123,6 +124,6 @@ export function OnboardingPage() {
           </Button>
         </div>
       </form>
-    </div>
+    </WindowScreen>
   );
 }

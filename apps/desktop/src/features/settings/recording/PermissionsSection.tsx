@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, ExternalLink, type LucideIcon, Mic, Monitor } from "lucide-react";
-import { useToast } from "@/components/toast/ToastProvider";
+import { Camera, ExternalLink, type LucideIcon, Mic, Monitor, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
 import { permissionsKey, usePermissions } from "@/features/media/hooks";
+import { useNotify } from "@/features/notifications/notices";
 import { type PermissionStatus, type Permissions, recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
@@ -64,7 +64,63 @@ export function PermissionsSection() {
           After allowing Screen Recording on macOS, quit and reopen Lare for it to take effect.
         </p>
       ) : null}
+      {macScreenPermission && permissions.data?.screenRecording === "denied" ? (
+        <StaleGrantNotice />
+      ) : null}
     </SubSection>
+  );
+}
+
+/**
+ * Shown when macOS refuses screen recording. The usual cause after an update is not a decision the
+ * user made: the grant is tied to the app's code signature, so a new build no longer matches the
+ * entry the old one was given, and System Settings goes on showing Lare switched on while capture
+ * is refused. Clearing the entry is the only way back, and doing it by hand means finding the "-"
+ * button under Privacy & Security.
+ */
+function StaleGrantNotice() {
+  const queryClient = useQueryClient();
+  const { notify } = useNotify();
+
+  const reset = useMutation({
+    mutationFn: () => recorder.resetScreenRecordingPermission(),
+    onSuccess: async (status) => {
+      await queryClient.invalidateQueries({ queryKey: permissionsKey });
+      if (status === "granted") {
+        notify({ title: "Screen recording allowed", variant: "success" });
+        return;
+      }
+      notify({
+        title: "Permission cleared",
+        description: "Lare has asked macOS again. Switch it on if prompted, then reopen Lare.",
+      });
+    },
+    onError: (e) =>
+      notify({
+        title: "Couldn't reset the permission",
+        description: errorMessage(e),
+        variant: "error",
+      }),
+  });
+
+  return (
+    <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+      <p className="text-xs text-zinc-400">
+        Switched on in System Settings but still denied? An update can invalidate the permission
+        while leaving Lare in the list. Clearing it lets macOS grant it to this build.
+      </p>
+      <div className="mt-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<RotateCcw className="size-3.5" aria-hidden />}
+          loading={reset.isPending}
+          onClick={() => reset.mutate()}
+        >
+          Reset permission
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -76,7 +132,7 @@ function PermissionRow({
   status: PermissionStatus | undefined;
 }) {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const Icon = row.icon;
 
   const settingsUrl = useQuery({
@@ -91,11 +147,11 @@ function PermissionRow({
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: permissionsKey });
       if (result === "granted") {
-        toast({ title: `${row.label} allowed`, variant: "success" });
+        notify({ title: `${row.label} allowed`, variant: "success" });
       } else if (row.which === "screen_recording") {
         // macOS only shows the screen-recording prompt once and reports "denied" until the app is
         // switched on in System Settings; the request above is what adds Lare to that list.
-        toast({
+        notify({
           title: "Turn on Lare in System Settings",
           description:
             "Lare is now listed under Privacy & Security → Screen & System Audio Recording. Switch it on, then quit and reopen Lare.",
@@ -103,7 +159,7 @@ function PermissionRow({
       }
     },
     onError: (e) =>
-      toast({
+      notify({
         title: `Couldn't request ${row.label.toLowerCase()} access`,
         description: errorMessage(e),
         variant: "error",
@@ -116,7 +172,7 @@ function PermissionRow({
     try {
       await recorder.openPermissionSettings(row.which);
     } catch (e) {
-      toast({
+      notify({
         title: "Couldn't open System Settings",
         description: errorMessage(e),
         variant: "error",

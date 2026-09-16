@@ -1,12 +1,9 @@
-import { ExternalLink, Rss } from "lucide-react";
+import { Rss } from "lucide-react";
 import { useParams } from "react-router";
-import { Button } from "@/components/ui/Button";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { FollowButton } from "@/features/friends/FollowButton";
 import { useViewerLikes } from "@/features/publishing/posts/social";
-import { profileWebUrl } from "@/lib/env";
-import { openExternal } from "@/lib/open";
 import { ProfileView } from "./ProfileView";
 import {
   useFollowState,
@@ -63,23 +60,14 @@ export function UserProfilePage() {
       website={profile.website}
       isPrivate={profile.is_private}
       actions={
-        <>
-          <Button
-            size="sm"
-            icon={<ExternalLink className="size-3.5" aria-hidden />}
-            onClick={() => void openExternal(profileWebUrl(profile.handle ?? ""))}
-          >
-            Open on web
-          </Button>
-          {isSelf ? null : (
-            <FollowButton
-              targetId={profile.id}
-              handle={profile.handle}
-              state={followState.data ?? "none"}
-              isPrivate={profile.is_private}
-            />
-          )}
-        </>
+        isSelf ? null : (
+          <FollowButton
+            targetId={profile.id}
+            handle={profile.handle}
+            state={followState.data ?? "none"}
+            isPrivate={profile.is_private}
+          />
+        )
       }
       stats={stats.data}
       showExtendedStats={visible}

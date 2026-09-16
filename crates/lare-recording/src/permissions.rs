@@ -127,6 +127,42 @@ pub async fn request_microphone() -> PermissionStatus {
     microphone()
 }
 
+/// Forget this app's screen-recording decision, so the next request prompts from scratch.
+///
+/// macOS ties the grant to the app's code signature. Lare's releases are not signed with a stable
+/// Developer ID, so every build carries a different ad-hoc signature and the entry recorded against
+/// the previous one stops matching after an update: capture is refused while System Settings still
+/// lists Lare with the switch on. The stale entry has to be removed before the permission can be
+/// granted again — which is what the "-" button under that list does, and what this does without
+/// making anyone leave the app.
+///
+/// Signing releases with a Developer ID is the actual fix; the grant would then follow the
+/// signature across updates and this would never need to be called.
+#[cfg(target_os = "macos")]
+pub fn reset_screen_recording(bundle_id: &str) -> Result<(), String> {
+    let output = std::process::Command::new("tccutil")
+        .args(["reset", "ScreenCapture", bundle_id])
+        .output()
+        .map_err(|e| format!("could not run tccutil: {e}"))?;
+    if output.status.success() {
+        tracing::info!(target: "lare_permissions", "reset screen-recording approval for {bundle_id}");
+        return Ok(());
+    }
+    // tccutil reports "No such bundle identifier" when there is nothing to forget. That is the
+    // desired end state, not a failure.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("No such bundle identifier") {
+        tracing::info!(target: "lare_permissions", "no screen-recording entry to reset for {bundle_id}");
+        return Ok(());
+    }
+    Err(format!("tccutil failed: {}", stderr.trim()))
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn reset_screen_recording(_bundle_id: &str) -> Result<(), String> {
+    Err("screen recording is not gated on this platform".to_string())
+}
+
 /// Deep link into the relevant macOS privacy pane.
 pub fn settings_url(which: &str) -> Option<&'static str> {
     match which {

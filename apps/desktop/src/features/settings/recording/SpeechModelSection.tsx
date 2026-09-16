@@ -2,10 +2,10 @@ import { Progress } from "@lare/ui/primitives";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Download } from "lucide-react";
 import { useRef, useState } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
 import { useWhisperModels, whisperModelsKey } from "@/features/media/hooks";
+import { useNotify } from "@/features/notifications/notices";
 import { formatBytes, newJobId, recorder, type WhisperModel } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { useTauriEvent } from "@/lib/tauri";
@@ -22,7 +22,7 @@ interface DownloadState {
 
 export function SpeechModelSection() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const models = useWhisperModels();
   const { settings, save } = useSettingsPatch();
 
@@ -50,13 +50,13 @@ export function SpeechModelSection() {
     try {
       await recorder.ensureWhisperModel(jobId, selectedModel.kind);
       await queryClient.invalidateQueries({ queryKey: whisperModelsKey });
-      toast({
+      notify({
         title: `${selectedModel.label} model ready`,
         description: "Transcription uses it from now on.",
         variant: "success",
       });
     } catch (e) {
-      toast({ title: "Model download failed", description: errorMessage(e), variant: "error" });
+      notify({ title: "Model download failed", description: errorMessage(e), variant: "error" });
     } finally {
       jobRef.current = null;
       setDownload(null);

@@ -5,13 +5,13 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
-import { useToast } from "@/components/toast/ToastProvider";
 import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner, Spinner } from "@/components/ui/States";
 import { VideoEmbed } from "@/components/VideoEmbed";
 import { useVideo } from "@/features/media/hooks";
+import { useNotify } from "@/features/notifications/notices";
 import { useInterviewReview } from "@/features/publishing/posts/queries";
 import { formatDateTime, plural } from "@/lib/format";
 import { errorMessage, invokeFunction } from "@/lib/supabase";
@@ -62,7 +62,7 @@ export function SessionReviewPage() {
 
 function SessionReview({ session }: { session: SessionDetail }) {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const isInterview = session.kind === "interview";
 
   const post = useSessionPost(session.id);
@@ -160,10 +160,10 @@ function SessionReview({ session }: { session: SessionDetail }) {
       ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["interview-review", session.id] });
-      toast({ title: "AI review ready", variant: "success" });
+      notify({ title: "AI review ready", variant: "success" });
     },
     onError: (e) =>
-      toast({
+      notify({
         title: "Couldn't generate the review",
         description: errorMessage(e),
         variant: "error",

@@ -9,11 +9,11 @@ import {
   parseGoalForm,
 } from "@lare/shared";
 import { useState } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import { useClearGoal, useSaveGoal } from "./queries";
 
@@ -30,7 +30,7 @@ export function GoalDialog({ goal, onClose }: { goal: Goal | null; onClose: () =
   );
   const save = useSaveGoal();
   const clear = useClearGoal();
-  const { toast } = useToast();
+  const { notify } = useNotify();
 
   const parsed = parseGoalForm({ period, target, min_difficulty: minDifficulty });
   const busy = save.isPending || clear.isPending;
@@ -39,11 +39,11 @@ export function GoalDialog({ goal, onClose }: { goal: Goal | null; onClose: () =
     if (!parsed) return;
     save.mutate(parsed, {
       onSuccess: () => {
-        toast({ title: "Goal saved", variant: "success" });
+        notify({ title: "Goal saved", variant: "success" });
         onClose();
       },
       onError: (err) =>
-        toast({
+        notify({
           title: "Couldn't save your goal",
           description: errorMessage(err),
           variant: "error",
@@ -54,11 +54,11 @@ export function GoalDialog({ goal, onClose }: { goal: Goal | null; onClose: () =
   const onRemove = () =>
     clear.mutate(undefined, {
       onSuccess: () => {
-        toast({ title: "Goal removed" });
+        notify({ title: "Goal removed" });
         onClose();
       },
       onError: (err) =>
-        toast({
+        notify({
           title: "Couldn't remove your goal",
           description: errorMessage(err),
           variant: "error",

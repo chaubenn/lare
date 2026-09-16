@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Label, Select } from "@/components/ui/Field";
 import { settingsKey, useRecorderSettings } from "@/features/media/hooks";
+import { useNotify } from "@/features/notifications/notices";
 import { type RecorderSettings, recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 
@@ -34,7 +34,7 @@ export function SubSection({
 /** Recorder settings + a `save(patch)` that persists immediately (optimistic in the cache). */
 export function useSettingsPatch() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const settings = useRecorderSettings();
   const mutation = useMutation({
     mutationFn: async (patch: Partial<RecorderSettings>) => {
@@ -48,7 +48,7 @@ export function useSettingsPatch() {
       );
     },
     onError: (e) =>
-      toast({
+      notify({
         title: "Couldn't save recording settings",
         description: errorMessage(e),
         variant: "error",

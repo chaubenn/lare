@@ -4,8 +4,8 @@
  */
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/components/toast/ToastProvider";
 import { useUser } from "@/features/auth/AuthProvider";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import { useTauriEvent } from "@/lib/tauri";
 import { localCopiesKey } from "./localCopies";
@@ -15,27 +15,27 @@ import { getRecordingMeta } from "./recordingStore";
 export function useRecordingEvents(): void {
   const { userId } = useUser();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
 
   useTauriEvent("recording:completed", (recording) => {
     void queryClient.invalidateQueries({ queryKey: ["recorder", "recordings"] });
     // A take that finished is playable from disk before it is uploaded.
     void queryClient.invalidateQueries({ queryKey: localCopiesKey });
     if (recording.purpose === "interview") {
-      toast({
+      notify({
         title: "Mock interview recorded",
         description: "Watch it in the draft now; it transcribes and uploads in the background.",
       });
       processInterview({ recording, userId, queryClient })
         .then(() => {
-          toast({
+          notify({
             title: "Interview processed",
             description: "Transcript and video are attached to your draft.",
             variant: "success",
           });
         })
         .catch((e: unknown) => {
-          toast({
+          notify({
             title: "Interview processing failed",
             description: `${errorMessage(e)}. The local source has been kept.`,
             variant: "error",
@@ -58,14 +58,14 @@ export function useRecordingEvents(): void {
         });
       })
       .then(() => {
-        toast({
+        notify({
           title: "Video uploaded",
           description: "Others can watch it once it finishes processing.",
           variant: "success",
         });
       })
       .catch((e: unknown) => {
-        toast({
+        notify({
           title: "Upload failed",
           description: `${errorMessage(e)}. Retry from the draft's Media step.`,
           variant: "error",
@@ -75,7 +75,7 @@ export function useRecordingEvents(): void {
 
   useTauriEvent("recording:state", (state) => {
     if (state.state === "error" && state.message) {
-      toast({ title: "Recording problem", description: state.message, variant: "error" });
+      notify({ title: "Recording problem", description: state.message, variant: "error" });
     }
   });
 }

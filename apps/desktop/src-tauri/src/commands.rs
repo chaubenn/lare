@@ -71,6 +71,43 @@ pub async fn request_permission(which: String) -> Result<PermissionStatus, Strin
     .map_err(err)?
 }
 
+/// Forget the screen-recording decision and ask for it again, for the case an update left a stale
+/// grant behind: capture refused while System Settings still shows Lare switched on. Saves the trip
+/// to System Settings to remove the entry with "-" by hand.
+#[tauri::command]
+pub async fn reset_screen_recording_permission(app: AppHandle) -> Result<PermissionStatus, String> {
+    let bundle_id = app.config().identifier.clone();
+    tokio::task::spawn_blocking(move || {
+        lare_recording::permissions::reset_screen_recording(&bundle_id)?;
+        Ok(lare_recording::permissions::request_screen_recording())
+    })
+    .await
+    .map_err(err)?
+}
+
+/// A URL the webview can play this device's copy of a recording from.
+///
+/// Served over the loopback server rather than `asset://` because WebKit cannot get through a
+/// fragmented MP4 over a custom scheme — see `preview.rs` for the measurements. Only paths inside
+/// the recordings directory are ever handed out, so this cannot be turned into a file server.
+#[tauri::command]
+pub fn preview_url(
+    rec: Rec<'_>,
+    previews: State<'_, crate::preview::PreviewFiles>,
+    path: String,
+) -> Result<String, String> {
+    let path = std::fs::canonicalize(&path).map_err(|e| format!("no such recording: {e}"))?;
+    let root = std::fs::canonicalize(rec.recordings_dir()).map_err(err)?;
+    if !path.starts_with(&root) {
+        return Err("path is not a recording".to_string());
+    }
+    let token = previews.register(&path);
+    Ok(format!(
+        "http://127.0.0.1:{}/preview/{token}",
+        lare_core::WS_PORT
+    ))
+}
+
 /// URL of the OS settings pane for a permission (macOS), if any.
 #[tauri::command]
 pub fn permission_settings_url(which: String) -> Option<String> {

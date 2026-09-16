@@ -2,6 +2,7 @@ import { buildSessionOverview, type OverviewProblem } from "@lare/shared";
 import type { Post, Video } from "@lare/supabase-types";
 import type { FeedImage } from "@/features/publishing/posts/media";
 import { PostCarousel } from "./PostCarousel";
+import { SessionCardSlide } from "./SessionCardSlide";
 import { SessionOverviewSlide } from "./SessionOverviewSlide";
 import { VideoSlide } from "./VideoSlide";
 
@@ -22,11 +23,8 @@ export interface SlidePost {
   video_kind: Post["video_kind"];
   show_video: boolean;
   show_demo_video: boolean;
-  /** The author's "lead with the session card" switch; false drops the cover slide. */
+  /** The author's "lead with the session card" switch; false drops the card slide. */
   include_og_card: boolean;
-  cover_media_id: string | null;
-  cover_url: string | null;
-  og_url: string | null;
   thumbnail_url: string | null;
   demo_thumbnail_url: string | null;
   images: FeedImage[];
@@ -41,9 +39,8 @@ export interface SlidePost {
 }
 
 /**
- * The swipe deck: cover (the author's own image, or the pre-generated session card) → the
- * session breakdown → the interview's summary video → the author's photos → the demo video or
- * full recording, when they chose to show it.
+ * The swipe deck: the session card → the session breakdown → the interview's summary video → the
+ * author's photos → the demo video or full recording, when they chose to show it.
  */
 export function PostSlides({
   post,
@@ -59,19 +56,15 @@ export function PostSlides({
     session?.session_problems ?? [],
     session?.active_ms ?? null,
   );
-  const photos = post.images.filter((image) => image.id !== post.cover_media_id);
+  const photos = post.images;
   const video = post.videos;
   const summary = post.demo_videos;
   const showVideo = Boolean(video) && post.video_kind !== "none" && post.show_video;
   const showSummary = Boolean(summary) && post.show_demo_video;
-  // A custom cover is the author's own image and always leads; the generated card only does so
-  // while they have the session card switched on.
-  const coverSrc = post.cover_url ?? (post.include_og_card ? post.og_url : null);
-
   return (
     <PostCarousel label={`${title} — media`} className={className}>
-      {coverSrc ? (
-        <CoverSlide src={coverSrc} custom={Boolean(post.cover_url)} title={title} />
+      {post.include_og_card && session ? (
+        <SessionCardSlide title={title} overview={overview} kind={session.kind} />
       ) : null}
       <SessionOverviewSlide overview={overview} kind={session?.kind} />
       {showSummary && summary ? (
@@ -100,18 +93,6 @@ export function PostSlides({
         />
       ) : null}
     </PostCarousel>
-  );
-}
-
-function CoverSlide({ src, custom, title }: { src: string; custom: boolean; title: string }) {
-  return (
-    <div className="relative size-full bg-zinc-950">
-      <img
-        src={src}
-        alt={`${title} — session overview`}
-        className={custom ? "size-full object-cover" : "size-full object-contain"}
-      />
-    </div>
   );
 }
 

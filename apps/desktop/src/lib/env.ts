@@ -27,13 +27,3 @@ export const env: Env = parsed.success
       VITE_SITE_URL: "http://localhost:3000",
       VITE_BUNNY_LIBRARY_ID: BUNNY_LIBRARY_ID,
     };
-
-/** Public URL of a post on the web app, keyed by its short `slug` (not the UUID). */
-export function postWebUrl(postSlug: string): string {
-  return `${env.VITE_SITE_URL.replace(/\/$/, "")}/p/${postSlug}`;
-}
-
-/** Public URL of a profile on the web app. */
-export function profileWebUrl(handle: string): string {
-  return `${env.VITE_SITE_URL.replace(/\/$/, "")}/u/${handle}`;
-}

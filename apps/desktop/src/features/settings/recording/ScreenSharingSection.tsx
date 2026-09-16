@@ -1,9 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { MonitorX } from "lucide-react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/features/media/hooks";
+import { useNotify } from "@/features/notifications/notices";
 import { recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { SubSection } from "./shared";
@@ -16,7 +16,7 @@ import { SubSection } from "./shared";
  */
 export function ScreenSharingSection() {
   const permissions = usePermissions();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const clear = useMutation({
     mutationFn: async () => {
       const ok = await ask(
@@ -29,14 +29,14 @@ export function ScreenSharingSection() {
     },
     onSuccess: (cleared) => {
       if (!cleared) return;
-      toast({
+      notify({
         title: "Screen sharing cleared",
         description: "The indicator in the menu bar should be gone.",
         variant: "success",
       });
     },
     onError: (e) =>
-      toast({
+      notify({
         title: "Couldn't clear screen sharing",
         description: errorMessage(e),
         variant: "error",

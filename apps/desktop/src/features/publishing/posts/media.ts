@@ -1,7 +1,7 @@
 import { MAX_POST_IMAGES, POST_MEDIA_BUCKET, postMediaPath, rejectPostImage } from "@lare/shared";
 import type { PostMedia } from "@lare/supabase-types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { invokeFunction, supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 export interface PostImage extends PostMedia {
   /** Signed URL, valid for an hour; null when the object could not be signed. */
@@ -9,16 +9,6 @@ export interface PostImage extends PostMedia {
 }
 
 export const postMediaKey = (postId: string) => ["post-media", postId] as const;
-
-/**
- * Ask the `og-snapshot` Edge Function to render and store the post's session card (the OG image).
- * Fire-and-forget: the function is idempotent and the feed falls back to rendering on demand.
- */
-export function requestOgSnapshot(postId: string, force = false): Promise<unknown> {
-  return supabase.functions
-    .invoke("og-snapshot", { body: force ? { postId, force: true } : { postId } })
-    .catch(() => null);
-}
 
 /** One carousel photo with a signed, ready-to-render URL. */
 export interface FeedImage {
@@ -36,7 +26,6 @@ export interface PostDecoration {
   /** Author-supplied cover, or null when the generated session card is used instead. */
   cover_url: string | null;
   /** Signed URL of the stored, pre-generated session card (post_media kind 'og'), if any. */
-  og_url: string | null;
 }
 
 interface DecoratableRow {
@@ -104,7 +93,6 @@ export async function decoratePosts<T extends DecoratableRow>(
         const url = media.get(m.storage_path);
         return url ? [{ id: m.id, url, caption: m.caption }] : [];
       });
-    const ogRow = mediaRows.find((m) => m.kind === "og");
     return {
       ...row,
       thumbnail_url: row.videos?.thumbnail_path
@@ -115,7 +103,6 @@ export async function decoratePosts<T extends DecoratableRow>(
         : null,
       images,
       cover_url: images.find((i) => i.id === row.cover_media_id)?.url ?? null,
-      og_url: ogRow ? (media.get(ogRow.storage_path) ?? null) : null,
     };
   });
 }
@@ -245,15 +232,6 @@ export function useSetImageCaption(postId: string) {
         .eq("post_id", postId);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
-  });
-}
-
-/** Re-render and replace the stored session card (OG image) for this post. */
-export function useRegenerateOgSnapshot(postId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => invokeFunction("og-snapshot", { postId, force: true }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
   });
 }

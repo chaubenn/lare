@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react";
 import { Outlet, useMatches, useNavigate } from "react-router";
-import { JobsTray } from "@/features/media/JobsTray";
 import { useLocalCopyCleanup } from "@/features/media/localCopies";
 import { useRecordingEvents } from "@/features/media/useRecordingEvents";
 import { useNotificationStream } from "@/features/notifications/queries";
+import { useNoticeSources } from "@/features/notifications/sources";
 import { useDraftsRealtime } from "@/features/publishing/drafts/queries";
 import { CommandPalette } from "./CommandPalette";
 import { NAV_ITEMS } from "./nav";
 import { PageActionsSlot } from "./PageActions";
 import { Sidebar } from "./Sidebar";
 import { StatusFooter } from "./StatusFooter";
-import { UpdateBanner } from "./UpdateBanner";
 
 export function AppShell() {
   const navigate = useNavigate();
@@ -21,6 +20,8 @@ export function AppShell() {
   );
   useDraftsRealtime();
   useNotificationStream();
+  // Jobs, the updater and OS permissions all report to the Notifications page now.
+  useNoticeSources();
   useRecordingEvents();
   useLocalCopyCleanup();
 
@@ -47,7 +48,6 @@ export function AppShell() {
       <Sidebar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div data-tauri-drag-region className="h-8 shrink-0" />
-        <UpdateBanner />
         <main className="min-h-0 flex-1 overflow-y-auto">
           <div
             className={fullWidth ? "w-full px-5 py-5" : "mx-auto w-full max-w-[1360px] px-5 py-5"}
@@ -56,7 +56,6 @@ export function AppShell() {
           </div>
         </main>
         <PageActionsSlot />
-        <JobsTray />
         <StatusFooter />
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

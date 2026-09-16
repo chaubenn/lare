@@ -1,6 +1,6 @@
-import { useToast } from "@/components/toast/ToastProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Toggle } from "@/components/ui/Field";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import { type Draft, type PostExtras, useSetPostExtras } from "./queries";
 
@@ -10,14 +10,14 @@ import { type Draft, type PostExtras, useSetPostExtras } from "./queries";
  * card is regenerated (or removed) to match, so the Photos panel and the preview stay honest.
  */
 export function PostExtrasPanel({ draft }: { draft: Draft }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const extras = useSetPostExtras(draft.id);
   const isInterview = draft.sessions?.kind === "interview" && draft.sessions.graded;
 
   const set = (patch: Partial<PostExtras>) =>
     extras.mutate(patch, {
       onError: (e) =>
-        toast({ title: "Couldn't update", description: errorMessage(e), variant: "error" }),
+        notify({ title: "Couldn't update", description: errorMessage(e), variant: "error" }),
     });
 
   return (
@@ -40,19 +40,7 @@ export function PostExtrasPanel({ draft }: { draft: Draft }) {
           disabled={extras.isPending}
           onChange={(v) => set({ include_og_card: v })}
           label="Session card"
-          description="Leads the post and is what a shared link unfurls to. Off: the post opens on the session breakdown."
-        />
-        <Toggle
-          id="extras-og-scores"
-          checked={draft.og_show_ai_scores}
-          disabled={extras.isPending || !draft.include_og_card || !isInterview}
-          onChange={(v) => set({ og_show_ai_scores: v })}
-          label="AI scores on the session card"
-          description={
-            isInterview
-              ? "Draws the overall grade and the five skill percentages on the card."
-              : "Only mock interviews are graded."
-          }
+          description="Leads the post with a summary of the session. Off: the post opens on the session breakdown."
         />
       </div>
     </Card>

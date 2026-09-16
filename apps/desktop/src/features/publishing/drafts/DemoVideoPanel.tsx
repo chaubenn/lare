@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Camera, Mic, Trash2, Video } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Toggle } from "@/components/ui/Field";
@@ -13,6 +12,7 @@ import { usePermissions, useRecorderStatus, useRecordings, useVideo } from "@/fe
 import { isActive, useJobs } from "@/features/media/jobs";
 import { publishInstantDemo, type VideoSlot } from "@/features/media/pipeline";
 import { patchRecordingMeta } from "@/features/media/recordingStore";
+import { useNotify } from "@/features/notifications/notices";
 import { type CreateUploadResponse, recorder } from "@/lib/recorder";
 import { errorMessage, invokeFunction } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
@@ -23,7 +23,7 @@ import { draftKey, draftsKey } from "./queries";
 function useSlotRecording(draft: Draft) {
   const { userId } = useUser();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const status = useRecorderStatus();
   const permissions = usePermissions();
 
@@ -64,13 +64,13 @@ function useSlotRecording(draft: Draft) {
       await invokeFunction("video-delete", { videoId: upload.videoId }).catch(() => undefined);
       throw error;
     }
-    toast({
+    notify({
       title: "Recording",
       description: "Stop from the pill to upload straight away.",
     });
   };
 
-  return { permissions, recordingBusy, screenOk, invalidate, start, toast };
+  return { permissions, recordingBusy, screenOk, invalidate, start, notify };
 }
 
 /**
@@ -83,7 +83,7 @@ export function DemoVideoPanel({ draft }: { draft: Draft }) {
   const recordings = useRecordings();
   const { userId } = useUser();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const working = useJobs().some((job) => isActive(job) && job.postId === draft.id);
   const retry = useMutation({
     mutationFn: (recording: NonNullable<typeof recordings.data>[number]) =>
@@ -96,7 +96,7 @@ export function DemoVideoPanel({ draft }: { draft: Draft }) {
         queryClient,
       }),
     onError: (error) =>
-      toast({
+      notify({
         title: "Upload failed; source kept",
         description: errorMessage(error),
         variant: "error",
@@ -155,10 +155,10 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
     },
     onSuccess: async () => {
       await slot.invalidate();
-      slot.toast({ title: "Video removed" });
+      slot.notify({ title: "Video removed" });
     },
     onError: (e) =>
-      slot.toast({
+      slot.notify({
         title: "Couldn't remove video",
         description: errorMessage(e),
         variant: "error",
@@ -241,10 +241,10 @@ function SummaryVideoPanel({ draft }: { draft: Draft }) {
     },
     onSuccess: async () => {
       await slot.invalidate();
-      slot.toast({ title: "Summary video removed" });
+      slot.notify({ title: "Summary video removed" });
     },
     onError: (e) =>
-      slot.toast({
+      slot.notify({
         title: "Couldn't remove the summary video",
         description: errorMessage(e),
         variant: "error",
@@ -329,7 +329,7 @@ function RecordControls({
   blurb: ReactNode;
   recording: ReturnType<typeof useSlotRecording>;
 }) {
-  const { permissions, recordingBusy, screenOk, start, toast } = recording;
+  const { permissions, recordingBusy, screenOk, start, notify } = recording;
   const [facecam, setFacecam] = useState(false);
   const [mic, setMic] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -341,7 +341,7 @@ function RecordControls({
     try {
       await start(slot, { facecam, mic });
     } catch (e) {
-      toast({ title: "Couldn't start recording", description: errorMessage(e), variant: "error" });
+      notify({ title: "Couldn't start recording", description: errorMessage(e), variant: "error" });
     } finally {
       setStarting(false);
     }

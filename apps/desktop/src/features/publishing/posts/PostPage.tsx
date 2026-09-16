@@ -1,19 +1,10 @@
 import { formatDurationHuman, formatLocalTimestamp, postStateOf } from "@lare/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronLeft,
-  Copy,
-  ExternalLink,
-  Lock,
-  MoreHorizontal,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { ChevronLeft, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, KindBadge, PostStateBadge } from "@/components/ui/Badge";
 import { Button, buttonClass } from "@/components/ui/Button";
@@ -22,12 +13,10 @@ import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { VideoEmbed } from "@/components/VideoEmbed";
 import { useUser } from "@/features/auth/AuthProvider";
+import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
-import { copyText } from "@/lib/clipboard";
-import { postWebUrl } from "@/lib/env";
 import { formatDateTime, plural } from "@/lib/format";
-import { openExternal } from "@/lib/open";
-import { postMediaKey, requestOgSnapshot, usePostMedia } from "./media";
+import { usePostMedia } from "./media";
 import { CommentsSection, PostActions } from "./PostSocial";
 import { type PostDetail, useInterviewReview, usePost } from "./queries";
 import { useDeletePostFlow } from "./useDeletePostFlow";
@@ -57,20 +46,11 @@ export function PostPage() {
 function PostView({ post }: { post: PostDetail }) {
   // The route lives under RequireAuth, so the viewer is always signed in here.
   const { userId } = useUser();
-  const queryClient = useQueryClient();
+  const _queryClient = useQueryClient();
   const review = useInterviewReview(post.sessions?.graded ? post.session_id : null);
   const media = usePostMedia(post.id);
   const mediaRows = media.data ?? [];
-  const ogImage = mediaRows.find((m) => m.kind === "og") ?? null;
   const photos = mediaRows.filter((m) => m.kind !== "og");
-  // Every published post carries a pre-generated session card; make one if this post lacks it.
-  const needsOg = post.status === "published" && media.isSuccess && !ogImage;
-  useEffect(() => {
-    if (!needsOg) return;
-    void requestOgSnapshot(post.id).then(() =>
-      queryClient.invalidateQueries({ queryKey: postMediaKey(post.id) }),
-    );
-  }, [needsOg, post.id, queryClient]);
   const author = post.profiles;
   const session = post.sessions;
   const problems = session?.session_problems ?? [];
@@ -162,17 +142,6 @@ function PostView({ post }: { post: PostDetail }) {
             />
           </div>
         </header>
-
-        {ogImage?.url ? (
-          <section>
-            <SectionTitle>Session card</SectionTitle>
-            <img
-              src={ogImage.url}
-              alt="Session overview card"
-              className="w-full rounded-xl border border-zinc-800"
-            />
-          </section>
-        ) : null}
 
         {photos.length > 0 ? (
           <section>
@@ -303,11 +272,10 @@ function HiddenNote({ postId }: { postId: string }) {
 
 /** Secondary actions in one place: sharing for everyone, deletion for the owner. */
 function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const remove = useDeletePostFlow(post.id);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  const webUrl = postWebUrl(post.slug);
 
   useEffect(() => {
     if (!open) return;
@@ -329,15 +297,6 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
   const choose = (action: () => void) => () => {
     setOpen(false);
     action();
-  };
-
-  const copyLink = async () => {
-    const ok = await copyText(webUrl);
-    toast(
-      ok
-        ? { title: "Link copied", variant: "success" }
-        : { title: "Couldn't copy", variant: "error" },
-    );
   };
 
   const item =
@@ -371,38 +330,17 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
             items[next]?.focus();
           }}
         >
-          <button
-            type="button"
-            role="menuitem"
-            className={`${item} text-[var(--text)]`}
-            onClick={choose(() => void copyLink())}
-          >
-            <Copy className="size-4 text-[var(--text-tertiary)]" aria-hidden />
-            Copy link
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={`${item} text-[var(--text)]`}
-            onClick={choose(() => void openExternal(webUrl))}
-          >
-            <ExternalLink className="size-4 text-[var(--text-tertiary)]" aria-hidden />
-            Open on web
-          </button>
           {isMine ? (
-            <>
-              <hr className="my-1 border-[var(--border)]" />
-              <button
-                type="button"
-                role="menuitem"
-                disabled={remove.isPending}
-                className={`${item} text-[var(--lare-danger)]`}
-                onClick={choose(() => void remove.deletePost())}
-              >
-                <Trash2 className="size-4" aria-hidden />
-                Delete post
-              </button>
-            </>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={remove.isPending}
+              className={`${item} text-[var(--lare-danger)]`}
+              onClick={choose(() => void remove.deletePost())}
+            >
+              <Trash2 className="size-4" aria-hidden />
+              Delete post
+            </button>
           ) : null}
         </div>
       ) : null}

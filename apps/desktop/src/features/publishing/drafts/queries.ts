@@ -3,7 +3,7 @@ import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useUser } from "@/features/auth/AuthProvider";
-import { postMediaKey, requestOgSnapshot } from "@/features/publishing/posts/media";
+import { postMediaKey } from "@/features/publishing/posts/media";
 import { supabase } from "@/lib/supabase";
 
 /** Post + the whole session it summarises (problems and their submissions). */
@@ -160,8 +160,8 @@ export function useDraftsRealtime() {
  */
 export interface PostExtras {
   include_ai_insights: boolean;
+  /** Lead the post with the session card slide. */
   include_og_card: boolean;
-  og_show_ai_scores: boolean;
 }
 
 export function useSetPostExtras(postId: string) {
@@ -171,11 +171,6 @@ export function useSetPostExtras(postId: string) {
     mutationFn: async (patch: Partial<PostExtras>) => {
       const { error } = await supabase.from("posts").update(patch).eq("id", postId);
       if (error) throw error;
-      // Both card switches change what the stored card is (or whether there is one at all), so
-      // let og-snapshot redraw or clean up. `force`, because the existing card is now stale.
-      if ("include_og_card" in patch || "og_show_ai_scores" in patch) {
-        await requestOgSnapshot(postId, true);
-      }
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: draftKey(postId) });
@@ -194,8 +189,6 @@ export interface PublishInput {
   showVideo: boolean;
   /** Show the interview's summary video as a slide, ahead of the full recording. */
   showDemoVideo: boolean;
-  /** Photo used as the cover; null falls back to the generated session card. */
-  coverMediaId: string | null;
 }
 
 /** The columns the draft form owns, shared by "save draft" and "publish". */
@@ -206,7 +199,8 @@ function postPatch(edit: PublishInput) {
     visibility: edit.visibility,
     show_video: edit.showVideo,
     show_demo_video: edit.showDemoVideo,
-    cover_media_id: edit.coverMediaId,
+    // The session card always leads a post: null is what makes the post fall back to it.
+    cover_media_id: null,
   };
 }
 
@@ -227,15 +221,10 @@ export function usePublishDraft() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (_data) => {
       void queryClient.invalidateQueries({ queryKey: ["drafts"] });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
       void queryClient.invalidateQueries({ queryKey: ["sessions"] });
-      // Every published post gets its session card (OG image) pre-generated and attached.
-      // `force`, because a card previewed while drafting was drawn from the older title/body.
-      void requestOgSnapshot(data.id, true).then(() =>
-        queryClient.invalidateQueries({ queryKey: postMediaKey(data.id) }),
-      );
     },
   });
 }

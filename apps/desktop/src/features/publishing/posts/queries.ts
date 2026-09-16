@@ -3,7 +3,6 @@ import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { parseAiReview } from "@/lib/json";
 import { supabase } from "@/lib/supabase";
-import { postMediaKey, requestOgSnapshot } from "./media";
 
 const POST_DETAIL_SELECT =
   "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url), sessions(*, session_problems(*, submissions(*))), videos!posts_video_id_fkey(*), demo_videos:videos!posts_demo_video_id_fkey(*)" as const;
@@ -52,7 +51,6 @@ export interface PostEdit {
   showVideo: boolean;
   /** Show the interview's summary video as a slide, ahead of the full recording. */
   showDemoVideo: boolean;
-  coverMediaId: string | null;
 }
 
 /** Edit an already published post. RLS restricts the update to its owner. */
@@ -76,15 +74,7 @@ export function useDeletePost() {
 export function useUpdatePost() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      id,
-      title,
-      body,
-      visibility,
-      showVideo,
-      showDemoVideo,
-      coverMediaId,
-    }: PostEdit) => {
+    mutationFn: async ({ id, title, body, visibility, showVideo, showDemoVideo }: PostEdit) => {
       const { error } = await supabase
         .from("posts")
         .update({
@@ -93,7 +83,8 @@ export function useUpdatePost() {
           visibility,
           show_video: showVideo,
           show_demo_video: showDemoVideo,
-          cover_media_id: coverMediaId,
+          // The session card always leads a post, so nothing here picks a cover.
+          cover_media_id: null,
         })
         .eq("id", id);
       if (error) throw error;
@@ -101,10 +92,6 @@ export function useUpdatePost() {
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: postKey(vars.id) });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
-      // The card shows the title, so an edit regenerates the stored OG image.
-      void requestOgSnapshot(vars.id, true).then(() =>
-        queryClient.invalidateQueries({ queryKey: postMediaKey(vars.id) }),
-      );
     },
   });
 }
