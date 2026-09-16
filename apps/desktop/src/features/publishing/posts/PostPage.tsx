@@ -30,6 +30,7 @@ import { CommentsSection, PostActions } from "./PostSocial";
 import { type PostDetail, useInterviewReview, usePost } from "./queries";
 import { useDeletePostFlow } from "./useDeletePostFlow";
 
+/** Route entry: resolves the id in the URL, then hands a loaded post to PostView. */
 export function PostPage() {
   const { id = "" } = useParams();
   const post = usePost(id);
@@ -301,6 +302,7 @@ function PostBody({ body }: { body: string }) {
   );
 }
 
+/** The sticky sidebar: what the session was, how long it ran, and what it solved. */
 function SessionPanel({ session }: { session: NonNullable<PostDetail["sessions"]> }) {
   const problems = session.session_problems;
   const submissionCount = problems.reduce((n, p) => n + p.submissions.length, 0);
@@ -339,6 +341,7 @@ function SessionPanel({ session }: { session: NonNullable<PostDetail["sessions"]
   );
 }
 
+/** Owner-only: says a clip is on the post but hidden from everyone else, and links to the switch. */
 function HiddenNote({ postId }: { postId: string }) {
   return (
     <p className="mt-2 text-xs text-[var(--text-tertiary)]">

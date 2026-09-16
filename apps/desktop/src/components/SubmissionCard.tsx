@@ -7,12 +7,18 @@ import { Button } from "@/components/ui/Button";
 import { formatDateTime } from "@/lib/format";
 import { parseDistributionJson } from "@/lib/json";
 
+/** LeetCode's own verbose name when it sent one, otherwise our label for the lang code. */
 export function languageLabel(lang: string | null, verbose?: string | null): string {
   if (verbose) return verbose;
   if (!lang) return "Unknown";
   return LANGUAGE_LABELS[lang] ?? lang;
 }
 
+/**
+ * One submission: how it was judged, and — when it passed — the runtime and memory
+ * distributions behind those percentiles. The code is behind a toggle because it is the
+ * tallest thing here and usually not what you came for.
+ */
 export function SubmissionCard({
   submission,
   defaultShowCode = false,

@@ -37,6 +37,7 @@ export function LoginPage() {
   );
 }
 
+/** The provider buttons. OAuth needs the desktop app to catch the callback, so the browser gets the email code instead. */
 function LoginForm() {
   const { notify } = useNotify();
   const [pending, setPending] = useState<OAuthProvider | null>(null);
@@ -92,6 +93,7 @@ function LoginForm() {
   );
 }
 
+/** Two stages in one form: ask for the address, then for the six-digit code sent to it. */
 function EmailOtpForm() {
   const { notify } = useNotify();
   const [email, setEmail] = useState("");

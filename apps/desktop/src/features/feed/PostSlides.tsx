@@ -146,6 +146,7 @@ export function LabelledSlide({
   );
 }
 
+/** A photo slide, with the author's caption laid over the foot of it when there is one. */
 function PhotoSlide({ image }: { image: FeedImage }) {
   return (
     <figure className="relative size-full bg-zinc-950">
