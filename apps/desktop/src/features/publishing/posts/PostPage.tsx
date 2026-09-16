@@ -1,3 +1,9 @@
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
+ * design-system: design.md (locked ink/bone) · genre: modern-minimal
+ * macrostructure: Long Document — one column, header → media → hairline → meta + note → thread
+ * tone: utilitarian · anchor hue: neutral (bone on ink; --lare-danger is the only chromatic note)
+ * enrichment: none (the post's own video is the media)
+ */
 import { formatDurationHuman, formatLocalTimestamp, postStateOf } from "@lare/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
@@ -33,7 +39,7 @@ export function PostPage() {
         title="Post not found"
         description="It may have been deleted, or you don't have access to it."
         action={
-          <Link to="/" className="text-sm text-zinc-200 underline underline-offset-2">
+          <Link to="/" className="text-sm text-[var(--text)] underline underline-offset-2">
             Back to feed
           </Link>
         }
@@ -69,7 +75,10 @@ function PostView({ post }: { post: PostDetail }) {
         </Link>
       </div>
 
-      <article className="min-w-0 space-y-6">
+      {/* Deliberate rhythm rather than one uniform gap: the media block gets room,
+          then a hairline turns the meta, the note and the thread into one quiet
+          run — a notebook entry, not five evenly spaced cards. */}
+      <article className="min-w-0">
         <header>
           <div className="flex items-start gap-3">
             <ProfileHoverCard handle={author?.handle} className="shrink-0">
@@ -130,18 +139,27 @@ function PostView({ post }: { post: PostDetail }) {
           ) : null}
         </header>
 
-        <PostContent post={post} isMine={isMine} review={review.data ?? null} />
+        <div className="mt-6">
+          <PostContent post={post} isMine={isMine} review={review.data ?? null} />
+        </div>
 
-        <PostActions
-          postId={post.id}
-          userId={userId}
-          likeCount={post.like_count}
-          commentCount={post.comment_count}
-        />
+        <div className="mt-6 border-t border-[var(--border)] pt-3">
+          <PostActions
+            postId={post.id}
+            userId={userId}
+            likeCount={post.like_count}
+            commentCount={post.comment_count}
+          />
+          {post.body ? (
+            <div className="mt-2">
+              <PostBody body={post.body} />
+            </div>
+          ) : null}
+        </div>
 
-        {post.body ? <PostBody body={post.body} /> : null}
-
-        <CommentsSection postId={post.id} userId={userId} isPostOwner={isMine} />
+        <div className="mt-8">
+          <CommentsSection postId={post.id} userId={userId} isPostOwner={isMine} />
+        </div>
       </article>
 
       {session ? (
@@ -180,6 +198,7 @@ function PostContent({
     post.demo_videos && (post.show_demo_video || isMine) ? post.demo_videos : null;
   const showsMainVideo = (post.video_kind !== "none" || post.videos) && (post.show_video || isMine);
   const hasVideo = Boolean(summaryVideo) || showsMainVideo;
+  const bothVideos = Boolean(summaryVideo) && showsMainVideo;
 
   const tabs: Array<SegmentedTab<ContentTab>> = [];
   if (hasVideo) tabs.push({ key: "video", label: "Video" });
@@ -201,26 +220,30 @@ function PostContent({
 
   const pane =
     active === "video" ? (
+      // Only label the videos when there are two to tell apart — with one, the tab
+      // already said "Video" and a heading repeating it is noise.
       <div className="space-y-6">
         {summaryVideo ? (
           <section>
-            <SectionTitle>Summary video</SectionTitle>
+            {bothVideos ? <SectionTitle>Summary video</SectionTitle> : null}
             <VideoEmbed video={summaryVideo} />
             {!post.show_demo_video && isMine ? <HiddenNote postId={post.id} /> : null}
           </section>
         ) : null}
         {showsMainVideo ? (
           <section>
-            <SectionTitle>
-              {post.video_kind === "highlights" ? "Highlights" : "Demo video"}
-            </SectionTitle>
+            {bothVideos ? (
+              <SectionTitle>
+                {post.video_kind === "highlights" ? "Highlights" : "Demo video"}
+              </SectionTitle>
+            ) : null}
             {post.videos ? (
               <>
                 <VideoEmbed video={post.videos} />
                 {!post.show_video && isMine ? <HiddenNote postId={post.id} /> : null}
               </>
             ) : (
-              <div className="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500">
+              <div className="rounded-[var(--lare-r-3)] border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--text-tertiary)]">
                 No video attached.
               </div>
             )}
@@ -228,7 +251,7 @@ function PostContent({
         ) : null}
       </div>
     ) : active === "problems" ? (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {problems.map((p) => (
           <ProblemSection key={p.id} problem={p} />
         ))}

@@ -27,17 +27,19 @@ export function ProblemSection({
   const url = problem.url || problemUrl(problem.slug);
 
   return (
-    <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+    // One containment layer only: the submission card below is the card. A problem is
+    // a titled region on the page ground, held by a hairline rather than a second box.
+    <section className="border-t border-[var(--border)] pt-4 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold text-zinc-100">
+          <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold text-[var(--text)]">
             {problem.frontend_id ? (
-              <span className="text-zinc-500">{problem.frontend_id}.</span>
+              <span className="text-[var(--text-tertiary)]">{problem.frontend_id}.</span>
             ) : null}
             <span className="select-text">{problem.title}</span>
             <DifficultyBadge difficulty={problem.difficulty} />
           </h3>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-tertiary)]">
             {problem.active_ms > 0 ? (
               <span>{formatDurationHuman(problem.active_ms)} active</span>
             ) : null}
@@ -73,7 +75,9 @@ export function ProblemSection({
       {submissions.length > 0 ? (
         <Submissions submissions={submissions} defaultShowCode={defaultShowCode} />
       ) : (
-        <p className="mt-3 text-sm text-zinc-500">No submissions were captured for this problem.</p>
+        <p className="mt-3 text-sm text-[var(--text-tertiary)]">
+          No submissions were captured for this problem.
+        </p>
       )}
     </section>
   );
@@ -110,7 +114,7 @@ function Submissions({
     key: submission.id,
     label: `#${i + 1}`,
     badge: submission.accepted ? (
-      <Check className="size-3 text-emerald-400" aria-label="Accepted" />
+      <Check className="size-3 text-[var(--lare-status-run)]" aria-label="Accepted" />
     ) : null,
   }));
 
