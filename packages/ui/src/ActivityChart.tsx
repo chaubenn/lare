@@ -38,6 +38,7 @@ function describeWeekPage(bars: ActivityWeek[]): string {
   return `${total} problem${total === 1 ? "" : "s"} over the last ${bars.length} weeks`;
 }
 
+/** Chart paging arrow. Sits over the bars and fades out rather than moving them when it can't page. */
 function NavButton({
   side,
   disabled,

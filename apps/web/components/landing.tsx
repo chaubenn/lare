@@ -22,6 +22,7 @@ const FEATURES = [
   },
 ] as const;
 
+/** The marketing page: what Lare is, the download links and the feature rundown. */
 export function Landing() {
   return (
     <Container width="page" className="py-10 sm:py-16">

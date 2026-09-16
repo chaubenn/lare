@@ -10,6 +10,11 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "interview", label: "Mock interview" },
 ];
 
+/**
+ * The whole side panel: sign-in, the tracking controls and the recording settings.
+ * Mirrors the background runtime's snapshot, so every action round-trips through
+ * `sendRuntime` rather than keeping its own copy of the session state.
+ */
 export function App() {
   const [snap, setSnap] = useState<RuntimeSnapshot | null>(null);
   const [busy, setBusy] = useState(false);

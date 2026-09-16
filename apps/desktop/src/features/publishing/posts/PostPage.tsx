@@ -43,6 +43,10 @@ export function PostPage() {
   return <PostView post={post.data} />;
 }
 
+/**
+ * A loaded post, read top to bottom: who wrote it, what they made, then the
+ * conversation. The long panes are tabbed so the comments stay within reach.
+ */
 function PostView({ post }: { post: PostDetail }) {
   // The route lives under RequireAuth, so the viewer is always signed in here.
   const { userId } = useUser();

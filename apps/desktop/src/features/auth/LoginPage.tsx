@@ -12,6 +12,7 @@ import { inTauri } from "@/lib/tauri";
 import { useAuth } from "./AuthProvider";
 import { type OAuthProvider, sendEmailOtp, signInWithProvider, verifyEmailOtp } from "./oauth";
 
+/** Sign-in screen. Waits out the session check, then bounces anyone already signed in. */
 export function LoginPage() {
   const { session } = useAuth();
   if (session === undefined) return <PageSpinner />;

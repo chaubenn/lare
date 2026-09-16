@@ -3,6 +3,7 @@ import { Container } from "@lare/ui/primitives";
 import { GITHUB_REPO_URL } from "@/lib/env";
 import { GitHubIcon } from "./brand-icons";
 
+/** Wordmark, one-line pitch and a link back to the repo. */
 export function SiteFooter() {
   return (
     <footer className="border-t border-[var(--border)] pb-16 md:pb-0">

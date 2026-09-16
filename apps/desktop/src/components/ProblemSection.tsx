@@ -14,6 +14,7 @@ import { defaultSubmissionIndex, submissionsInAttemptOrder } from "@/lib/submiss
 
 export type ProblemWithSubmissions = SessionProblem & { submissions: Submission[] };
 
+/** One problem from a session: what it asked, its topic tags, and the attempts made at it. */
 export function ProblemSection({
   problem,
   defaultShowCode = false,
