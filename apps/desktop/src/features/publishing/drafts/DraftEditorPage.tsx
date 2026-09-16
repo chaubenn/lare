@@ -124,8 +124,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
         typeof draft.body === "string" &&
         ["public", "private"].includes(draft.visibility ?? "") &&
         typeof draft.showVideo === "boolean" &&
-        typeof draft.showDemoVideo === "boolean" &&
-        (draft.coverMediaId === null || typeof draft.coverMediaId === "string")
+        typeof draft.showDemoVideo === "boolean"
         ? draft
         : {};
     } catch {
@@ -148,9 +147,6 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const [showDemoVideo, setShowDemoVideo] = useState(
     recovered.showDemoVideo ?? draft.show_demo_video,
   );
-  const [coverMediaId, setCoverMediaId] = useState<string | null>(
-    recovered.coverMediaId !== undefined ? recovered.coverMediaId : draft.cover_media_id,
-  );
   const [previewing, setPreviewing] = useState(false);
 
   const session = draft.sessions;
@@ -166,7 +162,6 @@ function DraftEditor({ draft }: { draft: Draft }) {
     visibility,
     showVideo,
     showDemoVideo,
-    coverMediaId,
   };
   const snapshot = JSON.stringify(edit);
   const latestSnapshot = useRef(snapshot);
@@ -240,7 +235,6 @@ function DraftEditor({ draft }: { draft: Draft }) {
     demoVideoId: draft.demo_video_id,
     showDemoVideo,
     includeOgCard: draft.include_og_card,
-    coverMediaId,
     session,
   });
 
@@ -458,13 +452,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
             {step === 1 ? (
               <>
                 <DemoVideoPanel draft={draft} />
-                <PostMediaPanel
-                  postId={draft.id}
-                  userId={userId}
-                  coverMediaId={coverMediaId}
-                  onCoverChange={setCoverMediaId}
-                  disabled={busy}
-                />
+                <PostMediaPanel postId={draft.id} userId={userId} disabled={busy} />
               </>
             ) : null}
 

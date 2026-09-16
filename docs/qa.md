@@ -116,7 +116,11 @@ going through Bunny.
   granted. **Skip for now** is remembered for that app version only.
 - Install the next build over it: with a stable signing identity configured
   (`docs/releasing.md`) nothing is asked again; without one, setup reappears listing what the
-  update revoked.
+  update revoked. In that state macOS still shows Lare switched on under Screen & System Audio
+  Recording while Lare reads **Denied** — **Reset permission** clears the stale entry and asks
+  again, which is the same thing as removing Lare from that list with "-" by hand.
+- The window drags from anywhere along its top strip on sign-in, onboarding and **Set up
+  recording**, not only inside the app shell.
 - Settings -> Recording: permissions show Granted after allowing Screen Recording, Microphone and
   Camera (macOS needs a restart after Screen Recording). Device pickers list displays/mics/cameras.
   Download `small.en` once — grading is unavailable without a local model.
@@ -128,6 +132,11 @@ going through Bunny.
     **local preview** (labelled as such) with upload progress underneath; **Remove** is disabled
     until the upload is done. The post page and feed card also play it until the video is ready. The take's folder in the app data folder (`Lare/recordings`) is still
     there; once the status turns ready it is **gone** within a few seconds (or at next launch).
+  - Press play on that preview, on a recording of real length (ten minutes, not ten seconds), and
+    scrub it. It is served from the loopback server, not `asset://`: over a custom scheme WebKit
+    walks the file eight bytes at a time and never reaches a duration, so a long recording showed
+    its first frame and then did nothing. A short one worked either way, which is why this needs a
+    long take to test.
   - Pull the network cable mid-upload. The upload must fail visibly, the local source must be
     **kept**, and the draft's Media step must offer a retry that works.
 - Mock interview started from the extension: right after stop the draft and the session page play
@@ -145,6 +154,9 @@ going through Bunny.
 - **Draft stepper**: Problems -> Media -> Details -> Extras -> Review & publish. Each step
   refuses to advance while invalid; Media blocks on an active capture or a pending upload; the
   draft saves continuously, so closing the window mid-step loses nothing.
+- Open a fresh draft's **Media** step: the session card is already drawn — nothing to press. It is
+  the cover and the first slide, always; there is no star on it or on any photo, and no regenerate
+  (the problems in a session cannot change, and publishing redraws the card anyway).
 - Draft -> "Include with the post": switching the **Session card** off removes the stored card and
   drops the first slide (Preview and Photos agree); switching it back on regenerates it. **AI
   scores on the session card** (interviews with a review) draws the overall grade and the five

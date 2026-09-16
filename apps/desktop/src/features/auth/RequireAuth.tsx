@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from "react-router";
 import { ErrorState, PageSpinner } from "@/components/ui/States";
+import { WindowScreen } from "@/components/ui/WindowScreen";
 import { useAuth } from "./AuthProvider";
 import { OnboardingPage } from "./OnboardingPage";
 import { SetupGate } from "./SetupPage";
@@ -7,14 +8,26 @@ import { SetupGate } from "./SetupPage";
 /** Gate: restores the session, forces onboarding until a handle exists, then renders children. */
 export function RequireAuth() {
   const { session, profile, profileLoading, profileError } = useAuth();
-  if (session === undefined) return <PageSpinner label="Restoring your session…" />;
+  // These render without the shell, so they carry their own drag region: a window that cannot be
+  // moved while the session is being restored is the worst place to leave someone.
+  if (session === undefined)
+    return (
+      <WindowScreen>
+        <PageSpinner label="Restoring your session…" />
+      </WindowScreen>
+    );
   if (!session) return <Navigate to="/login" replace />;
-  if (profileLoading) return <PageSpinner label="Loading your profile…" />;
+  if (profileLoading)
+    return (
+      <WindowScreen>
+        <PageSpinner label="Loading your profile…" />
+      </WindowScreen>
+    );
   if (profileError) {
     return (
-      <div className="p-8">
+      <WindowScreen className="max-w-md">
         <ErrorState error={profileError} title="Couldn't load your profile" />
-      </div>
+      </WindowScreen>
     );
   }
   if (!profile || profile.handle === null) return <OnboardingPage />;

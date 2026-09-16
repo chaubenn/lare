@@ -194,8 +194,6 @@ export interface PublishInput {
   showVideo: boolean;
   /** Show the interview's summary video as a slide, ahead of the full recording. */
   showDemoVideo: boolean;
-  /** Photo used as the cover; null falls back to the generated session card. */
-  coverMediaId: string | null;
 }
 
 /** The columns the draft form owns, shared by "save draft" and "publish". */
@@ -206,7 +204,8 @@ function postPatch(edit: PublishInput) {
     visibility: edit.visibility,
     show_video: edit.showVideo,
     show_demo_video: edit.showDemoVideo,
-    cover_media_id: edit.coverMediaId,
+    // The session card always leads a post: null is what makes the post fall back to it.
+    cover_media_id: null,
   };
 }
 

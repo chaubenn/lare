@@ -55,7 +55,6 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
   const [visibility, setVisibility] = useState<Post["visibility"]>(post.visibility);
   const [showVideo, setShowVideo] = useState(post.show_video);
   const [showDemoVideo, setShowDemoVideo] = useState(post.show_demo_video);
-  const [coverMediaId, setCoverMediaId] = useState<string | null>(post.cover_media_id);
   const [previewing, setPreviewing] = useState(false);
 
   const hasVideo = Boolean(post.video_id) && post.video_kind !== "none";
@@ -68,13 +67,12 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
     demoVideoId: post.demo_video_id,
     showDemoVideo,
     includeOgCard: post.include_og_card,
-    coverMediaId,
     session: post.sessions,
   });
 
   const save = () => {
     update.mutate(
-      { id: post.id, title, body, visibility, showVideo, showDemoVideo, coverMediaId },
+      { id: post.id, title, body, visibility, showVideo, showDemoVideo },
       {
         onSuccess: () => {
           toast({ title: "Post updated", variant: "success" });
@@ -204,13 +202,7 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
 
       <div className="min-w-0">
         <div className="lg:sticky lg:top-0">
-          <PostMediaPanel
-            postId={post.id}
-            userId={userId}
-            coverMediaId={coverMediaId}
-            onCoverChange={setCoverMediaId}
-            disabled={busy}
-          />
+          <PostMediaPanel postId={post.id} userId={userId} disabled={busy} />
         </div>
       </div>
 

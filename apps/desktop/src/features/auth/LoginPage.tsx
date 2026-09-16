@@ -6,6 +6,7 @@ import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { FieldError, Input, Label } from "@/components/ui/Field";
 import { PageSpinner } from "@/components/ui/States";
+import { WindowScreen } from "@/components/ui/WindowScreen";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 import { useAuth } from "./AuthProvider";
@@ -16,24 +17,22 @@ export function LoginPage() {
   if (session === undefined) return <PageSpinner />;
   if (session) return <Navigate to="/" replace />;
   return (
-    <div className="flex h-full items-center justify-center p-8">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <Wordmark className="justify-center text-xl text-zinc-50" markClassName="size-8" />
-          <h1 className="mt-6 text-xl font-medium">Sign in to Lare</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Hevy for LeetCode. Log sessions, share what you learned.
-          </p>
-        </div>
-        <LoginForm />
-        {!inTauri ? (
-          <p className="mt-6 text-center text-xs text-zinc-600">
-            Running in a browser: OAuth needs the desktop app to receive the callback. Use the email
-            code instead.
-          </p>
-        ) : null}
+    <WindowScreen className="max-w-sm">
+      <div className="mb-8 text-center">
+        <Wordmark className="justify-center text-xl text-zinc-50" markClassName="size-8" />
+        <h1 className="mt-6 text-xl font-medium">Sign in to Lare</h1>
+        <p className="mt-1 text-sm text-zinc-400">
+          Hevy for LeetCode. Log sessions, share what you learned.
+        </p>
       </div>
-    </div>
+      <LoginForm />
+      {!inTauri ? (
+        <p className="mt-6 text-center text-xs text-zinc-600">
+          Running in a browser: OAuth needs the desktop app to receive the callback. Use the email
+          code instead.
+        </p>
+      ) : null}
+    </WindowScreen>
   );
 }
 
