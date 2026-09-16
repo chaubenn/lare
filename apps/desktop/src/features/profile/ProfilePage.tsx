@@ -1,11 +1,9 @@
-import { ExternalLink, Pencil, Rss } from "lucide-react";
+import { Pencil, Rss } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useViewerLikes } from "@/features/publishing/posts/social";
-import { profileWebUrl } from "@/lib/env";
-import { openExternal } from "@/lib/open";
 import { ProfileView } from "./ProfileView";
 import { useProfileStats, useSolvedActivity, useSolvedSkills, useUserPosts } from "./queries";
 
@@ -45,25 +43,13 @@ export function ProfilePage() {
         </>
       }
       actions={
-        <>
-          <Button
-            size="sm"
-            icon={<Pencil className="size-3.5" aria-hidden />}
-            onClick={() => navigate("/profile/edit")}
-          >
-            Edit profile
-          </Button>
-          {profile?.handle ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<ExternalLink className="size-3.5" aria-hidden />}
-              onClick={() => void openExternal(profileWebUrl(profile.handle ?? ""))}
-            >
-              Open on web
-            </Button>
-          ) : null}
-        </>
+        <Button
+          size="sm"
+          icon={<Pencil className="size-3.5" aria-hidden />}
+          onClick={() => navigate("/profile/edit")}
+        >
+          Edit profile
+        </Button>
       }
       stats={stats.data}
       statsPending={stats.isPending}

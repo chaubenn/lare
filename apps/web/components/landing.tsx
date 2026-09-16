@@ -2,7 +2,6 @@ import { Wordmark } from "@lare/ui/brand";
 import { cn } from "@lare/ui/cn";
 import { buttonClass, Container } from "@lare/ui/primitives";
 import { Bot, Download, Puzzle, Timer, Video } from "lucide-react";
-import Link from "next/link";
 import { GITHUB_RELEASES_URL } from "@/lib/env";
 
 const FEATURES = [
@@ -34,9 +33,15 @@ export function Landing() {
           how everyone is progressing.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <Link href="/login" className={buttonClass("primary")}>
-            Sign in
-          </Link>
+          <a
+            href={GITHUB_RELEASES_URL}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(buttonClass("primary"), "lare-learn")}
+          >
+            <Download className="size-4" />
+            Download for macOS or Windows
+          </a>
           <a
             href={GITHUB_RELEASES_URL}
             target="_blank"
@@ -46,16 +51,10 @@ export function Landing() {
             <Puzzle className="size-4" />
             Get the extension
           </a>
-          <a
-            href={GITHUB_RELEASES_URL}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(buttonClass("secondary"), "lare-learn")}
-          >
-            <Download className="size-4" />
-            Download the desktop app
-          </a>
         </div>
+        <p className="mt-3 text-xs text-[var(--text-tertiary)]">
+          You sign in inside the app — there is no account to make here.
+        </p>
       </section>
 
       <ol className="mt-16 divide-y divide-[var(--border)] border-y border-[var(--border)]">

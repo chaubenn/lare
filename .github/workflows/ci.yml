@@ -48,10 +48,8 @@ jobs:
       - name: Web build
         working-directory: apps/web
         env:
-          NEXT_PUBLIC_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
+          # The landing page reads nothing else: no Supabase, no Bunny, no session.
           NEXT_PUBLIC_SITE_URL: https://lare-one.vercel.app
-          NEXT_PUBLIC_BUNNY_LIBRARY_ID: "743884"
         run: pnpm build
       - name: Extension production build
         working-directory: apps/extension

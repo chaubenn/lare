@@ -116,13 +116,6 @@ export function PostPreview({
             <PostSlides post={slides} title={shown} />
           </div>
         </article>
-
-        {slides.include_og_card && !slides.og_url && !slides.cover_url && (
-          <p className="text-xs text-zinc-500">
-            No session card yet — use the refresh button on the session card in Photos to generate
-            one. Publishing always regenerates it.
-          </p>
-        )}
       </div>
     </div>
   );
@@ -167,10 +160,6 @@ export function usePreviewSlides({
     show_video: showVideo,
     show_demo_video: showDemoVideo,
     include_og_card: includeOgCard,
-    // The session card always leads, so the deck always falls back to `og_url`.
-    cover_media_id: null,
-    cover_url: null,
-    og_url: rows.find((row) => row.kind === "og")?.url ?? null,
     thumbnail_url: null,
     demo_thumbnail_url: null,
     images,

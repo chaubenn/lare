@@ -10,7 +10,7 @@ videos, and run AI-graded mock interviews.
 | --- | --- | --- |
 | `apps/extension` | Chrome MV3, WXT, React | Passive practice capture (every problem opened, every submission judged — nothing to start or stop), Monaco edit log, mock-interview start/pause/end sent to the desktop app. On-page UI is one recording dot, shown only while an interview records; the side panel is the control surface. Writes to Supabase directly; talks to the desktop over `ws://127.0.0.1:47831`. |
 | `apps/desktop` | Tauri 2, React 19, Rust | Drafts and publishing, screen/camera/mic recording (recycled from Cap), whisper.cpp transcription, Bunny TUS uploads, interview review. |
-| `apps/web` | Next.js 16, Vercel (`syd1`) | Public post pages `/p/[id]`, profiles `/u/[handle]`, follower feed, follow requests. |
+| `apps/web` | Next.js 16, Vercel | The landing page. One static route: what Lare is, and the links to the releases. Nothing signs in here. |
 | `supabase/` | Postgres + RLS, Auth, Storage, Realtime, Edge Functions (Deno) | Source of truth for users, sessions, posts, videos; Bunny signing; OpenAI review. |
 | Bunny Stream | library `lare` (id 743884) | Video storage, encoding, delivery. Embed token authentication is on. |
 
@@ -35,7 +35,6 @@ flowchart LR
     Bunny["Bunny Stream"]
     OAI["OpenAI Responses API"]
   end
-  Web["Next.js web"]
   MainCS --> IsoCS --> SW
   SW -->|"problems, submissions, edit logs, draft post"| SB
   SW -->|"session.start/pause/resume/end, edits.batch, submission"| WS
@@ -46,9 +45,6 @@ flowchart LR
   EF --> Bunny
   EF --> OAI
   Bunny -->|"signed webhook"| EF
-  Web --> SB
-  Web --> EF
-  Web -->|"tokenised embed"| Bunny
 ```
 
 ## Data model (Supabase)
@@ -64,10 +60,10 @@ flowchart LR
   `thumbnail_path` in bucket `thumbnails`), `posts` (draft|published, visibility public|private,
   two video slots — `video_id` + `video_kind` none|full|highlights for the demo/full take and
   `demo_video_id` for an interview's summary clip, each with a `show_*` switch — plus the three
-  optional extras the draft editor groups together: `include_ai_insights`, `include_og_card`,
-  `og_show_ai_scores`).
-- `post_media` (carousel photos plus the one `kind = 'og'` row holding the pre-generated session
-  card written by `og-snapshot`), `post_likes`, `post_comments`.
+  optional extras the draft editor groups together: `include_ai_insights`, `include_og_card`.
+  `og_show_ai_scores` is unused — the AI review is a section of the post, not a strip on the card).
+- `post_media` (carousel photos; rows with `kind = 'og'` are leftovers from when the session card
+  was a stored PNG and are ignored), `post_likes`, `post_comments`.
 - `transcripts` (segments `[{s,e,text}]` in media ms), `interview_reviews` (OpenAI structured output).
 - Visibility: `can_view_post` - published and (owner, or public post and (author not private or
   accepted follower)). Child rows inherit through their post; AI insights additionally require
@@ -78,18 +74,10 @@ with `Deno.env` taking precedence; see `supabase/functions/_shared/http.ts`.
 
 ## Web deployment
 
-Vercel functions are pinned to **`syd1`** (`apps/web/vercel.json`), because the Supabase project
-lives in `ap-southeast-2`. On Vercel's default region (`iad1`) every Supabase call from a Server
-Component crossed the Pacific, and a signed-in page makes several in sequence — session, feed,
-then signing and likes and comments — so ~200 ms of latency was paid three times over before
-anything rendered. Colocating with the database is the right trade even for viewers far from
-Sydney: they pay one slow hop to the function instead of one per query.
-
-Every route reads cookies, so every route is dynamic and nothing is cached at the edge; what makes
-navigation feel instant instead is `loading.tsx` on the main routes plus
-`experimental.staleTimes` in `next.config.ts`, which lets the client router reuse a page it just
-rendered. `createClient` is memoised with React `cache`, so one request builds one Supabase client
-and verifies the JWT once.
+`apps/web` is a static landing page on Vercel. It was once a full second client — feed, drafts,
+sessions, profiles, post pages — with its functions pinned to `syd1` to sit beside the Supabase
+project. None of that is left: the app and the extension are what people use, and maintaining a
+second copy of them cost more than it returned. The site holds no session and talks to nothing.
 
 ## Time model
 
@@ -123,7 +111,7 @@ already in media time; edit events (wall-clock epoch from Monaco) and submission
    - interview -> transcribe the MP4 with whisper -> upload -> captions (`bunny-captions`) ->
      attach to the session's draft. A failed transcription marks the session ungraded and the
      video still uploads.
-5. Bunny calls `bunny-webhook` (HMAC) as it encodes; `videos.status` flips to `ready` and the web
+5. Bunny calls `bunny-webhook` (HMAC) as it encodes; `videos.status` flips to `ready` and the app
    and desktop players pick it up over Realtime. Playback URLs come from `bunny-playback-token`
    after an RLS visibility check.
 
@@ -136,16 +124,16 @@ recorder manifest only carries the post id.
 
 ## Post carousel
 
-One deck, rendered identically by `apps/web/components/post-slides.tsx` and
 `apps/desktop/src/features/feed/PostSlides.tsx`:
 
-    session card (or the author's cover) -> session breakdown -> summary video -> photos -> demo/full video
+    session card -> session breakdown -> summary video -> photos -> demo/full video
 
-The session card is `/api/og/{id}`: the Open Graph image *and* the first slide, so the two cannot
-drift. `og-snapshot` renders that route with the author's JWT and stores the PNG, so shared links
-and the feed read one image instead of rendering per request. Both are opt-out per post
-(`include_og_card`), and an interview may also draw its AI review percentages on the card
-(`og_show_ai_scores`).
+The session card (`SessionCardSlide`) is drawn from the session, not stored. It was a PNG once —
+rendered by a Next route with `next/og` and saved to a bucket by an `og-snapshot` function — because
+it was also the Open Graph image a shared link unfurled to. With the website reduced to a landing
+page there is nothing to unfurl, and what was left was a slide the app can draw itself from data it
+already has. It therefore cannot go stale, which is why nothing regenerates it. Opt out per post
+with `include_og_card`.
 
 ## Licensing
 

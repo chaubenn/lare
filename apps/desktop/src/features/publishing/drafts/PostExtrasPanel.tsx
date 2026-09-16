@@ -40,19 +40,7 @@ export function PostExtrasPanel({ draft }: { draft: Draft }) {
           disabled={extras.isPending}
           onChange={(v) => set({ include_og_card: v })}
           label="Session card"
-          description="Leads the post and is what a shared link unfurls to. Off: the post opens on the session breakdown."
-        />
-        <Toggle
-          id="extras-og-scores"
-          checked={draft.og_show_ai_scores}
-          disabled={extras.isPending || !draft.include_og_card || !isInterview}
-          onChange={(v) => set({ og_show_ai_scores: v })}
-          label="AI scores on the session card"
-          description={
-            isInterview
-              ? "Draws the overall grade and the five skill percentages on the card."
-              : "Only mock interviews are graded."
-          }
+          description="Leads the post with a summary of the session. Off: the post opens on the session breakdown."
         />
       </div>
     </Card>

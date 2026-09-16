@@ -17,8 +17,6 @@ import { useNotify } from "@/features/notifications/notices";
 import { PostMediaPanel } from "@/features/publishing/posts/PostMediaPanel";
 import { PostPreview, usePreviewSlides } from "@/features/publishing/posts/PostPreview";
 import { PageActions } from "@/features/shell/PageActions";
-import { copyText } from "@/lib/clipboard";
-import { postWebUrl } from "@/lib/env";
 import { formatDateTime, plural } from "@/lib/format";
 import { useHotkey } from "@/lib/hotkeys";
 import { errorMessage } from "@/lib/supabase";
@@ -249,12 +247,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
       } catch {
         /* Publication already succeeded. */
       }
-      const copied = await copyText(postWebUrl(slug));
-      notify({
-        title: copied ? "Published — link copied" : "Published",
-        description: copied ? postWebUrl(slug) : undefined,
-        variant: "success",
-      });
+      notify({ title: "Published", variant: "success" });
       void navigate(`/posts/${id}`, { replace: true });
     } catch (err) {
       leaving.current = false;

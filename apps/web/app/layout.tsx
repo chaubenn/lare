@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Outfit } from "next/font/google";
 import type { ReactNode } from "react";
-import { Suspense } from "react";
-import { Providers } from "@/components/providers";
-import { SiteHeaderFallback } from "@/components/site-chrome";
 import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader } from "@/components/site-header";
 import { env } from "@/lib/env";
 import "./globals.css";
 
@@ -26,7 +22,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(env.siteUrl),
   title: { default: "Lare — Hevy for LeetCode", template: "%s · Lare" },
   description:
-    "Log LeetCode sessions, capture submissions, share demo videos and get AI-graded mock interviews.",
+    "Log LeetCode sessions, capture submissions, record demo videos and run AI-graded mock interviews. Desktop app and Chrome extension.",
   openGraph: { siteName: "Lare", type: "website" },
   icons: {
     icon: [{ url: "/icon.png", type: "image/png" }],
@@ -34,17 +30,15 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * No header: the page is one screen with the wordmark in it, and there is nothing to navigate to.
+ */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`dark ${outfit.variable} ${ibmPlexMono.variable}`}>
       <body className="flex min-h-screen flex-col font-sans">
-        <Providers>
-          <Suspense fallback={<SiteHeaderFallback />}>
-            <SiteHeader />
-          </Suspense>
-          <main className="flex-1 py-5 pb-24 md:pb-5">{children}</main>
-          <SiteFooter />
-        </Providers>
+        <main className="flex-1 py-5">{children}</main>
+        <SiteFooter />
       </body>
     </html>
   );

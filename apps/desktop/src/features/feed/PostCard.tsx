@@ -5,7 +5,6 @@ import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { PostStateBadge } from "@/components/ui/Badge";
 import { CommentsPreview } from "@/features/feed/CommentsPreview";
-import { PostLinkButton } from "@/features/feed/PostLinkButton";
 import { PostSlides } from "@/features/feed/PostSlides";
 import type { FeedPost } from "@/features/feed/queries";
 import { useNotify } from "@/features/notifications/notices";
@@ -90,9 +89,7 @@ export function PostCard({
             <PostStateBadge state={postStateOf(post)} />
           </div>
         </div>
-        <div className="shrink-0">
-          <PostLinkButton postSlug={post.slug} />
-        </div>
+        <div className="shrink-0"></div>
       </header>
 
       <div className="px-4 sm:px-5">

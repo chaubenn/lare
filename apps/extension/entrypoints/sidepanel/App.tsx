@@ -356,8 +356,9 @@ export function App() {
                   void run(() => sendRuntime({ type: "PUBLISH_PROBLEMS", ids: selectedIds })).then(
                     (res) => {
                       setSelected([]);
+                      // The draft is edited in the desktop app; the website is a landing page.
                       if (res.ok && res.postId)
-                        void chrome.tabs.create({ url: `${SITE_URL}/drafts/${res.postId}` });
+                        void sendRuntime({ type: "OPEN_APP", path: `drafts/${res.postId}` });
                     },
                   )
                 }
@@ -591,9 +592,13 @@ export function App() {
               <a href={SITE_URL} target="_blank" rel="noreferrer" className="link">
                 lare.app
               </a>
-              <a href={`${SITE_URL}/drafts`} target="_blank" rel="noreferrer" className="link">
+              <button
+                type="button"
+                className="link"
+                onClick={() => void sendRuntime({ type: "OPEN_APP", path: "drafts" })}
+              >
                 Drafts
-              </a>
+              </button>
             </nav>
           </footer>
         </>

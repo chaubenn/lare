@@ -1,16 +1,13 @@
 import { MAX_POST_IMAGES, POST_IMAGE_MIME_TYPES } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ImagePlus, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import {
   type PostImage,
-  postMediaKey,
-  requestOgSnapshot,
   usePostMedia,
   useRemovePostImage,
   useReorderPostImages,
@@ -21,10 +18,9 @@ import {
 /**
  * The photo half of a post: add pictures, order them and caption them.
  *
- * The session card always leads the post and is what links unfurl to, so there is nothing to
- * choose and no star. It is generated when the draft is opened and again at publish, and it draws
- * the problems in the session — which cannot be added to or removed from a draft — so there is
- * nothing a "regenerate" button could change either.
+ * The session card is not here. It is drawn from the session rather than stored, so there is
+ * nothing to upload, star, regenerate or wait for — it is simply the first slide, and Preview is
+ * where you look at it.
  */
 export function PostMediaPanel({
   postId,
@@ -36,7 +32,6 @@ export function PostMediaPanel({
   disabled?: boolean;
 }) {
   const { notify } = useNotify();
-  const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const media = usePostMedia(postId);
   const upload = useUploadPostImages(postId, userId);
@@ -44,23 +39,9 @@ export function PostMediaPanel({
   const reorder = useReorderPostImages(postId);
   const caption = useSetImageCaption(postId);
 
-  const all = media.data ?? [];
-  const ogImage = all.find((i) => i.kind === "og") ?? null;
-  const images = all.filter((i) => i.kind !== "og");
-
-  // Draw the card the first time a draft is opened rather than waiting for publish, so the author
-  // always sees what leads their post. `og-snapshot` is idempotent, and publish regenerates it
-  // anyway once the title and body are final; asked for once per post so a failure does not loop.
-  const asked = useRef<string | null>(null);
-  const [drawn, setDrawn] = useState(false);
-  const missingOg = media.isSuccess && !ogImage;
-  useEffect(() => {
-    if (!missingOg || asked.current === postId) return;
-    asked.current = postId;
-    void requestOgSnapshot(postId)
-      .then(() => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }))
-      .finally(() => setDrawn(true));
-  }, [missingOg, postId, queryClient]);
+  // Old posts can still carry a stored `og` row from when the card was a PNG; it is never a
+  // carousel photo.
+  const images = (media.data ?? []).filter((i) => i.kind !== "og");
   const busy =
     Boolean(disabled) ||
     upload.isPending ||
@@ -93,30 +74,8 @@ export function PostMediaPanel({
       <SectionTitle>Photos</SectionTitle>
       <p className="text-xs text-zinc-500">
         {images.length}/{MAX_POST_IMAGES} used. The session card leads the post; photos follow it in
-        this order.
+        this order. Preview shows the deck as it will publish.
       </p>
-
-      <div className="mt-3 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60">
-        {ogImage?.url ? (
-          <img
-            src={ogImage.url}
-            alt="Generated session card"
-            // Contain, not cover: the card is 1200x630 and authors are checking its edges.
-            className="aspect-video w-full bg-zinc-950 object-contain"
-          />
-        ) : (
-          <div className="flex aspect-video items-center justify-center px-4 text-center text-xs text-zinc-600">
-            {drawn
-              ? "The session card could not be drawn. Publishing draws it again."
-              : "Drawing the session card…"}
-          </div>
-        )}
-        <div className="flex items-center gap-2 border-t border-zinc-800 px-2 py-1.5">
-          <span className="min-w-0 flex-1 truncate text-xs text-zinc-400">
-            Session card · cover
-          </span>
-        </div>
-      </div>
 
       {images.length > 0 ? (
         <ul className="mt-3 grid grid-cols-2 gap-2">

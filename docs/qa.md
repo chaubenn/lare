@@ -7,7 +7,7 @@ From the repository root:
 ```sh
 pnpm lint                                                    # biome
 pnpm -r --if-present typecheck
-pnpm test                                                    # shared, capture, desktop, web unit tests
+pnpm test                                                    # shared, capture and desktop unit tests
 pnpm --filter @lare/extension e2e                            # Playwright, real Chromium
 ```
 
@@ -34,7 +34,7 @@ deno check --node-modules-dir=none $(find . -name '*.ts')
 deno test  --node-modules-dir=none --allow-net --allow-env --allow-read
 ```
 
-`ci-dev.yml` runs lint, typecheck, the shared tests and a web build on every push to `dev`.
+`ci-dev.yml` runs lint, typecheck, every package's unit tests and a web build on each push to `dev`.
 `ci.yml` runs everything above on macOS and Windows for the `dev -> main` PR. The items below
 are the manual passes — the ones that need a real microphone, a real screen, and real money
 going through Bunny.
@@ -52,7 +52,7 @@ going through Bunny.
 - The extension's toolbar icon opens a **side panel**, not a popup. Mock interviews are started
   from it and recorded by the desktop app.
 - There is no Recordings page. Local files stay as a preview until their video is ready, then go.
-- The website has the desktop app's shell, plus drafts, sessions and browser recording.
+- The website is a landing page. Everything a user does happens in the app and the extension.
 
 ## Chrome extension
 
@@ -66,7 +66,7 @@ going through Bunny.
   session and a `submissions` row (runtime/memory percentiles and distribution present after the
   retry window). The panel lists the problem as `n/m accepted`.
 - Open a second problem: a second `session_problems` row joins the same inbox session, and both
-  show up under **Tracked problems** in the desktop app's Drafts page *and* on the web `/drafts`.
+  show up under **Tracked problems** in the desktop app's Drafts page.
 - The toolbar badge counts unposted tracked problems. Post or **Clear all** them from the
   desktop app, then open the side panel: they drop off the panel and the badge clears (the
   worker also re-checks every two minutes).
@@ -105,8 +105,7 @@ going through Bunny.
 - **Recording error** (deny screen recording, or quit the desktop mid-start): the panel shows the
   desktop's message, the dot goes away, and no interview is left running.
 - Close the recorded tab mid-recording: the interview ends and the desktop saves what it recorded.
-- There is no summary/demo recorder in the extension; that is draft work in the desktop app and
-  the web.
+- There is no summary/demo recorder in the extension; that is draft work in the desktop app.
 
 ## Desktop
 
@@ -158,17 +157,15 @@ going through Bunny.
 - **Draft stepper**: Problems -> Media -> Details -> Extras -> Review & publish. Each step
   refuses to advance while invalid; Media blocks on an active capture or a pending upload; the
   draft saves continuously, so closing the window mid-step loses nothing.
-- Open a fresh draft's **Media** step: the session card is already drawn — nothing to press. It is
-  the cover and the first slide, always; there is no star on it or on any photo, and no regenerate
-  (the problems in a session cannot change, and publishing redraws the card anyway).
-- Draft -> "Include with the post": switching the **Session card** off removes the stored card and
-  drops the first slide (Preview and Photos agree); switching it back on regenerates it. **AI
-  scores on the session card** (interviews with a review) draws the overall grade and the five
-  skill percentages on it.
+- The session card is the first slide and is drawn, not stored: open a draft, change the title, and
+  Preview shows the new title immediately. There is nothing to generate, regenerate or wait for, and
+  the Photos panel holds photos only.
+- Draft -> "Include with the post": switching the **Session card** off drops the first slide
+  (Preview and the post agree); switching it back on restores it.
 - Interview draft -> **Summary video** -> Record (Instant): uploads to the second slot and appears
   as the third slide (after the session card and the session breakdown), with the full recording
   fourth. Removing it detaches only that slot.
-- Publish a draft; the post page in the desktop and on the web render the runtime chart, code and
+- Publish a draft; the post page renders the runtime chart, code and
   video. A private account's public post is invisible to a stranger and visible to an accepted
   follower.
 - **Pending posts**: publish while the video is still processing. The author sees the post with a
@@ -179,24 +176,9 @@ going through Bunny.
 
 ## Web
 
-- **Signed in, `md` and up**: the sidebar shell appears, with the same nav and active-pill motion
-  as the desktop app. The logo goes to the landing page.
-- **Below `md`, or signed out**: the old header and bottom tab bar, untouched. Mobile must not
-  have been sacrificed for the shell — check a phone viewport specifically.
-- `/drafts` and `/drafts/[id]`: the same five-step stepper as the desktop app, tracked problems
-  included. Autosave survives a reload mid-step.
-- `/sessions` and `/sessions/[id]`: timeline, per-problem submissions with verdicts and
-  percentiles, code edit timeline, transcript and AI review inline — owner-only.
-  - An **ungraded** session says so, and offers no review. It must not look like a graded session
-    that failed.
-- **Browser recording** (`BrowserRecorder`): record a general video and a summary video on the
-  web. Needs HTTPS or localhost. Chunks upload during recording, same as the extension.
-- Anywhere the web hits the local-Whisper boundary, it points at the desktop app as a capability
-  ("you can do everything on the web except be graded"), not as a paywall.
-- `/p/[id]` for a public post renders without sign-in; the video plays; AI insights show only when
-  the author enabled them.
-- `/u/[handle]` for a private profile shows a lock and the follow-request button; accepting from
-  the desktop/web Requests page reveals the posts.
+- The site is one page: what Lare is, and buttons to the releases and the extension. There is no
+  sign-in, no feed, no post or profile pages — nothing that needs a session.
+- Both download buttons reach the GitHub releases page.
 
 ## Database
 

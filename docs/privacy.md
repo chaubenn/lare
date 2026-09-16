@@ -6,7 +6,7 @@ Lare records people's screens, voices and faces. These are the rules the product
 
 - **Speech transcription runs locally** with whisper.cpp. Audio never leaves the machine for
   transcription, and only the resulting text is stored in Supabase (`transcripts`). This is the
-  one thing the desktop app does that the web cannot, and it is not moving to the cloud.
+  one thing that only happens on your machine, and it is not moving to the cloud.
   - For an interview, the desktop app records the screen and microphone itself and transcribes
     the recording after it stops. The extension only tells it when to start, pause and end, over
     the loopback socket (`ws://127.0.0.1:47831`).
@@ -36,7 +36,8 @@ Lare records people's screens, voices and faces. These are the rules the product
   pill: the extension shows no other on-page UI, but **it never starts a recording without the
   dot**.
 - Each video records which surface produced it (`videos.capture_source`: `desktop`, `extension`
-  or `web`) so quality complaints can be diagnosed. It is metadata about the capture path, not
+  or `web`; `web` is historical) so quality complaints can be diagnosed. It is metadata about the
+  capture path, not
   about the user.
 - Videos go to Bunny Stream (EU company; library replicated to Sydney) under a per-video token:
   **the player** requires a signed embed URL minted by `bunny-playback-token` after the same

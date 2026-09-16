@@ -227,18 +227,16 @@ function FollowingTab({ onFind }: { onFind: () => void }) {
   return (
     <div className="space-y-6">
       {accepted.length === 0 ? (
-        <>
-          <EmptyState
-            icon={<Users className="size-8" aria-hidden />}
-            title="You aren't following anyone yet"
-            description="Follow people to see their sessions in your feed."
-            action={
-              <Button size="sm" onClick={onFind} icon={<Search className="size-3.5" aria-hidden />}>
-                Find people
-              </Button>
-            }
-          />
-        </>
+        <EmptyState
+          icon={<Users className="size-8" aria-hidden />}
+          title="You aren't following anyone yet"
+          description="Follow people to see their sessions in your feed."
+          action={
+            <Button size="sm" onClick={onFind} icon={<Search className="size-3.5" aria-hidden />}>
+              Find people
+            </Button>
+          }
+        />
       ) : (
         <PeopleGrid>
           {accepted.map((row) => (
