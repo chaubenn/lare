@@ -1,5 +1,7 @@
 import { buildSessionOverview, type OverviewProblem } from "@lare/shared";
 import type { Post, Video } from "@lare/supabase-types";
+import type { ReactNode } from "react";
+import { SectionTitle } from "@/components/ui/Card";
 import type { FeedImage } from "@/features/publishing/posts/media";
 import { PostCarousel } from "./PostCarousel";
 import { SessionCardSlide } from "./SessionCardSlide";
@@ -61,6 +63,9 @@ export function PostSlides({
   const summary = post.demo_videos;
   const showVideo = Boolean(video) && post.video_kind !== "none" && post.show_video;
   const showSummary = Boolean(summary) && post.show_demo_video;
+  // Two clips in one deck look identical without a name on them — the player's `title`
+  // reaches screen readers only. With a single clip the label would state the obvious.
+  const bothClips = showVideo && showSummary;
   return (
     <PostCarousel label={`${title} — media`} className={className}>
       {post.include_og_card && session ? (
@@ -68,31 +73,69 @@ export function PostSlides({
       ) : null}
       <SessionOverviewSlide overview={overview} kind={session?.kind} />
       {showSummary && summary ? (
-        <VideoSlide
-          videoId={summary.id}
-          status={summary.status}
-          bunnyVideoId={summary.bunny_video_id}
-          posterUrl={post.demo_thumbnail_url}
-          durationMs={summary.duration_ms}
-          title={`${title} — summary`}
-          className="size-full rounded-none border-0"
-        />
+        <LabelledSlide label={bothClips ? "Summary" : null}>
+          <VideoSlide
+            videoId={summary.id}
+            status={summary.status}
+            bunnyVideoId={summary.bunny_video_id}
+            posterUrl={post.demo_thumbnail_url}
+            durationMs={summary.duration_ms}
+            title={`${title} — summary`}
+            className="size-full rounded-none border-0"
+          />
+        </LabelledSlide>
       ) : null}
       {photos.map((image) => (
         <PhotoSlide key={image.id} image={image} />
       ))}
       {showVideo && video ? (
-        <VideoSlide
-          videoId={video.id}
-          status={video.status}
-          bunnyVideoId={video.bunny_video_id}
-          posterUrl={post.thumbnail_url}
-          durationMs={video.duration_ms}
-          title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "full recording"}`}
-          className="size-full rounded-none border-0"
-        />
+        <LabelledSlide
+          label={bothClips ? (post.video_kind === "highlights" ? "Highlights" : "Recording") : null}
+        >
+          <VideoSlide
+            videoId={video.id}
+            status={video.status}
+            bunnyVideoId={video.bunny_video_id}
+            posterUrl={post.thumbnail_url}
+            durationMs={video.duration_ms}
+            title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "full recording"}`}
+            className="size-full rounded-none border-0"
+          />
+        </LabelledSlide>
       ) : null}
     </PostCarousel>
+  );
+}
+
+/**
+ * A slide whose content is text, not media. The deck frame is a fixed aspect, so the
+ * content scrolls inside it — that keeps every slide the same height instead of the
+ * page jumping as you arrow between a video and a problem description.
+ */
+export function ScrollSlide({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="size-full overflow-y-auto overscroll-contain bg-[var(--surface)] px-4 pb-8 pt-4">
+      <SectionTitle>{label}</SectionTitle>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Names a slide in its top-left corner. Wrapping here rather than inside VideoSlide
+ * means the label survives every player state — ready, still processing, or a local
+ * preview of a clip that has not uploaded yet.
+ */
+export function LabelledSlide({ label, children }: { label: string | null; children: ReactNode }) {
+  return (
+    <div className="relative size-full">
+      {children}
+      {label ? (
+        <span className="lare-label pointer-events-none absolute left-3 top-3 z-10 rounded-[var(--lare-r-1)] bg-[color-mix(in_oklab,var(--lare-ink)_72%,transparent)] px-2 py-1 text-[var(--text)] ring-1 ring-[var(--border)] backdrop-blur">
+          {label}
+        </span>
+      ) : null}
+    </div>
   );
 }
 

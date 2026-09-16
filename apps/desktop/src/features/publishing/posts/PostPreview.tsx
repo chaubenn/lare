@@ -169,7 +169,8 @@ export function usePreviewSlides({
   };
 }
 
-function toSlideVideo(clip: Video | null | undefined): SlideVideo | null {
+/** A video row narrowed to the four fields the deck reads. */
+export function toSlideVideo(clip: Video | null | undefined): SlideVideo | null {
   return clip
     ? {
         id: clip.id,

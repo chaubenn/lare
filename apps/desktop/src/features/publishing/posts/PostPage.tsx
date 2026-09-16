@@ -1,13 +1,15 @@
 /* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
  * design-system: design.md (locked ink/bone) · genre: modern-minimal
- * macrostructure: Long Document — one column, header → media → hairline → meta + note → thread
+ * macrostructure: Long Document — one column: header + caption → one deck (the feed's
+ *   carousel, arrows + dots) carrying media AND problems AND the review → hairline →
+ *   meta → thread. No tab strip anywhere.
  * tone: utilitarian · anchor hue: neutral (bone on ink; --lare-danger is the only chromatic note)
  * enrichment: none (the post's own video is the media)
  */
 import { formatDurationHuman, formatLocalTimestamp, postStateOf } from "@lare/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -16,10 +18,11 @@ import { Badge, KindBadge, PostStateBadge } from "@/components/ui/Badge";
 import { Button, buttonClass } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
-import { type SegmentedTab, SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
-import { VideoEmbed } from "@/components/VideoEmbed";
 import { useUser } from "@/features/auth/AuthProvider";
+import { PostCarousel } from "@/features/feed/PostCarousel";
+import { LabelledSlide, ScrollSlide } from "@/features/feed/PostSlides";
+import { VideoSlide } from "@/features/feed/VideoSlide";
 import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { formatDateTime, plural } from "@/lib/format";
@@ -51,7 +54,8 @@ export function PostPage() {
 
 /**
  * A loaded post, read top to bottom: who wrote it, what they made, then the
- * conversation. The long panes are tabbed so the comments stay within reach.
+ * conversation. Everything it carries lives in one deck, so the comments sit a
+ * fixed distance below the title no matter how much the session holds.
  */
 function PostView({ post }: { post: PostDetail }) {
   // The route lives under RequireAuth, so the viewer is always signed in here.
@@ -137,6 +141,11 @@ function PostView({ post }: { post: PostDetail }) {
               {post.title}
             </h1>
           ) : null}
+          {post.body ? (
+            <div className="mt-3">
+              <PostBody body={post.body} />
+            </div>
+          ) : null}
         </header>
 
         <div className="mt-6">
@@ -150,11 +159,6 @@ function PostView({ post }: { post: PostDetail }) {
             likeCount={post.like_count}
             commentCount={post.comment_count}
           />
-          {post.body ? (
-            <div className="mt-2">
-              <PostBody body={post.body} />
-            </div>
-          ) : null}
         </div>
 
         <div className="mt-8">
@@ -174,12 +178,11 @@ function PostView({ post }: { post: PostDetail }) {
 }
 
 type ReviewData = NonNullable<ReturnType<typeof useInterviewReview>["data"]>;
-type ContentTab = "video" | "problems" | "review";
 
 /**
- * Watch it, read it, or see the grade. Each of these runs long — problem
- * descriptions and the AI review especially — so stacking them put the comments
- * several screens below the video.
+ * The post's body as one swipe deck: the summary clip, the recording, the problems and
+ * the review. Deliberately narrower than the feed's deck — no photos, and no session
+ * card or breakdown slide, because the Session panel beside it already carries those.
  */
 function PostContent({
   post,
@@ -190,91 +193,66 @@ function PostContent({
   isMine: boolean;
   review: ReviewData | null;
 }) {
-  const panelId = useId();
-  const [picked, setPicked] = useState<ContentTab | null>(null);
-
   const problems = post.sessions?.session_problems ?? [];
-  const summaryVideo =
-    post.demo_videos && (post.show_demo_video || isMine) ? post.demo_videos : null;
-  const showsMainVideo = (post.video_kind !== "none" || post.videos) && (post.show_video || isMine);
-  const hasVideo = Boolean(summaryVideo) || showsMainVideo;
-  const bothVideos = Boolean(summaryVideo) && showsMainVideo;
+  const summary = post.demo_videos;
+  const video = post.videos;
 
-  const tabs: Array<SegmentedTab<ContentTab>> = [];
-  if (hasVideo) tabs.push({ key: "video", label: "Video" });
-  if (problems.length > 0) {
-    tabs.push({
-      key: "problems",
-      label: "Problems",
-      badge: <span className="text-[var(--text-tertiary)]">{problems.length}</span>,
-    });
-  }
-  if (review) tabs.push({ key: "review", label: "AI review" });
+  // The owner keeps sight of a clip they have hidden; the note under the deck is
+  // what tells them it is hidden from everyone else.
+  const showSummary = Boolean(summary) && (post.show_demo_video || isMine);
+  const showVideo = Boolean(video) && post.video_kind !== "none" && (post.show_video || isMine);
+  const hiddenFromOthers =
+    isMine && ((video && !post.show_video) || (summary && !post.show_demo_video));
+  const bothClips = showSummary && showVideo;
 
-  const first = tabs[0];
-  if (!first) return null;
+  if (!showSummary && !showVideo && problems.length === 0 && !review) return null;
 
-  // The review query resolves after the post, so the tab set grows underneath
-  // us. Deriving the active tab keeps a stale pick from blanking the panel.
-  const active = tabs.find((t) => t.key === picked)?.key ?? first.key;
-
-  const pane =
-    active === "video" ? (
-      // Only label the videos when there are two to tell apart — with one, the tab
-      // already said "Video" and a heading repeating it is noise.
-      <div className="space-y-6">
-        {summaryVideo ? (
-          <section>
-            {bothVideos ? <SectionTitle>Summary video</SectionTitle> : null}
-            <VideoEmbed video={summaryVideo} />
-            {!post.show_demo_video && isMine ? <HiddenNote postId={post.id} /> : null}
-          </section>
-        ) : null}
-        {showsMainVideo ? (
-          <section>
-            {bothVideos ? (
-              <SectionTitle>
-                {post.video_kind === "highlights" ? "Highlights" : "Demo video"}
-              </SectionTitle>
-            ) : null}
-            {post.videos ? (
-              <>
-                <VideoEmbed video={post.videos} />
-                {!post.show_video && isMine ? <HiddenNote postId={post.id} /> : null}
-              </>
-            ) : (
-              <div className="rounded-[var(--lare-r-3)] border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--text-tertiary)]">
-                No video attached.
-              </div>
-            )}
-          </section>
-        ) : null}
-      </div>
-    ) : active === "problems" ? (
-      <div className="space-y-4">
-        {problems.map((p) => (
-          <ProblemSection key={p.id} problem={p} />
-        ))}
-      </div>
-    ) : review ? (
-      <AiReviewSection review={review} />
-    ) : null;
-
-  // A lone tab is just a label on the only thing there is.
-  if (tabs.length === 1) return <section>{pane}</section>;
-
+  const title = post.title ?? "Post";
   return (
     <section>
-      <SegmentedTabs
-        items={tabs}
-        value={active}
-        onChange={setPicked}
-        label="Post content"
-        className="mb-4"
-      />
-      <div id={panelId} role="tabpanel">
-        {pane}
-      </div>
+      <PostCarousel label={`${title} — contents`}>
+        {showSummary && summary ? (
+          <LabelledSlide label={bothClips ? "Summary" : null}>
+            <VideoSlide
+              videoId={summary.id}
+              status={summary.status}
+              bunnyVideoId={summary.bunny_video_id}
+              durationMs={summary.duration_ms}
+              title={`${title} — summary`}
+              className="size-full rounded-none border-0"
+            />
+          </LabelledSlide>
+        ) : null}
+        {showVideo && video ? (
+          <LabelledSlide
+            label={bothClips ? (post.video_kind === "highlights" ? "Highlights" : "Demo") : null}
+          >
+            <VideoSlide
+              videoId={video.id}
+              status={video.status}
+              bunnyVideoId={video.bunny_video_id}
+              durationMs={video.duration_ms}
+              title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "demo"}`}
+              className="size-full rounded-none border-0"
+            />
+          </LabelledSlide>
+        ) : null}
+        {problems.length > 0 ? (
+          <ScrollSlide label={`Problems · ${problems.length}`}>
+            <div className="space-y-4">
+              {problems.map((p) => (
+                <ProblemSection key={p.id} problem={p} />
+              ))}
+            </div>
+          </ScrollSlide>
+        ) : null}
+        {review ? (
+          <ScrollSlide label="AI review">
+            <AiReviewSection review={review} />
+          </ScrollSlide>
+        ) : null}
+      </PostCarousel>
+      {hiddenFromOthers ? <HiddenNote postId={post.id} /> : null}
     </section>
   );
 }
