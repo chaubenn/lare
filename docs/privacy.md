@@ -58,12 +58,15 @@ directly.
 
 What that does and does not mean:
 
-- The GUID is a UUIDv4 and is only released after the same visibility check as the post, so
-  videos cannot be discovered, enumerated or guessed. A stranger cannot reach a private post.
+- The GUID is a UUIDv4 and is only released for a video the post actually shows, so videos
+  cannot be discovered, enumerated or guessed. A stranger cannot reach a private post.
+  `show_video` and `show_demo_video` are enforced in `private.can_view_video`, not only in the
+  UI, so a clip the author switched off is not selectable, has no playback token, and its
+  thumbnail is not readable either (migration `0019`).
 - But **anyone who was allowed to watch a video can keep a permanent direct link to it**, and
-  that link keeps working after the post is made private, after it is unshared, and after the
-  five-minute playback token expires. Only deleting the video (`video-delete`, which removes it
-  from Bunny) actually revokes access.
+  that link keeps working after the post is made private, after it is unshared, after the clip
+  is hidden, and after the five-minute playback token expires. Only deleting the video
+  (`video-delete`, which removes it from Bunny) actually revokes access.
 
 Treat "this person was allowed to watch it once" as "this person may keep a copy". That is true
 of any un-DRM'd video on the web — a viewer can always record their own screen — but here it is

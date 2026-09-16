@@ -21,7 +21,10 @@ Deno.serve(
     if (error) throw new HttpError(error.message, 500);
     if (!video?.bunny_video_id) throw new HttpError("Video not found", 404);
 
-    const expires = Math.floor(Date.now() / 1000) + 6 * 3600;
+    // Five minutes, which is what docs/privacy.md promises. The token only has to survive
+    // the embed page load: the player is opened on a click, so each play mints a fresh one,
+    // and the CDN segments behind it are not token-gated anyway.
+    const expires = Math.floor(Date.now() / 1000) + 5 * 60;
     const token = await embedToken(video.bunny_video_id, expires);
     return json({
       libraryId: libraryId(),

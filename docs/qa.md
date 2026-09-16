@@ -186,6 +186,12 @@ going through Bunny.
 isolated fixture (pending, hidden videos, drafts, the ready trigger, swapping a video back to
 pending). Run it the same way as the others, never against real data.
 
+`0019_hidden_videos_stay_hidden.sql` is idempotent;
+`supabase/functions/_tests/hidden_videos.sql` is its isolated fixture. It proves a clip the
+author switched off is not selectable by a viewer of the post — which matters because the GUID
+in that row is a permanent link to the file — while the author still sees their own hidden
+clips. Same rules: disposable database only.
+
 `0015_v1.sql` is idempotent — apply it twice against a disposable database and confirm both the
 second run and these behaviours. `supabase/functions/_tests/v1_schema.sql` is the isolated
 fixture that does exactly this; it is **not** a migration and must never be run against real data.
