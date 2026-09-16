@@ -69,7 +69,7 @@ export default defineConfig({
   }),
   vite: () => ({
     define: {
-      __EXT_VERSION__: JSON.stringify(process.env.npm_package_version ?? "0.4.7"),
+      __EXT_VERSION__: JSON.stringify(process.env.npm_package_version ?? "0.4.8"),
       __BUILD_ID__: JSON.stringify(BUILD_ID),
     },
   }),
