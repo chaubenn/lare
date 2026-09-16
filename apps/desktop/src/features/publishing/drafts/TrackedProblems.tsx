@@ -3,9 +3,9 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { Radio } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
+import { useNotify } from "@/features/notifications/notices";
 import { formatListWhen, plural } from "@/lib/format";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
@@ -36,7 +36,7 @@ export function TrackedProblems() {
   const publish = usePublishTracked();
   const clear = useClearTracked();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const rows = tracked.data ?? [];
@@ -60,7 +60,7 @@ export function TrackedProblems() {
       setSelected(new Set());
       void navigate(`/drafts/${postId}`);
     } catch (err) {
-      toast({
+      notify({
         title: "Couldn't create the post",
         description: errorMessage(err),
         variant: "error",
@@ -74,7 +74,7 @@ export function TrackedProblems() {
       await clear.mutateAsync(rows.map((r) => r.id));
       setSelected(new Set());
     } catch (err) {
-      toast({
+      notify({
         title: "Couldn't clear tracked problems",
         description: errorMessage(err),
         variant: "error",

@@ -1,10 +1,10 @@
 import { HANDLE_RE } from "@lare/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { FieldError, Input, Label, Toggle } from "@/components/ui/Field";
 import { WindowScreen } from "@/components/ui/WindowScreen";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { profileQueryKey, useAuth, useUser } from "./AuthProvider";
 
@@ -14,7 +14,7 @@ export function OnboardingPage() {
   const { userId, session } = useUser();
   const { signOut } = useAuth();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const suggested = (session.user.user_metadata as Record<string, unknown>)?.user_name;
   const suggestedName =
     (session.user.user_metadata as Record<string, unknown>)?.full_name ??
@@ -51,7 +51,7 @@ export function OnboardingPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
-      toast({ title: "Welcome to Lare", variant: "success" });
+      notify({ title: "Welcome to Lare", variant: "success" });
     },
     onError: (err) => setError(errorMessage(err)),
   });

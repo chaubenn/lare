@@ -1,6 +1,6 @@
 import { Check, Clock, UserPlus } from "lucide-react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import { type FollowState, useFollow, useUnfollow } from "./queries";
 
@@ -21,13 +21,13 @@ export function FollowButton({
 }) {
   const follow = useFollow();
   const unfollow = useUnfollow();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const pending = follow.isPending || unfollow.isPending;
 
   if (!handle) return null;
 
   const onError = (title: string) => (err: unknown) =>
-    toast({ title, description: errorMessage(err), variant: "error" });
+    notify({ title, description: errorMessage(err), variant: "error" });
 
   if (state === "none") {
     return (
@@ -39,7 +39,7 @@ export function FollowButton({
         onClick={() =>
           follow.mutate(handle, {
             onSuccess: (next) =>
-              toast({
+              notify({
                 title: next === "pending" ? `Requested @${handle}` : `Following @${handle}`,
                 variant: "success",
               }),
@@ -68,7 +68,7 @@ export function FollowButton({
       onClick={() =>
         unfollow.mutate(targetId, {
           onSuccess: () =>
-            toast({
+            notify({
               title: isPendingRequest ? "Request cancelled" : `Unfollowed @${handle}`,
               variant: "success",
             }),

@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, ExternalLink, type LucideIcon, Mic, Monitor, RotateCcw } from "lucide-react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
 import { permissionsKey, usePermissions } from "@/features/media/hooks";
+import { useNotify } from "@/features/notifications/notices";
 import { type PermissionStatus, type Permissions, recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
@@ -80,23 +80,23 @@ export function PermissionsSection() {
  */
 function StaleGrantNotice() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
 
   const reset = useMutation({
     mutationFn: () => recorder.resetScreenRecordingPermission(),
     onSuccess: async (status) => {
       await queryClient.invalidateQueries({ queryKey: permissionsKey });
       if (status === "granted") {
-        toast({ title: "Screen recording allowed", variant: "success" });
+        notify({ title: "Screen recording allowed", variant: "success" });
         return;
       }
-      toast({
+      notify({
         title: "Permission cleared",
         description: "Lare has asked macOS again. Switch it on if prompted, then reopen Lare.",
       });
     },
     onError: (e) =>
-      toast({
+      notify({
         title: "Couldn't reset the permission",
         description: errorMessage(e),
         variant: "error",
@@ -132,7 +132,7 @@ function PermissionRow({
   status: PermissionStatus | undefined;
 }) {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const Icon = row.icon;
 
   const settingsUrl = useQuery({
@@ -147,11 +147,11 @@ function PermissionRow({
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: permissionsKey });
       if (result === "granted") {
-        toast({ title: `${row.label} allowed`, variant: "success" });
+        notify({ title: `${row.label} allowed`, variant: "success" });
       } else if (row.which === "screen_recording") {
         // macOS only shows the screen-recording prompt once and reports "denied" until the app is
         // switched on in System Settings; the request above is what adds Lare to that list.
-        toast({
+        notify({
           title: "Turn on Lare in System Settings",
           description:
             "Lare is now listed under Privacy & Security → Screen & System Audio Recording. Switch it on, then quit and reopen Lare.",
@@ -159,7 +159,7 @@ function PermissionRow({
       }
     },
     onError: (e) =>
-      toast({
+      notify({
         title: `Couldn't request ${row.label.toLowerCase()} access`,
         description: errorMessage(e),
         variant: "error",
@@ -172,7 +172,7 @@ function PermissionRow({
     try {
       await recorder.openPermissionSettings(row.which);
     } catch (e) {
-      toast({
+      notify({
         title: "Couldn't open System Settings",
         description: errorMessage(e),
         variant: "error",

@@ -1,11 +1,11 @@
 import { WS_PORT } from "@lare/shared";
 import { LogOut, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, PageHeader, SectionTitle } from "@/components/ui/Card";
 import { useAuth, useUser } from "@/features/auth/AuthProvider";
+import { useNotify } from "@/features/notifications/notices";
 import { useExtensionStatus } from "@/features/shell/useExtensionStatus";
 import { copyText } from "@/lib/clipboard";
 import { errorMessage } from "@/lib/supabase";
@@ -32,7 +32,7 @@ export function SettingsPage() {
 
 function ExtensionPanel() {
   const { connected, port } = useExtensionStatus();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   return (
     <Card>
       <SectionTitle
@@ -50,7 +50,7 @@ function ExtensionPanel() {
               className="text-xs text-zinc-500 hover:text-zinc-300"
               onClick={() =>
                 void copyText(EXTENSION_ID).then((ok) =>
-                  toast(ok ? { title: "Copied" } : { title: "Couldn't copy", variant: "error" }),
+                  notify(ok ? { title: "Copied" } : { title: "Couldn't copy", variant: "error" }),
                 )
               }
             >
@@ -74,7 +74,7 @@ function ExtensionPanel() {
 function AccountPanel() {
   const { signOut } = useAuth();
   const { session } = useUser();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const [version, setVersion] = useState<string>("…");
   const [signingOut, setSigningOut] = useState(false);
 
@@ -97,7 +97,7 @@ function AccountPanel() {
     try {
       await signOut();
     } catch (err) {
-      toast({ title: "Couldn't sign out", description: errorMessage(err), variant: "error" });
+      notify({ title: "Couldn't sign out", description: errorMessage(err), variant: "error" });
       setSigningOut(false);
     }
   };

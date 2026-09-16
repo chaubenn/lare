@@ -5,7 +5,6 @@ import { ArrowLeft, ArrowRight, Check, Eye, Send, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ProblemSection } from "@/components/ProblemSection";
-import { useToast } from "@/components/toast/ToastProvider";
 import { KindBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,6 +13,7 @@ import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useRecorderStatus } from "@/features/media/hooks";
 import { isActive, useJobs } from "@/features/media/jobs";
+import { useNotify } from "@/features/notifications/notices";
 import { PostMediaPanel } from "@/features/publishing/posts/PostMediaPanel";
 import { PostPreview, usePreviewSlides } from "@/features/publishing/posts/PostPreview";
 import { PageActions } from "@/features/shell/PageActions";
@@ -106,7 +106,7 @@ async function confirmDelete(): Promise<boolean> {
 
 function DraftEditor({ draft }: { draft: Draft }) {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const { userId } = useUser();
   const publish = usePublishDraft();
   const save = useSaveDraft();
@@ -211,7 +211,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
       ),
     });
     if (error) {
-      toast({ title: error, variant: "error" });
+      notify({ title: error, variant: "error" });
       return false;
     }
     return true;
@@ -250,7 +250,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
         /* Publication already succeeded. */
       }
       const copied = await copyText(postWebUrl(slug));
-      toast({
+      notify({
         title: copied ? "Published — link copied" : "Published",
         description: copied ? postWebUrl(slug) : undefined,
         variant: "success",
@@ -258,16 +258,16 @@ function DraftEditor({ draft }: { draft: Draft }) {
       void navigate(`/posts/${id}`, { replace: true });
     } catch (err) {
       leaving.current = false;
-      toast({ title: "Couldn't publish", description: errorMessage(err), variant: "error" });
+      notify({ title: "Couldn't publish", description: errorMessage(err), variant: "error" });
     }
   };
 
   const doSave = async () => {
     try {
       await save.mutateAsync(edit);
-      toast({ title: "Draft saved", variant: "success" });
+      notify({ title: "Draft saved", variant: "success" });
     } catch (err) {
-      toast({ title: "Couldn't save", description: errorMessage(err), variant: "error" });
+      notify({ title: "Couldn't save", description: errorMessage(err), variant: "error" });
     }
   };
 
@@ -282,11 +282,11 @@ function DraftEditor({ draft }: { draft: Draft }) {
       } catch {
         /* Deletion already succeeded. */
       }
-      toast({ title: "Draft deleted" });
+      notify({ title: "Draft deleted" });
       void navigate("/drafts", { replace: true });
     } catch (err) {
       leaving.current = false;
-      toast({ title: "Couldn't delete", description: errorMessage(err), variant: "error" });
+      notify({ title: "Couldn't delete", description: errorMessage(err), variant: "error" });
     }
   };
 

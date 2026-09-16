@@ -2,13 +2,13 @@ import { excerptFromHtml, postStateOf } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Heart, Lock, MessageCircle, Sparkles } from "lucide-react";
 import { Link } from "react-router";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { PostStateBadge } from "@/components/ui/Badge";
 import { CommentsPreview } from "@/features/feed/CommentsPreview";
 import { PostLinkButton } from "@/features/feed/PostLinkButton";
 import { PostSlides } from "@/features/feed/PostSlides";
 import type { FeedPost } from "@/features/feed/queries";
+import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import type { UserPost } from "@/features/profile/queries";
 import { useToggleLike } from "@/features/publishing/posts/social";
@@ -30,7 +30,7 @@ export function PostCard({
   /** Whether the signed-in viewer has liked this post, resolved once for the whole page. */
   liked: boolean;
 }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const toggle = useToggleLike(post.id);
   const author = post.profiles;
   const session = post.sessions;
@@ -118,7 +118,11 @@ export function PostCard({
             onClick={() =>
               toggle.mutate(undefined, {
                 onError: (e) =>
-                  toast({ title: "Couldn't like", description: errorMessage(e), variant: "error" }),
+                  notify({
+                    title: "Couldn't like",
+                    description: errorMessage(e),
+                    variant: "error",
+                  }),
               })
             }
             className={cn(

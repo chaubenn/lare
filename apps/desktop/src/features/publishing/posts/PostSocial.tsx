@@ -2,11 +2,11 @@ import { formatLocalTimestamp } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { SectionTitle } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/Field";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import {
   type PostComment,
@@ -30,7 +30,7 @@ export function PostActions({
   likeCount: number;
   commentCount: number;
 }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const liked = useViewerLike(postId, userId);
   const toggle = useToggleLike(postId);
   // The mutation answers with the authoritative count; until then show the row's own value.
@@ -47,7 +47,7 @@ export function PostActions({
         onClick={() =>
           toggle.mutate(undefined, {
             onError: (e) =>
-              toast({ title: "Couldn't like", description: errorMessage(e), variant: "error" }),
+              notify({ title: "Couldn't like", description: errorMessage(e), variant: "error" }),
           })
         }
         className={cn(
@@ -76,13 +76,13 @@ export function CommentsSection({
   userId: string;
   isPostOwner: boolean;
 }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const comments = useComments(postId);
   const add = useAddComment(postId, userId);
   const [draft, setDraft] = useState("");
 
   const fail = (title: string) => (e: unknown) =>
-    toast({ title, description: errorMessage(e), variant: "error" });
+    notify({ title, description: errorMessage(e), variant: "error" });
 
   const list = comments.data ?? [];
 
@@ -147,7 +147,7 @@ function CommentRow({
   canEdit: boolean;
   canDelete: boolean;
 }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const update = useUpdateComment(postId);
   const remove = useDeleteComment(postId);
   const [editing, setEditing] = useState(false);
@@ -156,7 +156,7 @@ function CommentRow({
   const author = comment.profiles;
   const name = author?.display_name ?? (author?.handle ? `@${author.handle}` : "Someone");
   const fail = (title: string) => (e: unknown) =>
-    toast({ title, description: errorMessage(e), variant: "error" });
+    notify({ title, description: errorMessage(e), variant: "error" });
 
   return (
     <li className="flex gap-3">

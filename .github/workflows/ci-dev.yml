@@ -33,7 +33,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm -r --if-present typecheck
-      - run: pnpm --filter @lare/shared test
+      # Every package that has tests, not just @lare/shared: the desktop, web and capture
+      # suites existed but nothing ran them.
+      - run: pnpm -r --if-present test
       - name: Web build
         working-directory: apps/web
         env:

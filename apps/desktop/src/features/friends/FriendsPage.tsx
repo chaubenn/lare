@@ -1,13 +1,13 @@
 import { Check, Lock, Search, UserPlus, Users, X } from "lucide-react";
 import { type ReactNode, useDeferredValue, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { CountBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/Card";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, ListSkeleton, PageSpinner } from "@/components/ui/States";
+import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { useProfileStats } from "@/features/profile/queries";
 import {
@@ -339,7 +339,7 @@ function RequestsTab() {
 
 function RequestCard({ request }: { request: FollowRequest }) {
   const respond = useRespondToRequest();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const person = request.profiles as PersonSummary;
   const name = personName(person);
 
@@ -348,9 +348,9 @@ function RequestCard({ request }: { request: FollowRequest }) {
       { follower: request.follower_id, accept },
       {
         onSuccess: () =>
-          toast({ title: accept ? `Accepted ${name}` : `Declined ${name}`, variant: "success" }),
+          notify({ title: accept ? `Accepted ${name}` : `Declined ${name}`, variant: "success" }),
         onError: (err) =>
-          toast({
+          notify({
             title: "Couldn't update request",
             description: errorMessage(err),
             variant: "error",

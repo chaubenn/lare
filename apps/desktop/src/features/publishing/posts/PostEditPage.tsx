@@ -2,12 +2,12 @@ import type { Post } from "@lare/supabase-types";
 import { ChevronLeft, Eye, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Card, PageHeader, SectionTitle } from "@/components/ui/Card";
 import { Input, Label, Select, Textarea, Toggle } from "@/components/ui/Field";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import { PostMediaPanel } from "./PostMediaPanel";
 import { PostPreview, usePreviewSlides } from "./PostPreview";
@@ -43,7 +43,7 @@ export function PostEditPage() {
  * as they are uploaded; the fields save on "Save changes", the same split the web editor uses.
  */
 function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const navigate = useNavigate();
   const update = useUpdatePost();
   const remove = useDeletePostFlow(post.id);
@@ -75,11 +75,11 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
       { id: post.id, title, body, visibility, showVideo, showDemoVideo },
       {
         onSuccess: () => {
-          toast({ title: "Post updated", variant: "success" });
+          notify({ title: "Post updated", variant: "success" });
           void navigate(postHref);
         },
         onError: (e) =>
-          toast({ title: "Couldn't save", description: errorMessage(e), variant: "error" }),
+          notify({ title: "Couldn't save", description: errorMessage(e), variant: "error" }),
       },
     );
   };

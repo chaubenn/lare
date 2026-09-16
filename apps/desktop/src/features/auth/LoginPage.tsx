@@ -2,11 +2,11 @@ import { Wordmark } from "@lare/ui/brand";
 import { Globe, KeyRound, Mail } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Navigate } from "react-router";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { FieldError, Input, Label } from "@/components/ui/Field";
 import { PageSpinner } from "@/components/ui/States";
 import { WindowScreen } from "@/components/ui/WindowScreen";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 import { useAuth } from "./AuthProvider";
@@ -37,7 +37,7 @@ export function LoginPage() {
 }
 
 function LoginForm() {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const [pending, setPending] = useState<OAuthProvider | null>(null);
   const [waiting, setWaiting] = useState<OAuthProvider | null>(null);
 
@@ -47,7 +47,7 @@ function LoginForm() {
       await signInWithProvider(provider);
       setWaiting(provider);
     } catch (err) {
-      toast({ title: "Couldn't start sign-in", description: errorMessage(err), variant: "error" });
+      notify({ title: "Couldn't start sign-in", description: errorMessage(err), variant: "error" });
     } finally {
       setPending(null);
     }
@@ -92,7 +92,7 @@ function LoginForm() {
 }
 
 function EmailOtpForm() {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [stage, setStage] = useState<"email" | "code">("email");
@@ -111,7 +111,7 @@ function EmailOtpForm() {
     try {
       await sendEmailOtp(trimmed);
       setStage("code");
-      toast({ title: "Code sent", description: `Check ${trimmed} for a 6-digit code.` });
+      notify({ title: "Code sent", description: `Check ${trimmed} for a 6-digit code.` });
     } catch (err) {
       setError(errorMessage(err));
     } finally {

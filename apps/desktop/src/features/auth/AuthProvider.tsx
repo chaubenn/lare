@@ -2,7 +2,7 @@ import type { Profile } from "@lare/supabase-types";
 import type { Session } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { setCurrentUser, useTauriEvent } from "@/lib/tauri";
 
@@ -50,7 +50,7 @@ export function useUser(): {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
 
   // Restore the persisted session and follow auth changes.
   useEffect(() => {
@@ -87,14 +87,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth
       .exchangeCodeForSession(code)
       .then(({ error }) => {
-        if (error) toast({ title: "Sign-in failed", description: error.message, variant: "error" });
+        if (error)
+          notify({ title: "Sign-in failed", description: error.message, variant: "error" });
       })
       .catch((err: unknown) =>
-        toast({ title: "Sign-in failed", description: errorMessage(err), variant: "error" }),
+        notify({ title: "Sign-in failed", description: errorMessage(err), variant: "error" }),
       );
   });
   useTauriEvent("auth:error", ({ error, description }) => {
-    toast({ title: "Sign-in failed", description: description ?? error, variant: "error" });
+    notify({ title: "Sign-in failed", description: description ?? error, variant: "error" });
   });
 
   const profileQuery = useQuery({

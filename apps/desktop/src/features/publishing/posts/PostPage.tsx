@@ -13,7 +13,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, KindBadge, PostStateBadge } from "@/components/ui/Badge";
 import { Button, buttonClass } from "@/components/ui/Button";
@@ -22,6 +21,7 @@ import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { VideoEmbed } from "@/components/VideoEmbed";
 import { useUser } from "@/features/auth/AuthProvider";
+import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { copyText } from "@/lib/clipboard";
 import { postWebUrl } from "@/lib/env";
@@ -303,7 +303,7 @@ function HiddenNote({ postId }: { postId: string }) {
 
 /** Secondary actions in one place: sharing for everyone, deletion for the owner. */
 function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const remove = useDeletePostFlow(post.id);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -333,7 +333,7 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
 
   const copyLink = async () => {
     const ok = await copyText(webUrl);
-    toast(
+    notify(
       ok
         ? { title: "Link copied", variant: "success" }
         : { title: "Couldn't copy", variant: "error" },

@@ -3,9 +3,9 @@ import { cn } from "@lare/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ImagePlus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
 import {
   type PostImage,
@@ -35,7 +35,7 @@ export function PostMediaPanel({
   userId: string;
   disabled?: boolean;
 }) {
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const media = usePostMedia(postId);
@@ -69,7 +69,7 @@ export function PostMediaPanel({
     caption.isPending;
 
   const fail = (title: string) => (e: unknown) =>
-    toast({ title, description: errorMessage(e), variant: "error" });
+    notify({ title, description: errorMessage(e), variant: "error" });
 
   const move = (index: number, delta: number) => {
     const next = [...images];

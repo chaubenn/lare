@@ -121,6 +121,10 @@ going through Bunny.
   again, which is the same thing as removing Lare from that list with "-" by hand.
 - The window drags from anywhere along its top strip on sign-in, onboarding and **Set up
   recording**, not only inside the app shell.
+- **Notifications** (⌘6) is the only place the app speaks: an upload in progress, a finished or
+  failed job, a blocked microphone, an available update and every save error all land there,
+  behind one badge. Nothing flashes in a corner any more, so a failed save is silent until you
+  look — check the badge after anything that could fail.
 - Settings -> Recording: permissions show Granted after allowing Screen Recording, Microphone and
   Camera (macOS needs a restart after Screen Recording). Device pickers list displays/mics/cameras.
   Download `small.en` once — grading is unavailable without a local model.

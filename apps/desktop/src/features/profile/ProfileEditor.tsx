@@ -10,19 +10,19 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { type FormEvent, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { useToast } from "@/components/toast/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/Card";
 import { FieldError, Input, Label, Textarea, Toggle } from "@/components/ui/Field";
 import { profileQueryKey, useUser } from "@/features/auth/AuthProvider";
+import { useNotify } from "@/features/notifications/notices";
 import { errorMessage, supabase } from "@/lib/supabase";
 
 /** `/profile/edit`: photo, name, handle, bio, website, privacy. Saving returns to the profile. */
 export function ProfileEditor() {
   const { userId, profile, session } = useUser();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const [displayName, setDisplayName] = useState(profile?.display_name ?? "");
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [website, setWebsite] = useState(profile?.website ?? "");
@@ -58,7 +58,7 @@ export function ProfileEditor() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
       void queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
-      toast({ title: "Profile saved", variant: "success" });
+      notify({ title: "Profile saved", variant: "success" });
       navigate("/profile");
     },
     onError: (err) => setError(errorMessage(err)),
@@ -197,7 +197,7 @@ const FIELD = "mt-1 bg-[var(--surface)]!";
 function AvatarUploader() {
   const { userId, profile } = useUser();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { notify } = useNotify();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const upload = useMutation({
@@ -222,9 +222,9 @@ function AvatarUploader() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
-      toast({ title: "Profile picture updated", variant: "success" });
+      notify({ title: "Profile picture updated", variant: "success" });
     },
-    onError: (err) => toast({ title: errorMessage(err), variant: "error" }),
+    onError: (err) => notify({ title: errorMessage(err), variant: "error" }),
   });
 
   return (
