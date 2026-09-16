@@ -273,7 +273,9 @@ test("publish selected cloud inbox problems hands the draft to the desktop app",
   });
   await panel.getByRole("button", { name: "Create draft from selected problems" }).click();
   await expect
-    .poll(() => sw.evaluate(() => (globalThis as unknown as { __opened?: string[] }).__opened ?? []))
+    .poll(() =>
+      sw.evaluate(() => (globalThis as unknown as { __opened?: string[] }).__opened ?? []),
+    )
     .toEqual([expect.stringMatching(/^lare:\/\/drafts\/.+/)]);
   // The draft itself is still made without the desktop app running: only the hand-off needs it.
   const request = (await recorded()).find((r) => r.path.includes("publish_practice_problems"));
