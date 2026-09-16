@@ -154,6 +154,9 @@ going through Bunny.
 - **Draft stepper**: Problems -> Media -> Details -> Extras -> Review & publish. Each step
   refuses to advance while invalid; Media blocks on an active capture or a pending upload; the
   draft saves continuously, so closing the window mid-step loses nothing.
+- Open a fresh draft's **Media** step: the session card is already drawn — nothing to press. It is
+  the cover and the first slide, always; there is no star on it or on any photo, and no regenerate
+  (the problems in a session cannot change, and publishing redraws the card anyway).
 - Draft -> "Include with the post": switching the **Session card** off removes the stored card and
   drops the first slide (Preview and Photos agree); switching it back on regenerates it. **AI
   scores on the session card** (interviews with a review) draws the overall grade and the five

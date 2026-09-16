@@ -52,7 +52,6 @@ export interface PostEdit {
   showVideo: boolean;
   /** Show the interview's summary video as a slide, ahead of the full recording. */
   showDemoVideo: boolean;
-  coverMediaId: string | null;
 }
 
 /** Edit an already published post. RLS restricts the update to its owner. */
@@ -76,15 +75,7 @@ export function useDeletePost() {
 export function useUpdatePost() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      id,
-      title,
-      body,
-      visibility,
-      showVideo,
-      showDemoVideo,
-      coverMediaId,
-    }: PostEdit) => {
+    mutationFn: async ({ id, title, body, visibility, showVideo, showDemoVideo }: PostEdit) => {
       const { error } = await supabase
         .from("posts")
         .update({
@@ -93,7 +84,8 @@ export function useUpdatePost() {
           visibility,
           show_video: showVideo,
           show_demo_video: showDemoVideo,
-          cover_media_id: coverMediaId,
+          // The session card always leads a post, so nothing here picks a cover.
+          cover_media_id: null,
         })
         .eq("id", id);
       if (error) throw error;

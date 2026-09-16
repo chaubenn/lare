@@ -141,7 +141,6 @@ export function usePreviewSlides({
   demoVideoId,
   showDemoVideo,
   includeOgCard,
-  coverMediaId,
   session,
 }: {
   postId: string;
@@ -151,7 +150,6 @@ export function usePreviewSlides({
   demoVideoId: string | null;
   showDemoVideo: boolean;
   includeOgCard: boolean;
-  coverMediaId: string | null;
   session: SlidePost["sessions"];
 }): SlidePost {
   const media = usePostMedia(postId);
@@ -169,9 +167,9 @@ export function usePreviewSlides({
     show_video: showVideo,
     show_demo_video: showDemoVideo,
     include_og_card: includeOgCard,
-    cover_media_id: coverMediaId,
-    // Null when the cover is the session card (or unset): the deck falls back to `og_url`.
-    cover_url: images.find((image) => image.id === coverMediaId)?.url ?? null,
+    // The session card always leads, so the deck always falls back to `og_url`.
+    cover_media_id: null,
+    cover_url: null,
     og_url: rows.find((row) => row.kind === "og")?.url ?? null,
     thumbnail_url: null,
     demo_thumbnail_url: null,

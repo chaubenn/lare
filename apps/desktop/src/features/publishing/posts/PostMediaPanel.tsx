@@ -1,15 +1,17 @@
 import { MAX_POST_IMAGES, POST_IMAGE_MIME_TYPES } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { ChevronLeft, ChevronRight, ImagePlus, RefreshCw, Star, Trash2 } from "lucide-react";
-import { useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, ImagePlus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/toast/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { errorMessage } from "@/lib/supabase";
 import {
   type PostImage,
+  postMediaKey,
+  requestOgSnapshot,
   usePostMedia,
-  useRegenerateOgSnapshot,
   useRemovePostImage,
   useReorderPostImages,
   useSetImageCaption,
@@ -17,35 +19,48 @@ import {
 } from "./media";
 
 /**
- * The photo half of a post: add pictures, order them, caption them, and pick which one is the
- * cover. The pre-generated session card (the OG image) is always there; starring it — or any
- * photo — chooses what leads the post and what links unfurl to.
+ * The photo half of a post: add pictures, order them and caption them.
+ *
+ * The session card always leads the post and is what links unfurl to, so there is nothing to
+ * choose and no star. It is generated when the draft is opened and again at publish, and it draws
+ * the problems in the session — which cannot be added to or removed from a draft — so there is
+ * nothing a "regenerate" button could change either.
  */
 export function PostMediaPanel({
   postId,
   userId,
-  coverMediaId,
-  onCoverChange,
   disabled,
 }: {
   postId: string;
   userId: string;
-  coverMediaId: string | null;
-  onCoverChange: (mediaId: string | null) => void;
   disabled?: boolean;
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const media = usePostMedia(postId);
   const upload = useUploadPostImages(postId, userId);
   const remove = useRemovePostImage(postId);
   const reorder = useReorderPostImages(postId);
   const caption = useSetImageCaption(postId);
-  const regenerate = useRegenerateOgSnapshot(postId);
 
   const all = media.data ?? [];
   const ogImage = all.find((i) => i.kind === "og") ?? null;
   const images = all.filter((i) => i.kind !== "og");
+
+  // Draw the card the first time a draft is opened rather than waiting for publish, so the author
+  // always sees what leads their post. `og-snapshot` is idempotent, and publish regenerates it
+  // anyway once the title and body are final; asked for once per post so a failure does not loop.
+  const asked = useRef<string | null>(null);
+  const [drawn, setDrawn] = useState(false);
+  const missingOg = media.isSuccess && !ogImage;
+  useEffect(() => {
+    if (!missingOg || asked.current === postId) return;
+    asked.current = postId;
+    void requestOgSnapshot(postId)
+      .then(() => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }))
+      .finally(() => setDrawn(true));
+  }, [missingOg, postId, queryClient]);
   const busy =
     Boolean(disabled) ||
     upload.isPending ||
@@ -70,20 +85,15 @@ export function PostMediaPanel({
   };
 
   const drop = (image: PostImage) => {
-    remove.mutate(image, {
-      onSuccess: () => {
-        if (image.id === coverMediaId) onCoverChange(null);
-      },
-      onError: fail("Couldn't remove the photo"),
-    });
+    remove.mutate(image, { onError: fail("Couldn't remove the photo") });
   };
 
   return (
     <Card>
       <SectionTitle>Photos</SectionTitle>
       <p className="text-xs text-zinc-500">
-        {images.length}/{MAX_POST_IMAGES} used. Star a photo — or the session card — to make it the
-        cover; otherwise the session card leads the post.
+        {images.length}/{MAX_POST_IMAGES} used. The session card leads the post; photos follow it in
+        this order.
       </p>
 
       <div className="mt-3 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60">
@@ -96,32 +106,15 @@ export function PostMediaPanel({
           />
         ) : (
           <div className="flex aspect-video items-center justify-center px-4 text-center text-xs text-zinc-600">
-            No session card yet. Refresh to generate one and see how the post will look.
+            {drawn
+              ? "The session card could not be drawn. Publishing draws it again."
+              : "Drawing the session card…"}
           </div>
         )}
         <div className="flex items-center gap-2 border-t border-zinc-800 px-2 py-1.5">
-          <span className="min-w-0 flex-1 truncate text-xs text-zinc-400">Session card</span>
-          <IconButton
-            label={ogImage && ogImage.id === coverMediaId ? "Unset cover" : "Use as cover"}
-            active={Boolean(ogImage && ogImage.id === coverMediaId)}
-            disabled={busy || !ogImage}
-            onClick={() =>
-              ogImage && onCoverChange(ogImage.id === coverMediaId ? null : ogImage.id)
-            }
-          >
-            <Star
-              className={cn("size-3.5", ogImage && ogImage.id === coverMediaId && "fill-current")}
-            />
-          </IconButton>
-          <IconButton
-            label="Regenerate card"
-            disabled={busy || regenerate.isPending}
-            onClick={() =>
-              regenerate.mutate(undefined, { onError: fail("Couldn't regenerate the card") })
-            }
-          >
-            <RefreshCw className={cn("size-3.5", regenerate.isPending && "animate-spin")} />
-          </IconButton>
+          <span className="min-w-0 flex-1 truncate text-xs text-zinc-400">
+            Session card · cover
+          </span>
         </div>
       </div>
 
@@ -130,10 +123,7 @@ export function PostMediaPanel({
           {images.map((image, index) => (
             <li
               key={image.id}
-              className={cn(
-                "overflow-hidden rounded-lg border bg-zinc-900/60",
-                image.id === coverMediaId ? "border-zinc-400" : "border-zinc-800",
-              )}
+              className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60"
             >
               {image.url ? (
                 <img
@@ -147,14 +137,6 @@ export function PostMediaPanel({
                 </div>
               )}
               <div className="flex items-center gap-0.5 border-t border-zinc-800 px-1 py-1">
-                <IconButton
-                  label={image.id === coverMediaId ? "Unset cover" : "Use as cover"}
-                  active={image.id === coverMediaId}
-                  disabled={busy}
-                  onClick={() => onCoverChange(image.id === coverMediaId ? null : image.id)}
-                >
-                  <Star className={cn("size-3.5", image.id === coverMediaId && "fill-current")} />
-                </IconButton>
                 <IconButton
                   label="Move earlier"
                   disabled={busy || index === 0}
@@ -224,14 +206,12 @@ function IconButton({
   label,
   onClick,
   disabled,
-  active,
   danger,
   children,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  active?: boolean;
   danger?: boolean;
   children: React.ReactNode;
 }) {
@@ -244,7 +224,6 @@ function IconButton({
       disabled={disabled}
       className={cn(
         "rounded p-1 text-zinc-400 transition-colors hover:text-zinc-100 disabled:opacity-40",
-        active && "text-amber-300",
         danger && "hover:text-rose-300",
       )}
     >
