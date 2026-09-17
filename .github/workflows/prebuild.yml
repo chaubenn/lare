@@ -1,0 +1,27 @@
+name: Prebuild
+
+# Builds the desktop installers for every commit that lands on `main`, so that cutting a
+# release is a publish rather than a compile. `release.yml` looks for this workflow's run
+# against the tagged commit and uploads its artifacts directly; the ~25 minutes of Rust
+# happens here, off the critical path, while release notes are still being written.
+#
+# This also fixes the caching. `main` is the default branch, and GitHub lets every other
+# ref read the default branch's caches — so unlike the old tag-time build, the target dir
+# saved here is still there for the next commit.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Keyed by commit, not by branch: a newer push to `main` must not cancel the build whose
+  # artifacts an older commit's tag may still be waiting on.
+  group: prebuild-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  desktop:
+    uses: ./.github/workflows/desktop-build.yml
+    secrets: inherit
