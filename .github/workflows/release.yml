@@ -192,9 +192,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.create-release.outputs.tag }}
         run: |
+          set -euo pipefail
           zip=$(ls apps/extension/.output/*-chrome.zip | head -n1)
           cp "$zip" Lare-Chrome-Extension.zip
-          gh release upload "$TAG" Lare-Chrome-Extension.zip --clobber
+          # Same retry as the desktop assets: GitHub's asset endpoint does 500 sometimes.
+          for attempt in 1 2 3 4 5; do
+            if gh release upload "$TAG" Lare-Chrome-Extension.zip --clobber; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::failed to upload Lare-Chrome-Extension.zip after 5 attempts"
+              exit 1
+            fi
+            echo "::warning::upload failed (attempt $attempt); retrying in $((attempt * 15))s"
+            sleep $((attempt * 15))
+          done
 
   assemble:
     name: Attach desktop assets
@@ -272,7 +284,25 @@ jobs:
           TAG: ${{ needs.create-release.outputs.tag }}
         # Every file here is one the release is meant to carry, so there is nothing to trim
         # afterwards the way there was when the bundler uploaded its whole output directory.
-        run: gh release upload "$TAG" dist/* --clobber
+        #
+        # Retried per file. v0.5.1 died here twice: GitHub's asset endpoint answered one
+        # upload with a 500 page and tauri-action, which has no retry, threw away a finished
+        # 25 minute build over it. A flake should cost seconds.
+        run: |
+          set -euo pipefail
+          for file in dist/*; do
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "$TAG" "$file" --clobber; then
+                break
+              fi
+              if [ "$attempt" -eq 5 ]; then
+                echo "::error::failed to upload $(basename "$file") after 5 attempts"
+                exit 1
+              fi
+              echo "::warning::upload of $(basename "$file") failed (attempt $attempt); retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            done
+          done
 
   publish:
     name: Publish release

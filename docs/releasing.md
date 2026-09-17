@@ -49,6 +49,12 @@ a failed prebuild, or artifacts past their 90-day expiry — `release.yml` compi
 itself, exactly as it used to. Slower, but never broken. Both paths call the same
 `desktop-build.yml`, so the fallback cannot drift from the fast path.
 
+Uploads are retried five times with backoff, per file. v0.5.1 never shipped because of this:
+GitHub's release-asset endpoint answered one upload with a 500 page, and `tauri-action`, which
+owned the upload then and has no retry, threw away a finished 25 minute build over it — twice,
+on two separate attempts. Building and uploading are now separate steps, so a flake costs
+seconds rather than the whole compile.
+
 ## QA without a release
 
 Most fixes do not need a CI build at all. Where the compile time actually goes, cold
