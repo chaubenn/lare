@@ -246,8 +246,8 @@ test("a mock interview needs the desktop app, and the panel says so", async () =
   // Mock interviews live on their own tab, away from tracking.
   await expect(panel.getByRole("button", { name: /Start mock interview/ })).toHaveCount(0);
   await panel.getByRole("tab", { name: "Mock interview" }).click();
-  // There is no browser recording and no graded/ungraded choice any more.
-  await expect(panel.getByRole("checkbox", { name: "Transcript & AI review" })).toHaveCount(0);
+  // Transcript & AI review is on unless the author turns it off.
+  await expect(panel.getByRole("checkbox", { name: "Transcript & AI review" })).toBeChecked();
   await expect(panel.getByText(/Open the Lare desktop app/)).toBeVisible();
   await expect(panel.getByRole("button", { name: /Start mock interview/ })).toBeDisabled();
 
@@ -327,7 +327,7 @@ test("problems posted from another client drop off the panel and the badge", asy
   await problem.close();
 });
 
-const startRequest = (tabId: number | null) => ({
+const startRequest = (tabId: number | null, graded = true) => ({
   type: "START_INTERVIEW",
   problem: {
     slug: "two-sum",
@@ -339,6 +339,7 @@ const startRequest = (tabId: number | null) => ({
   },
   question: null,
   facecam: false,
+  graded,
   tabId,
 });
 
@@ -426,6 +427,7 @@ test("the desktop app records the interview: start, consent dot, pause and end r
     expect(start).toMatchObject({ kind: "interview", facecam: false, mic: true });
     // The session row exists before the desktop is asked to record: its pipeline writes to it.
     expect((await sessionWrites()).length).toBeGreaterThan(0);
+    expect((await sessionWrites())[0]?.body).toMatchObject({ graded: true });
     await expect(dotOn(problem)).toHaveCount(1);
 
     const paused = await panel.evaluate(() =>
@@ -442,6 +444,48 @@ test("the desktop app records the interview: start, consent dot, pause and end r
       .poll(() => desktop.received.find((m) => m.type === "session.end")?.sessionId)
       .toBe(start?.sessionId);
     await expect(dotOn(problem)).toHaveCount(0);
+
+    await panel.close();
+    await problem.close();
+  } finally {
+    await desktop.stop();
+  }
+});
+
+test("a video-only interview still records but saves the session ungraded", async () => {
+  await fetch(`${BASE}/__reset`);
+  await resetExtensionState();
+  const desktop = new FakeDesktop({
+    userId: USER_ID,
+    recordingCapable: true,
+    protocol: PROTOCOL_VERSION,
+  });
+  desktop.onMessage((msg, reply) => {
+    if (msg.type === "session.start")
+      reply({
+        type: "recording.state",
+        sessionId: msg.sessionId,
+        state: "recording",
+        startedAt: Date.now(),
+        message: null,
+      });
+  });
+  await desktop.start();
+  try {
+    const problem = await openProblem();
+    const panel = await openPanel();
+
+    const res = await panel.evaluate(
+      (req) => chrome.runtime.sendMessage(req),
+      startRequest(await problemTabId(), false),
+    );
+    expect(res, JSON.stringify(res)).toMatchObject({ ok: true });
+    expect(desktop.received.some((m) => m.type === "session.start")).toBe(true);
+    // The desktop pipeline reads this flag and skips transcription.
+    expect((await sessionWrites())[0]?.body).toMatchObject({ graded: false });
+
+    const ended = await panel.evaluate(() => chrome.runtime.sendMessage({ type: "END_SESSION" }));
+    expect(ended, JSON.stringify(ended)).toMatchObject({ ok: true });
 
     await panel.close();
     await problem.close();

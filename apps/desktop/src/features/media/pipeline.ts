@@ -367,8 +367,17 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
     const attached = await attachToDraft();
     if (attached) await opts.queryClient?.invalidateQueries();
 
+    // The author chose "video only" in the extension: no transcript, so no AI review either.
+    const { data: session, error: sessionError } = await supabase
+      .from("sessions")
+      .select("graded")
+      .eq("id", sessionId)
+      .maybeSingle();
+    throwIf(sessionError, "sessions select");
+    const graded = session?.graded ?? true;
+
     let vtt: string | null = null;
-    if (!opts.resume?.transcribed) {
+    if (graded && !opts.resume?.transcribed) {
       try {
         vtt = await transcribeSession({
           job,
