@@ -136,7 +136,9 @@ going through Bunny.
     until the upload is done. The post page and feed card also play it until the video is ready. The take's folder in the app data folder (`Lare/recordings`) is still
     there; once the status turns ready it is **gone** within a few seconds (or at next launch).
   - Press play on that preview, on a recording of real length (ten minutes, not ten seconds), and
-    scrub it. It is served from the loopback server, not `asset://`: over a custom scheme WebKit
+    scrub it. **Play itself must run** — a clock that only moves when you drag the timeline is the
+    failure mode of an empty `<track>` inside the player (WebKit then never leaves `HAVE_CURRENT_DATA`).
+    It is served from the loopback server, not `asset://`: over a custom scheme WebKit
     walks the file eight bytes at a time and never reaches a duration, so a long recording showed
     its first frame and then did nothing. A short one worked either way, which is why this needs a
     long take to test.

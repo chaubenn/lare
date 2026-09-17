@@ -9,12 +9,13 @@ import { mediaErrorText, type StallWatch, watchPlayback } from "@/features/media
  * This device's own copy of a video, played while the cloud copy is still processing (or failed).
  * Only the author ever has one, so viewers never see this.
  *
- * A media element that dies does it quietly: the frame stays up, the clock stays at 0:00, and
- * `controls` goes on showing a pause button, because as far as the element is concerned playback
- * was never stopped — it is just never fed. Left alone the caption underneath keeps promising the
- * cloud copy is on its way, which is the one thing that makes this failure impossible to report.
- * So both halves are watched: `error` for a pipeline that gave up, and the clock itself for one
- * that stalled without admitting it.
+ * Do not put an empty `<track>` inside the player. WebKit's `configureTextTracks` turns a captions
+ * track to `showing`, then refuses to advance `readyState` past `HAVE_CURRENT_DATA` until that
+ * track is loaded or failed. An element with no `src` stays `NotLoaded`, so play is accepted
+ * (`paused` goes false) but `potentiallyPlaying()` stays false — the frame updates when you
+ * scrub, and never otherwise. That is indistinguishable from a healthy paused video unless the
+ * clock is sampled, which is what the stall watch below does for the other failure: a pipeline
+ * that dies without an `error` event.
  */
 export function LocalPreview({
   src,
@@ -66,6 +67,7 @@ export function LocalPreview({
 
   return (
     <div className={cn("space-y-1.5", className)}>
+      {/* biome-ignore lint/a11y/useMediaCaption: an empty <track> leaves WebKit's readyState stuck at HAVE_CURRENT_DATA, so play never starts. Local previews have no caption file. */}
       <video
         key={attempt}
         ref={video}
@@ -75,9 +77,7 @@ export function LocalPreview({
         title={title}
         onPlaying={() => setProblem(null)}
         className="aspect-video w-full rounded-xl border border-zinc-800 bg-black"
-      >
-        <track kind="captions" />
-      </video>
+      />
       {problem ? (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-amber-400">
           <span className="flex items-center gap-1.5">
