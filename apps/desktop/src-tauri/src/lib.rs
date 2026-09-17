@@ -24,7 +24,7 @@ use crate::ws_server::{ServerContext, ServerEvent, WsHub};
 
 /// State shared between commands and the local server.
 pub struct AppState {
-    /// Supabase user id of the signed-in user (mirrored into `hello.ack.userId` and `/health`).
+    /// Supabase user id of the signed-in user (mirrored into `hello.ack.userId`).
     pub current_user: Arc<Mutex<Option<String>>>,
     pub ws: WsHub,
     /// Route from a `lare://` link the app was launched with, consumed once by the frontend.
@@ -71,12 +71,17 @@ fn init_tracing() {
         .unwrap_or_else(|_| EnvFilter::new("info,lare_desktop_lib=debug,lare_desktop=debug"));
     let registry = tracing_subscriber::registry().with(filter);
     // Also mirror logs to a file: when the app is launched via Launch Services its stderr goes
-    // to the unified log, which is awkward to read; /tmp/lare-app.log is always available.
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/lare-app.log")
-        .ok();
+    // to the unified log, which is awkward to read. The file lives in the user's own log
+    // directory rather than the shared /tmp, where any other local account could pre-create or
+    // symlink `lare-app.log` and read (or redirect) what the app writes.
+    let file = log_dir().and_then(|dir| {
+        std::fs::create_dir_all(&dir).ok()?;
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("lare-app.log"))
+            .ok()
+    });
     match file {
         Some(f) => registry
             .with(tracing_subscriber::fmt::layer())
@@ -88,6 +93,24 @@ fn init_tracing() {
             .init(),
         None => registry.with(tracing_subscriber::fmt::layer()).init(),
     }
+}
+
+/// Per-user log directory: `~/Library/Logs/Lare` on macOS, `%LOCALAPPDATA%\Lare\logs` on
+/// Windows, `$XDG_STATE_HOME/lare` (or `~/.local/state/lare`) elsewhere. `None` when the
+/// environment does not say where home is; logging then stays on stderr only.
+fn log_dir() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    if cfg!(target_os = "macos") {
+        return std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library/Logs/Lare"));
+    }
+    if cfg!(windows) {
+        return std::env::var_os("LOCALAPPDATA")
+            .map(|data| PathBuf::from(data).join("Lare").join("logs"));
+    }
+    if let Some(state) = std::env::var_os("XDG_STATE_HOME") {
+        return Some(PathBuf::from(state).join("lare"));
+    }
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state/lare"))
 }
 
 pub fn focus_main_window(app: &AppHandle) {

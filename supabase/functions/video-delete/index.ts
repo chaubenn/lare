@@ -34,7 +34,10 @@ Deno.serve(
       .update({ video_id: null, video_kind: "none" })
       .eq("video_id", video.id);
     const { error } = await admin.from("videos").delete().eq("id", video.id);
-    if (error) throw new HttpError(error.message, 500);
+    if (error) {
+      console.error("videos delete failed", error);
+      throw new HttpError("Could not delete video", 500);
+    }
     return json({ ok: true });
   }),
 );

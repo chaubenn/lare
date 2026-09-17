@@ -27,10 +27,37 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https:",
+        "media-src": "'self' blob: https: http://127.0.0.1:47831",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost https://*.supabase.co wss://*.supabase.co http://127.0.0.1:47831 ws://127.0.0.1:47831",
+        "frame-src": "https://player.mediadelivery.net https://iframe.mediadelivery.net",
+        "worker-src": "'self' blob:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'"
+      },
+      "devCsp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https: http://localhost:* http://127.0.0.1:*",
+        "media-src": "'self' blob: https: http://localhost:* http://127.0.0.1:*",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost https://*.supabase.co wss://*.supabase.co http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*",
+        "frame-src": "https://player.mediadelivery.net https://iframe.mediadelivery.net",
+        "worker-src": "'self' blob:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'"
+      },
       "assetProtocol": {
-        "enable": true,
-        "scope": ["$APPDATA/**", "$APPLOCALDATA/**", "$TEMP/**"]
+        "enable": false,
+        "scope": []
       }
     }
   },

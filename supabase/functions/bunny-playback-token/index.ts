@@ -18,7 +18,10 @@ Deno.serve(
       .select("id, bunny_video_id, status, duration_ms, width, height")
       .eq("id", body.videoId)
       .maybeSingle();
-    if (error) throw new HttpError(error.message, 500);
+    if (error) {
+      console.error("videos select failed", error);
+      throw new HttpError("Could not read video", 500);
+    }
     if (!video?.bunny_video_id) throw new HttpError("Video not found", 404);
 
     // Five minutes, which is what docs/privacy.md promises. The token only has to survive

@@ -244,6 +244,34 @@ fn safe_id(id: &str) -> Result<&str, String> {
     Ok(id)
 }
 
+/// `path` resolved and confirmed to live under the recordings directory.
+///
+/// Every command that takes a path from the webview goes through here. The webview renders
+/// content other users wrote, so a path it hands over is not trusted to name anything outside
+/// the recordings this app made: without the check `read_file_bytes` is a file reader and
+/// `make_thumbnail` a file writer for the whole disk. Both sides are canonicalised, so `..`,
+/// symlinks and Windows path prefixes cannot slip a file past the comparison. The file itself
+/// may not exist yet (a thumbnail about to be written, an upload marker); its directory must.
+fn under_recordings(rec: &Recorder, path: &Path) -> Result<PathBuf, String> {
+    let root = std::fs::canonicalize(rec.recordings_dir())
+        .map_err(|e| format!("recordings directory unavailable: {e}"))?;
+    let resolved = match std::fs::canonicalize(path) {
+        Ok(resolved) => resolved,
+        Err(_) => {
+            let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+                return Err("invalid path".to_string());
+            };
+            std::fs::canonicalize(parent)
+                .map_err(|e| format!("no such directory: {e}"))?
+                .join(name)
+        }
+    };
+    if !resolved.starts_with(&root) {
+        return Err("path is outside the recordings directory".to_string());
+    }
+    Ok(resolved)
+}
+
 // ---------------------------------------------------------------------------
 // Secondary windows
 // ---------------------------------------------------------------------------
@@ -283,7 +311,8 @@ pub fn focus_main(app: AppHandle) {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn media_info(path: PathBuf) -> Result<MediaInfo, String> {
+pub async fn media_info(rec: Rec<'_>, path: PathBuf) -> Result<MediaInfo, String> {
+    under_recordings(&rec, &path)?;
     tokio::task::spawn_blocking(move || lare_recording::thumbnail::probe(&path).map_err(err))
         .await
         .map_err(err)?
@@ -303,7 +332,11 @@ pub struct ThumbnailRequest {
 
 /// Write a JPEG poster frame and return its path (read it with the fs plugin to upload).
 #[tauri::command]
-pub async fn make_thumbnail(req: ThumbnailRequest) -> Result<PathBuf, String> {
+pub async fn make_thumbnail(rec: Rec<'_>, req: ThumbnailRequest) -> Result<PathBuf, String> {
+    under_recordings(&rec, &req.video_path)?;
+    if let Some(output) = &req.output {
+        under_recordings(&rec, output)?;
+    }
     tokio::task::spawn_blocking(move || {
         let output = req
             .output
@@ -359,6 +392,7 @@ pub async fn prepare_bunny_upload(rec: Rec<'_>, tus: lare_bunny::TusCredentials)
 
 #[tauri::command]
 pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Result<UploadResult, String> {
+    under_recordings(&rec, &job.path)?;
     let client = lare_bunny::http_client();
     if let Some(upload_url) = rec.join_live_upload(&job.path, &job.tus, job.resume_url.as_deref()).await? {
         return Ok(UploadResult { upload_url, size_bytes: tokio::fs::metadata(&job.path).await.map_err(err)?.len() });
@@ -433,7 +467,8 @@ pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Re
 
 /// Persist an upload URL for later resume (called by the frontend right after `create-upload`).
 #[tauri::command]
-pub fn remember_upload(path: PathBuf, upload_url: String) -> Result<(), String> {
+pub fn remember_upload(rec: Rec<'_>, path: PathBuf, upload_url: String) -> Result<(), String> {
+    under_recordings(&rec, &path)?;
     let marker = path.with_extension("upload.json");
     std::fs::write(
         marker,
@@ -565,6 +600,7 @@ pub async fn transcribe_recording(
     .await
     .map_err(|e| format!("{e:#}"))?;
     let input = job.input.clone();
+    under_recordings(&rec, &input)?;
     if !input.exists() {
         return Err(format!("{} does not exist", input.display()));
     }
@@ -593,7 +629,8 @@ pub async fn transcribe_recording(
 
 /// Read a small file (thumbnail/VTT) as bytes for uploading from the webview.
 #[tauri::command]
-pub async fn read_file_bytes(path: PathBuf) -> Result<tauri::ipc::Response, String> {
+pub async fn read_file_bytes(rec: Rec<'_>, path: PathBuf) -> Result<tauri::ipc::Response, String> {
+    under_recordings(&rec, &path)?;
     let meta = tokio::fs::metadata(&path).await.map_err(err)?;
     if meta.len() > 64 * 1024 * 1024 {
         return Err("file too large to read into memory".into());
@@ -605,14 +642,14 @@ pub async fn read_file_bytes(path: PathBuf) -> Result<tauri::ipc::Response, Stri
 /// Delete a file inside the recordings directory.
 #[tauri::command]
 pub fn delete_file(rec: Rec<'_>, path: PathBuf) -> Result<(), String> {
-    if !path.starts_with(rec.recordings_dir()) {
-        return Err("refusing to delete outside the recordings directory".into());
-    }
+    // Canonicalised on both sides: a bare `starts_with` let `<recordings>/../elsewhere` through.
+    let path = under_recordings(&rec, &path)?;
     std::fs::remove_file(&path).map_err(err)
 }
 
-/// Whether a path exists (used to detect recordings deleted outside the app).
+/// Whether a recording path exists (used to detect recordings deleted outside the app).
+/// Anything outside the recordings directory reports `false` rather than being probed.
 #[tauri::command]
-pub fn path_exists(path: PathBuf) -> bool {
-    Path::new(&path).exists()
+pub fn path_exists(rec: Rec<'_>, path: PathBuf) -> bool {
+    under_recordings(&rec, &path).is_ok_and(|p| p.exists())
 }
