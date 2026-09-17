@@ -312,11 +312,13 @@ async function startInterview(
       currentSlug: problem.slug,
       tabId,
       facecam: req.facecam,
+      graded: req.graded,
       synced: false,
     };
     session = started;
     // The desktop pipeline writes to this row when the recording finishes, so it must exist first.
-    await syncSessionStart(started, userId, true);
+    // It also reads `graded` from it to decide whether to transcribe.
+    await syncSessionStart(started, userId, started.graded);
     await syncProblemOpen(sessionId, tp, req.question);
     started.synced = true;
     tp.synced = true;
@@ -485,7 +487,7 @@ async function finishSession(): Promise<RuntimeResponse> {
         .catch(() => undefined);
     if (!userId) throw new Error("Signed out");
     if (!session.synced) {
-      await syncSessionStart(session, userId, true);
+      await syncSessionStart(session, userId, session.graded);
       for (const tp of session.problems) await syncProblemOpen(session.sessionId, tp, null);
     }
     postId = await finalizeSession(session, userId, endedAt);

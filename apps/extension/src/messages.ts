@@ -46,6 +46,8 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
     problem: ProblemInfoSchema.nullable(),
     question: QuestionDetailsSchema.nullable(),
     facecam: z.boolean().default(false),
+    /** Transcribe the recording and allow an AI review. Off: video only. */
+    graded: z.boolean().default(true),
     tabId: z.number().nullable().default(null),
   }),
   /** Load the content scripts into a LeetCode tab that has none (opened before an update). */

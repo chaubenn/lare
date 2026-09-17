@@ -25,6 +25,7 @@ export function App() {
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [facecam, setFacecam] = useState(false);
+  const [graded, setGraded] = useState(true);
   const [selected, setSelected] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>("tracking");
   const [, setTick] = useState(0);
@@ -113,6 +114,7 @@ export function App() {
         problem: reply.problem,
         question: reply.question,
         facecam,
+        graded,
         tabId: tab.id ?? null,
       }),
     );
@@ -415,6 +417,11 @@ export function App() {
                     {formatDuration(activeMs(interview.events, Date.now()))}
                   </div>
                   <p className="note">The desktop app is recording your screen and microphone.</p>
+                  <p className="muted">
+                    {interview.graded
+                      ? "Graded: transcribed locally, then AI reviewed."
+                      : "Ungraded: video only, no transcript or AI review."}
+                  </p>
                   {recording?.state === "recording" && (
                     <p className="muted">A red dot shows on the problem page while it records.</p>
                   )}
@@ -485,10 +492,26 @@ export function App() {
               ) : (
                 <>
                   <p className="muted">
-                    The Lare desktop app records your screen and microphone while you solve, then
-                    transcribes it locally for the AI review. Camera is optional.
+                    The Lare desktop app records your screen and microphone while you solve. Camera
+                    is optional.
                   </p>
                   <div className="options">
+                    <div className="option">
+                      <label className="option-row">
+                        Transcript &amp; AI review
+                        <input
+                          type="checkbox"
+                          className="switch"
+                          checked={graded}
+                          onChange={(e) => setGraded(e.target.checked)}
+                        />
+                      </label>
+                      <p className="option-hint">
+                        {graded
+                          ? "The desktop app transcribes the recording locally, then it can be AI reviewed."
+                          : "Video only: no transcript and no AI review."}
+                      </p>
+                    </div>
                     <div className="option">
                       <label className="option-row">
                         Include camera
