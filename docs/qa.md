@@ -215,6 +215,14 @@ clips. Same rules: disposable database only. Verified against the old `0010` def
 the fixture fails there on the hidden-video assertion, so it catches the regression rather than
 passing whatever it is given.
 
+`0020_post_references_stay_owned.sql` is idempotent;
+`supabase/functions/_tests/post_references.sql` is its isolated fixture. It proves a post cannot
+be pointed at another user's session or videos, or at a cover image from another post, on insert
+or on update, while the author's own rows and detaching (setting a slot to null) still work. The
+visibility helpers open a session's problems, submissions, transcript, review and clips to anyone
+who can view a post that references them, which is what made the reference itself the leak. Same
+rules: disposable database only.
+
 `0015_v1.sql` is idempotent — apply it twice against a disposable database and confirm both the
 second run and these behaviours. `supabase/functions/_tests/v1_schema.sql` is the isolated
 fixture that does exactly this; it is **not** a migration and must never be run against real data.

@@ -134,8 +134,10 @@ export function handler(
       return await fn(req);
     } catch (e) {
       if (e instanceof HttpError) return error(e.message, e.status);
+      // Anything else is a bug or an upstream failure. Its message can carry an upstream response
+      // body or a configuration name, so it goes to the logs and the caller gets a generic 500.
       console.error(e);
-      return error(e instanceof Error ? e.message : "Internal error", 500);
+      return error("Internal error", 500);
     }
   };
 }

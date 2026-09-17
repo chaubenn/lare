@@ -151,6 +151,7 @@ export function CommentsSection({
   );
 }
 
+/** One comment. Editing happens in place; the author and the post's owner can both delete. */
 function CommentRow({
   comment,
   postId,

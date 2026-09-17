@@ -1,7 +1,8 @@
 //! Local HTTP + WebSocket server on `127.0.0.1:47831`.
 //!
 //! * `GET /`               WebSocket used by the Chrome extension (protocol in `lare_core::protocol`).
-//! * `GET /health`         JSON status probe (`{"app":"lare", ...}`).
+//! * `GET /health`         JSON status probe (`{"app":"lare", ...}`). Readable by any page in the
+//!   user's browser (CORS `*`), so it says whether the app runs and nothing about who is signed in.
 //! * `GET /auth/callback`  OAuth loopback redirect; forwards the PKCE `code` to the webview.
 //! * `GET /preview/{token}` This device's copy of a recording, for the local preview (`preview`).
 //!
@@ -260,11 +261,12 @@ async fn health(State(ctx): State<ServerContext>) -> Response {
     let body = json!({
         "app": "lare",
         "version": ctx.app_version,
-        "userId": ctx.current_user(),
         "connected": ctx.hub.connected(),
     });
     let mut res = axum::Json(body).into_response();
-    // Lets the web app / extension popup probe whether the desktop app is running.
+    // Lets the web app / extension popup probe whether the desktop app is running. Anything
+    // that identifies the signed-in user stays out of this body: the header below hands it to
+    // every origin, and the extension gets the user id through `hello.ack` instead.
     res.headers_mut().insert(
         header::ACCESS_CONTROL_ALLOW_ORIGIN,
         HeaderValue::from_static("*"),
@@ -875,7 +877,10 @@ mod tests {
         let (_, body) = http_get(server.addr, "/health").await;
         let json: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert_eq!(json["connected"], true);
-        assert_eq!(json["userId"], serde_json::Value::Null);
+        assert!(
+            json.get("userId").is_none(),
+            "/health is readable by any origin and must not name the user"
+        );
 
         client.close(None).await.unwrap();
         // Give the server a moment to notice the close frame.

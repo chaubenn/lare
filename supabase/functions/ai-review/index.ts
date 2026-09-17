@@ -283,7 +283,10 @@ Deno.serve(
       .select("*")
       .single();
     if (error?.code === "42501") throw new HttpError("AI review is disabled for this session", 409);
-    if (error) throw new HttpError(`interview_reviews upsert failed: ${error.message}`, 500);
+    if (error) {
+      console.error("interview_reviews upsert failed", error);
+      throw new HttpError("Could not save the review", 500);
+    }
     return json({ review: saved, cached: false });
   }),
 );
