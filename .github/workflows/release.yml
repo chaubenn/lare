@@ -1,9 +1,16 @@
 name: Release
 
-# Push a tag `vX.Y.Z` (matching apps/desktop/src-tauri/tauri.conf.json `version`) to build signed
-# updater bundles + installers for macOS (Apple Silicon + Intel) and Windows x64, plus the Chrome
-# extension zip, and publish them as the GitHub "latest" release. The desktop app polls
+# Push a tag `vX.Y.Z` (matching apps/desktop/src-tauri/tauri.conf.json `version`) to publish the
+# signed updater bundles + installers for macOS (Apple Silicon + Intel) and Windows x64, plus the
+# Chrome extension zip, as the GitHub "latest" release. The desktop app polls
 # `releases/latest/download/latest.json` on launch and self-updates from it.
+#
+# This workflow does not normally compile anything. `prebuild.yml` already built the desktop
+# bundles when the commit landed on `main`; the job below finds that run and uploads its
+# artifacts, which turns a release from a ~25 minute wait into a ~2 minute publish. The bytes
+# users download are the same fully optimised release build as before — they were simply built
+# earlier. If a tag points at a commit that was never prebuilt (or whose artifacts have since
+# expired), the `desktop` job compiles them here instead, exactly as this workflow used to.
 #
 # `workflow_dispatch` builds everything into a draft release (never becomes "latest").
 on:
@@ -13,15 +20,11 @@ on:
 
 permissions:
   contents: write
+  # Reading another workflow run's artifacts.
+  actions: read
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0
-  # Public client configuration baked into the desktop bundle.
-  VITE_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
-  VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
-  VITE_SITE_URL: https://lare-one.vercel.app
-  VITE_BUNNY_LIBRARY_ID: "743884"
 
 jobs:
   create-release:
@@ -86,98 +89,76 @@ jobs:
           [ -n "$ID" ] || { echo "::error::could not resolve release id for $TAG"; exit 1; }
           echo "release_id=$ID" >> "$GITHUB_OUTPUT"
 
-  desktop:
-    name: Desktop (${{ matrix.name }})
-    needs: create-release
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS arm64
-            os: macos-14
-            target: aarch64-apple-darwin
-            asset: Lare-macOS-AppleSilicon.dmg
-            glob: "target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"
-          - name: macOS x64
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-            asset: Lare-macOS-Intel.dmg
-            glob: "target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"
-          - name: Windows x64
-            os: windows-2022
-            target: x86_64-pc-windows-msvc
-            asset: Lare-Windows-x64-Setup.exe
-            glob: "target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"
+  prebuilt:
+    name: Find prebuilt bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      # The Prebuild run holding this commit's desktop artifacts, or "" to build them here.
+      run_id: ${{ steps.find.outputs.run_id }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.88.0
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: release-${{ matrix.target }}
-      - run: pnpm install --frozen-lockfile
-      - name: cmake (macOS)
-        if: runner.os == 'macOS'
-        run: brew install cmake || true
-      - name: Native deps (prebuilt ffmpeg, cargo env)
-        env:
-          RUST_TARGET_TRIPLE: ${{ matrix.target }}
-        run: node scripts/setup-native-deps.mjs
-      - name: Stable macOS signing identity (when configured)
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        # macOS keys camera/mic/screen permissions to the code signature. Unsigned builds get a new
-        # one every time, so each update revokes them. Only exported when set: an empty
-        # APPLE_CERTIFICATE makes the bundler fail at "security import". See docs/releasing.md.
-        run: |
-          if [ -z "$APPLE_CERTIFICATE" ]; then
-            echo "::warning::APPLE_CERTIFICATE unset: macOS permissions reset on every update"
-            exit 0
-          fi
-          {
-            echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
-            echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
-            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
-          } >> "$GITHUB_ENV"
-      - name: Build, sign updater bundles and attach installers
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Updater signing (minisign). The matching public key is in tauri.conf.json.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Notarisation stays off; it additionally needs APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID.
-        with:
-          projectPath: apps/desktop
-          tauriScript: pnpm tauri
-          args: --target ${{ matrix.target }}
-          releaseId: ${{ needs.create-release.outputs.release_id }}
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
-      - name: Attach stable-named installer
-        shell: bash
+      - name: Locate the Prebuild run for this commit
+        id: find
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.create-release.outputs.tag }}
+          # Every artifact a release needs; a partial run is no use to us.
+          WANTED: desktop-aarch64-apple-darwin desktop-x86_64-apple-darwin desktop-x86_64-pc-windows-msvc
         run: |
-          shopt -s nullglob
-          files=( ${{ matrix.glob }} )
-          if [ ${#files[@]} -eq 0 ]; then echo "::error::no installer matched ${{ matrix.glob }}"; exit 1; fi
-          cp "${files[0]}" "${{ matrix.asset }}"
-          gh release upload "$TAG" "${{ matrix.asset }}" --clobber
+          set -uo pipefail
+          run_id=""
+          # Tagging straight after a merge is normal, so the prebuild is often still running.
+          # Waiting for it beats duplicating the same 25 minutes of compilation here.
+          deadline=$(( SECONDS + 45 * 60 ))
+          while :; do
+            info=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/prebuild.yml/runs?head_sha=${GITHUB_SHA}&per_page=1" \
+              --jq '(.workflow_runs[0] // {}) | "\(.id // "")|\(.status // "")|\(.conclusion // "")"' 2>/dev/null) || info="||"
+            id=${info%%|*}; rest=${info#*|}; status=${rest%%|*}; conclusion=${rest##*|}
+
+            if [ -z "$id" ]; then
+              echo "::notice::No Prebuild run for ${GITHUB_SHA} — the desktop bundles will be built in this run."
+              break
+            fi
+            if [ "$status" != "completed" ]; then
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "::warning::Prebuild run $id still $status after 45 min — building here instead."
+                break
+              fi
+              echo "Prebuild run $id is $status; waiting 30s"
+              sleep 30
+              continue
+            fi
+            if [ "$conclusion" != "success" ]; then
+              echo "::warning::Prebuild run $id concluded $conclusion — building here instead."
+              break
+            fi
+
+            # Artifacts expire (90 days by default), which matters when re-tagging an old commit.
+            have=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired | not) | .name')
+            missing=""
+            for want in $WANTED; do
+              grep -qx "$want" <<<"$have" || missing="$missing $want"
+            done
+            if [ -n "$missing" ]; then
+              echo "::warning::Prebuild run $id is missing artifacts:$missing — building here instead."
+              break
+            fi
+
+            echo "::notice::Reusing desktop bundles from Prebuild run $id."
+            run_id="$id"
+            break
+          done
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: Desktop
+    needs: prebuilt
+    # Only when the commit has no usable prebuild. The reusable workflow is the same one
+    # prebuild.yml calls, so the fallback cannot drift from the fast path.
+    if: needs.prebuilt.outputs.run_id == ''
+    uses: ./.github/workflows/desktop-build.yml
+    secrets: inherit
 
   extension:
     name: Chrome extension
@@ -215,16 +196,94 @@ jobs:
           cp "$zip" Lare-Chrome-Extension.zip
           gh release upload "$TAG" Lare-Chrome-Extension.zip --clobber
 
+  assemble:
+    name: Attach desktop assets
+    needs: [create-release, prebuilt, desktop]
+    # `desktop` is skipped on the fast path, which `always()` lets us treat as success.
+    if: >-
+      always() && needs.create-release.result == 'success' && needs.prebuilt.result == 'success'
+      && (needs.desktop.result == 'success' || needs.desktop.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download desktop bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: dist
+          # The prebuild run on `main`, or this run when the fallback build ran.
+          run-id: ${{ needs.prebuilt.outputs.run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Write latest.json
+        env:
+          VERSION: ${{ needs.create-release.outputs.version }}
+        # tauri-action writes this manifest itself when it owns the upload. It no longer does,
+        # because the bundles are built before a release exists — so assemble it here from the
+        # .sig files that shipped beside each updater bundle. The URLs point at
+        # `releases/latest/download/...` rather than the tag, which is what the app's configured
+        # updater endpoint resolves.
+        run: |
+          set -euo pipefail
+          ls -l dist
+          python3 - <<'PY'
+          import datetime, glob, json, os, pathlib
+
+          dist = pathlib.Path("dist")
+          base = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/releases/latest/download"
+
+          setup = sorted(glob.glob("dist/Lare_*_x64-setup.exe"))
+          if not setup:
+              raise SystemExit("::error::no Windows updater bundle in dist")
+          windows = os.path.basename(setup[0])
+
+          def entry(name):
+              sig = dist / f"{name}.sig"
+              if not (dist / name).is_file() or not sig.is_file():
+                  raise SystemExit(f"::error::missing {name} or its .sig in dist")
+              return {"signature": sig.read_text().strip(), "url": f"{base}/{name}"}
+
+          arm, intel = entry("Lare_aarch64.app.tar.gz"), entry("Lare_x64.app.tar.gz")
+          win = entry(windows)
+          now = datetime.datetime.now(datetime.timezone.utc)
+
+          doc = {
+              "version": os.environ["VERSION"],
+              "notes": "",
+              "pub_date": now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+              # The bare `darwin-*`/`windows-x86_64` keys are what the updater reads; the
+              # suffixed aliases mirror what tauri-action used to emit. The old `-msi` entry is
+              # gone: it pointed at an installer the previous publish step deleted anyway.
+              "platforms": {
+                  "darwin-aarch64": arm,
+                  "darwin-aarch64-app": arm,
+                  "darwin-x86_64": intel,
+                  "darwin-x86_64-app": intel,
+                  "windows-x86_64": win,
+                  "windows-x86_64-nsis": win,
+              },
+          }
+          (dist / "latest.json").write_text(json.dumps(doc, indent=2) + "\n")
+          print(json.dumps({k: v["url"] for k, v in doc["platforms"].items()}, indent=2))
+          PY
+      - name: Upload to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        # Every file here is one the release is meant to carry, so there is nothing to trim
+        # afterwards the way there was when the bundler uploaded its whole output directory.
+        run: gh release upload "$TAG" dist/* --clobber
+
   publish:
     name: Publish release
-    needs: [create-release, desktop, extension]
+    needs: [create-release, assemble, extension]
     # Tag pushes become the public "latest" release (what the in-app updater reads).
     # Manual runs stay as drafts for inspection.
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify updater manifest and undraft
+      - name: Verify assets and undraft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.create-release.outputs.tag }}
@@ -234,18 +293,3 @@ jobs:
             grep -qx "$required" assets.txt || { echo "::error::missing asset $required"; exit 1; }
           done
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
-      - name: Trim duplicate assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.create-release.outputs.tag }}
-        run: |
-          # Keep only what people need to run the app — the four stable installers — plus
-          # latest.json and the versioned updater artifacts it points at (setup exe + .sig,
-          # .app.tar.gz + .sig). Everything else (duplicate dmgs, msi, raw extension zip) goes.
-          for asset in $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'); do
-            case "$asset" in
-              latest.json|Lare-macOS-*|Lare-Windows-x64-Setup.exe|Lare-Chrome-Extension.zip) continue ;;
-              *_x64-setup.exe|*_x64-setup.exe.sig|*.app.tar.gz|*.app.tar.gz.sig) continue ;;
-              *) gh release delete-asset "$TAG" "$asset" --repo "$GITHUB_REPOSITORY" --yes ;;
-            esac
-          done

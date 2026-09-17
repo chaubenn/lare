@@ -7,9 +7,9 @@ has been through the full CI matrix. `dev` is the shared integration branch.
 
 ```
 feature work ──▶ dev ──(PR)──▶ main ──(tag)──▶ release
-                 │  │           │
+                 │  │           │   └─prebuild─┘
                  │  └─(dev tag)─┴──▶ dev release (prerelease, QA only)
-            fast CI (~3 min)   full CI (~10 min)
+            fast CI (~3 min)   full CI (~10 min)   publish (~2 min)
 ```
 
 - Push to `dev` freely. `ci-dev.yml` runs biome, `tsc`, the `@lare/shared` unit tests and
@@ -19,14 +19,41 @@ feature work ──▶ dev ──(PR)──▶ main ──(tag)──▶ release
   macOS and Windows, the Playwright extension e2e, and production builds of the web app
   and the extension. This is the ~10 minute (warm) gate, and it is paid once per release rather
   than once per commit.
+- Landing on `main` also starts `prebuild.yml`, which builds the three desktop installers
+  for that commit and keeps them as artifacts. Tagging later publishes those bytes rather
+  than compiling again — see [Where the time goes](#where-the-time-goes).
 - Never push straight to `main`. The full matrix is the only thing standing between a
   commit and a signed build on someone's machine.
 
+## Where the time goes
+
+A release used to be a ~26 minute wait, because pushing the tag was what started the Rust
+build. It no longer is. `prebuild.yml` builds the desktop bundles when the commit lands on
+`main`, and `release.yml` finds that run and uploads its artifacts — so the tag itself costs
+about two minutes. The installers users download are the same fully optimised release build
+as before; they were just built earlier.
+
+Two things follow from that:
+
+- **The wait moved, it did not vanish.** Tag immediately after the merge and `release.yml`
+  simply waits for the prebuild to finish (up to 45 minutes) instead of duplicating it. The
+  gain is real only if you let the prebuild run while you do something else — writing the
+  release notes, for instance.
+- **The prebuild gets faster; the old tag build never did.** GitHub scopes Actions caches by
+  ref and lets any ref read the default branch's, so a cache saved from a tag was unreadable
+  by the next tag — every release before this compiled from scratch. Prebuilds run on `main`,
+  so their cache is the one the next prebuild restores.
+
+If a tag points at a commit with no usable prebuild — a commit that never landed on `main`,
+a failed prebuild, or artifacts past their 90-day expiry — `release.yml` compiles the bundles
+itself, exactly as it used to. Slower, but never broken. Both paths call the same
+`desktop-build.yml`, so the fallback cannot drift from the fast path.
+
 ## QA without a release
 
-Most fixes do not need a CI build at all. Where the wait actually goes (v0.4.4 release run):
-Intel Mac 34 min, Windows 27 min, Apple Silicon 17 min, extension under 1 min. The `dev ->
-main` PR CI is about 9 minutes warm.
+Most fixes do not need a CI build at all. Where the compile time actually goes, cold
+(v0.5.1 prebuild, all three in parallel): Intel Mac 26 min, Windows 26 min, Apple Silicon
+11 min, extension under 1 min. The `dev -> main` PR CI is about 9 minutes warm.
 
 - **`pnpm bundle`** builds this checkout into `out/`: `out/extension` (exactly what the release
   zip contains; load it unpacked, after removing the dev build, which shares its id) and the
@@ -73,21 +100,29 @@ exist on the default branch, and `dev-release.yml` lives only on `dev`.
 
 ## Cutting a release
 
-1. Bump the version in **all four** files — they must agree, and the tag must match them:
+1. Bump the version in **all five** places — they must agree, and the tag must match them:
    - `apps/desktop/package.json`
    - `apps/desktop/src-tauri/tauri.conf.json`  ← the workflow reads the tag check from here
    - `apps/desktop/src-tauri/Cargo.toml`
+   - `Cargo.lock`, the `lare-desktop` entry — easy to forget, and a stale one shows up as a
+     lockfile diff in the middle of a release build
    - `apps/extension/package.json` — the extension carries the same number as the app it
      talks to, even when nothing in it changed, so a support question only ever needs one
      version.
-2. Merge `dev` into `main` via the PR.
-3. `git tag vX.Y.Z && git push origin vX.Y.Z`.
+   The bump has to be in the commit that lands on `main`, because that is the commit the
+   prebuild compiles and the tag then publishes.
+2. Merge `dev` into `main` via the PR. `prebuild.yml` starts building the desktop bundles.
+3. `git tag vX.Y.Z && git push origin vX.Y.Z`, once the prebuild is green.
 
-`release.yml` then builds installers for macOS (Apple Silicon + Intel) and Windows x64 and
-the extension zip, signs the updater bundles with `TAURI_SIGNING_PRIVATE_KEY`, writes
-`latest.json`, and publishes the GitHub release as **latest**. Running the workflow with
-`workflow_dispatch` instead produces a draft that is never marked latest — use that to
-inspect a build without shipping it.
+`release.yml` then uploads the prebuilt installers for macOS (Apple Silicon + Intel) and
+Windows x64, builds the extension zip, writes `latest.json` from the minisign signatures the
+bundler produced alongside each updater bundle, and publishes the GitHub release as
+**latest**. Running the workflow with `workflow_dispatch` instead produces a draft that is
+never marked latest — use that to inspect a build without shipping it.
+
+The release carries exactly eleven assets: four stable-named downloads, `latest.json`, and
+the three updater bundles with their `.sig` files. Nothing else is uploaded, so nothing has
+to be deleted afterwards.
 
 If the tag and `tauri.conf.json` disagree, the workflow fails at the first step with the
 mismatch printed. Fix the version, delete the tag, re-tag.
@@ -120,7 +155,7 @@ right-click-Open / Windows SmartScreen note that `release.yml` already writes.
 
 ## Release assets
 
-The publish job trims the release down to exactly what is needed. Keep it that way:
+The release carries exactly what is needed and nothing more. Keep it that way:
 
 | Asset | Why it is there |
 | --- | --- |
@@ -132,8 +167,9 @@ The publish job trims the release down to exactly what is needed. Keep it that w
 | `*_x64-setup.exe` + `.sig` | **Do not delete.** `latest.json` points at these by name |
 | `*.app.tar.gz` + `.sig` | **Do not delete.** Same — this is the macOS updater bundle |
 
-Everything else — duplicate versioned dmgs, the msi, the raw wxt extension zip — is
-deleted automatically by the "Trim duplicate assets" step.
+Everything else the bundler produces — duplicate versioned dmgs, the msi, the raw wxt
+extension zip — is simply never uploaded. `desktop-build.yml` stages the files above and
+only those, so there is no trimming step to go wrong.
 
 The versioned updater artifacts look redundant next to the stable names, and they are the
 one thing on this list that is tempting to remove. They are what `tauri-plugin-updater`
