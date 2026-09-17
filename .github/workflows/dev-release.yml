@@ -181,8 +181,7 @@ jobs:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
-          releaseId: ${{ needs.create-release.outputs.release_id }}
-          includeUpdaterJson: false
+          # Build only. Attach with `gh` below — same GitHub asset-API flake as release.yml.
       - name: Attach stable-named installer
         shell: bash
         env:

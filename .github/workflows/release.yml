@@ -29,7 +29,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      release_id: ${{ steps.create.outputs.release_id }}
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
     steps:
@@ -74,17 +73,16 @@ jobs:
           https://github.com/chaubenn/lare#install
           EOF
           fi
-          # Drafts are not resolvable via /releases/tags/{tag}; look the id up in the list.
-          # GitHub briefly reports a temporary `untagged-*` tag_name right after creation,
-          # so retry until the real tag shows up (or time out).
+          # Drafts are not resolvable via /releases/tags/{tag} for a few seconds after
+          # create (html_url is `untagged-*` even when tag_name is set). Wait until the
+          # tag_name shows up in the list so later `gh release upload` calls do not 404.
           ID=""
           for attempt in 1 2 3 4 5 6; do
             ID=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
             [ -n "$ID" ] && break
             sleep 5
           done
-          [ -n "$ID" ] || { echo "::error::could not resolve release id for $TAG"; exit 1; }
-          echo "release_id=$ID" >> "$GITHUB_OUTPUT"
+          [ -n "$ID" ] || { echo "::error::draft $TAG did not become visible"; exit 1; }
 
   desktop:
     name: Desktop (${{ matrix.name }})
@@ -152,7 +150,7 @@ jobs:
             echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
             echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
           } >> "$GITHUB_ENV"
-      - name: Build, sign updater bundles and attach installers
+      - name: Build and sign updater bundles
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -164,20 +162,44 @@ jobs:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
-          releaseId: ${{ needs.create-release.outputs.release_id }}
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
-      - name: Attach stable-named installer
+          # Do not pass releaseId. tauri-action's octokit uploader 500s on this repo
+          # (GitHub unicorn HTML, "Error saving asset", "Error creating asset temp dir")
+          # when three matrix jobs post large updater bundles at once. Attach with `gh`.
+      - name: Attach installer and updater artifacts
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.create-release.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+          ASSET: ${{ matrix.asset }}
+          GLOB: ${{ matrix.glob }}
         run: |
+          set -euo pipefail
           shopt -s nullglob
-          files=( ${{ matrix.glob }} )
-          if [ ${#files[@]} -eq 0 ]; then echo "::error::no installer matched ${{ matrix.glob }}"; exit 1; fi
-          cp "${files[0]}" "${{ matrix.asset }}"
-          gh release upload "$TAG" "${{ matrix.asset }}" --clobber
+          files=( $GLOB )
+          if [ ${#files[@]} -eq 0 ]; then echo "::error::no installer matched $GLOB"; exit 1; fi
+          cp "${files[0]}" "$ASSET"
+          upload=( "$ASSET" )
+          macos=( "target/${TARGET}/release/bundle/macos/"*.app.tar.gz
+                  "target/${TARGET}/release/bundle/macos/"*.app.tar.gz.sig )
+          nsis=( "target/${TARGET}/release/bundle/nsis/"*-setup.exe
+                 "target/${TARGET}/release/bundle/nsis/"*-setup.exe.sig )
+          upload+=( "${macos[@]}" "${nsis[@]}" )
+          if [ ${#upload[@]} -lt 3 ]; then
+            echo "::error::missing updater artifacts for $TARGET (got: ${upload[*]})"
+            find "target/${TARGET}/release/bundle" -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+          echo "Uploading: ${upload[*]}"
+          for attempt in 1 2 3 4 5 6; do
+            if gh release upload "$TAG" "${upload[@]}" --clobber; then
+              exit 0
+            fi
+            echo "::warning::upload attempt $attempt failed; retrying"
+            sleep $((attempt * 15))
+          done
+          echo "::error::gh release upload failed after retries"
+          exit 1
 
   extension:
     name: Chrome extension
@@ -224,13 +246,57 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify updater manifest and undraft
+      - name: Write latest.json, verify assets, undraft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.create-release.outputs.tag }}
         run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          mkdir -p sigs
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -p '*.sig' -D sigs
+          python3 - <<'PY'
+          import json, os, pathlib
+          from datetime import datetime, timezone
+          tag = os.environ["TAG"]
+          version = tag[1:] if tag.startswith("v") else tag
+          repo = os.environ["GITHUB_REPOSITORY"]
+          base = f"https://github.com/{repo}/releases/latest/download"
+          def entry(filename: str, sigfile: str) -> dict:
+              sig = pathlib.Path("sigs", sigfile).read_text().strip()
+              if not sig:
+                  raise SystemExit(f"empty signature {sigfile}")
+              return {"signature": sig, "url": f"{base}/{filename}"}
+          darwin_arm = entry("Lare_aarch64.app.tar.gz", "Lare_aarch64.app.tar.gz.sig")
+          darwin_x64 = entry("Lare_x64.app.tar.gz", "Lare_x64.app.tar.gz.sig")
+          win = entry(f"Lare_{version}_x64-setup.exe", f"Lare_{version}_x64-setup.exe.sig")
+          now = datetime.now(timezone.utc)
+          pub = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{int(now.microsecond / 1000):03d}Z"
+          pathlib.Path("latest.json").write_text(
+              json.dumps(
+                  {
+                      "version": version,
+                      "notes": "",
+                      "pub_date": pub,
+                      "platforms": {
+                          "darwin-aarch64": darwin_arm,
+                          "darwin-aarch64-app": darwin_arm,
+                          "darwin-x86_64": darwin_x64,
+                          "darwin-x86_64-app": darwin_x64,
+                          "windows-x86_64": win,
+                          "windows-x86_64-nsis": win,
+                      },
+                  },
+                  indent=2,
+              )
+              + "\n"
+          )
+          PY
+          gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | tee assets.txt
-          for required in latest.json Lare-macOS-AppleSilicon.dmg Lare-macOS-Intel.dmg Lare-Windows-x64-Setup.exe Lare-Chrome-Extension.zip; do
+          for required in latest.json Lare-macOS-AppleSilicon.dmg Lare-macOS-Intel.dmg Lare-Windows-x64-Setup.exe Lare-Chrome-Extension.zip \
+            Lare_aarch64.app.tar.gz Lare_aarch64.app.tar.gz.sig Lare_x64.app.tar.gz Lare_x64.app.tar.gz.sig \
+            "Lare_${VERSION}_x64-setup.exe" "Lare_${VERSION}_x64-setup.exe.sig"; do
             grep -qx "$required" assets.txt || { echo "::error::missing asset $required"; exit 1; }
           done
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

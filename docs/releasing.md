@@ -84,10 +84,11 @@ exist on the default branch, and `dev-release.yml` lives only on `dev`.
 3. `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 `release.yml` then builds installers for macOS (Apple Silicon + Intel) and Windows x64 and
-the extension zip, signs the updater bundles with `TAURI_SIGNING_PRIVATE_KEY`, writes
-`latest.json`, and publishes the GitHub release as **latest**. Running the workflow with
-`workflow_dispatch` instead produces a draft that is never marked latest — use that to
-inspect a build without shipping it.
+the extension zip, signs the updater bundles with `TAURI_SIGNING_PRIVATE_KEY`, attaches
+them with `gh release upload` (tauri-action's own GitHub uploader 500s on large parallel
+uploads), writes `latest.json`, and publishes the GitHub release as **latest**. Running
+the workflow with `workflow_dispatch` instead produces a draft that is never marked
+latest — use that to inspect a build without shipping it.
 
 If the tag and `tauri.conf.json` disagree, the workflow fails at the first step with the
 mismatch printed. Fix the version, delete the tag, re-tag.
