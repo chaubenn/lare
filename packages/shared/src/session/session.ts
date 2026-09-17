@@ -69,6 +69,11 @@ export const ActiveSessionSchema = z.object({
   /** Tab that started the session (used to scope UI). */
   tabId: z.number().nullable(),
   facecam: z.boolean().default(false),
+  /**
+   * Transcript & AI review. Defaults to on, which is what every interview did before the choice
+   * came back, so state saved by those builds keeps its meaning.
+   */
+  graded: z.boolean().default(true),
   /** Whether the Supabase `sessions` row exists yet. */
   synced: z.boolean().default(false),
 });
