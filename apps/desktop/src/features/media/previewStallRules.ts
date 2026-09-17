@@ -6,6 +6,12 @@
  * reports nothing at all: `paused` stays false, the poster frame stays up, and the clock stays
  * where it was. That is indistinguishable from a healthy paused video unless the clock is
  * sampled, which is what this does.
+ *
+ * There are two shapes of "never fed", and the element looks different in each. A player that
+ * was handed the file and then lost the pipeline sits at `readyState` 4 with a frozen clock. One
+ * whose request never came back — the preview server gone, the local copy swept away underneath
+ * it — sits at `readyState` 0 or 1 with nothing buffered and a clock that has never left zero.
+ * Both are watched, because both leave the caption underneath promising a cloud copy is coming.
  */
 
 /** The slice of `HTMLMediaElement` the rule reads. */
@@ -15,40 +21,63 @@ export interface PlaybackSample {
   /** `HAVE_CURRENT_DATA` (2) and up mean the element has something it could be showing. */
   readyState: number;
   currentTime: number;
+  /** End of the last buffered range: how much of the file the element has actually been handed. */
+  buffered?: number;
 }
 
-/** The last time the clock was seen to move, and when that was. */
+/** The last time the element was seen to make progress, and when that was. */
 export interface StallWatch {
   at: number;
   time: number;
+  /** Buffered end at that moment — the only progress a player with nothing to show can make. */
+  loaded: number;
+  readyState: number;
 }
 
 export interface StallVerdict {
   watch: StallWatch | null;
-  /** Set once the clock has been still for `stallMs` while playback was meant to be running. */
+  /** Set once nothing has moved for the grace period while playback was meant to be running. */
   problem: string | null;
 }
 
+/** Grace for an element that has data: it should be spending it. */
 export const STALL_MS = 4000;
+/**
+ * Grace for an element that has none yet. Longer, because opening a file and decoding the first
+ * frame is legitimately not instant — but this is a local file over loopback, so a spell this
+ * long with nothing buffered and no change of `readyState` is not slowness.
+ */
+export const LOADING_MS = 10_000;
 
 /**
  * Advance the watch by one sample. `problem` is only ever set for a video that believes it is
- * playing — buffering (`readyState < 2`), pausing and ending all reset the watch instead, so
- * ordinary use never trips it.
+ * playing — pausing and ending reset the watch instead — and only once it has stopped making any
+ * kind of progress: the clock for a player that has data, what it has buffered for one that does
+ * not. Ordinary buffering moves one or the other, so ordinary use never trips it.
  */
 export function watchPlayback(
   sample: PlaybackSample,
   previous: StallWatch | null,
   now: number,
   stallMs: number = STALL_MS,
+  loadingMs: number = LOADING_MS,
 ): StallVerdict {
-  if (sample.paused || sample.ended || sample.readyState < 2) {
+  if (sample.paused || sample.ended) {
     return { watch: null, problem: null };
   }
-  if (!previous || previous.time !== sample.currentTime) {
-    return { watch: { at: now, time: sample.currentTime }, problem: null };
+  const loaded = sample.buffered ?? 0;
+  const moved =
+    !previous ||
+    previous.time !== sample.currentTime ||
+    previous.loaded !== loaded ||
+    previous.readyState !== sample.readyState;
+  if (moved) {
+    return {
+      watch: { at: now, time: sample.currentTime, loaded, readyState: sample.readyState },
+      problem: null,
+    };
   }
-  if (now - previous.at < stallMs) {
+  if (now - previous.at < (sample.readyState < 2 ? loadingMs : stallMs)) {
     return { watch: previous, problem: null };
   }
   return {

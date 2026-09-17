@@ -3,7 +3,7 @@ import type { Video } from "@lare/supabase-types";
 import { useQuery } from "@tanstack/react-query";
 import { LoaderCircle, Video as VideoIcon } from "lucide-react";
 import { LocalPreview } from "@/components/LocalPreview";
-import { useLocalVideoSrc } from "@/features/media/localCopies";
+import { useLocalVideoSrc, useRecheckLocalVideo } from "@/features/media/localCopies";
 import { env } from "@/lib/env";
 import { invokeFunction } from "@/lib/supabase";
 
@@ -51,8 +51,11 @@ export function VideoEmbed({
   const libraryId = video.library_id || env.VITE_BUNNY_LIBRARY_ID;
   const playback = usePlaybackUrl(video);
   const localSrc = useLocalVideoSrc(video.id, video.status);
+  const recheckLocal = useRecheckLocalVideo(video.id);
   if (video.status !== "ready" && localSrc) {
-    return <LocalPreview src={localSrc} status={video.status} title={title} />;
+    return (
+      <LocalPreview src={localSrc} status={video.status} title={title} onReload={recheckLocal} />
+    );
   }
   if (video.status === "ready" && video.bunny_video_id) {
     if (playback.isPending) {

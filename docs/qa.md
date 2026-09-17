@@ -140,6 +140,11 @@ going through Bunny.
     walks the file eight bytes at a time and never reaches a duration, so a long recording showed
     its first frame and then did nothing. A short one worked either way, which is why this needs a
     long take to test.
+  - The preview must never sit there silently failing. Quit the app while the draft is open (the
+    preview server goes with it) and press play: within a few seconds the player says it is not
+    being fed and offers **Reload**, rather than going on promising the cloud copy is coming.
+    Reload re-checks the file, so if the local copy has already been swept away the preview gives
+    way to the processing placeholder instead of a dead player.
   - Pull the network cable mid-upload. The upload must fail visibly, the local source must be
     **kept**, and the draft's Media step must offer a retry that works.
 - Mock interview started from the extension: right after stop the draft and the session page play

@@ -5,7 +5,7 @@
 
 import type { Video } from "@lare/supabase-types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useUser } from "@/features/auth/AuthProvider";
 import { recorder } from "@/lib/recorder";
 import { supabase } from "@/lib/supabase";
@@ -38,6 +38,18 @@ export function useLocalVideoSrc(
     },
   });
   return notReady ? (query.data ?? null) : null;
+}
+
+/**
+ * Ask again where this device's copy of `videoId` is. What the preview plays is a URL for a file
+ * that the cleanup sweep can delete underneath it, so a preview that has stopped being fed has to
+ * be able to re-check rather than reload a source that no longer points at anything.
+ */
+export function useRecheckLocalVideo(videoId: string | null | undefined): () => void {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: [...localCopiesKey, videoId] });
+  }, [queryClient, videoId]);
 }
 
 /** Delete local recordings whose cloud video is ready or gone. Returns how many were removed. */
