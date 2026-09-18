@@ -25,6 +25,10 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Not every job here checks the repo out — `assemble` only downloads artifacts — and
+  # without this `gh` tries to infer the repo from a git remote that is not there, failing
+  # with "not a git repository" no matter how many times it is retried.
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   create-release:
