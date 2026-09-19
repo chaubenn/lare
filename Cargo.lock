@@ -4331,7 +4331,7 @@ dependencies = [
 
 [[package]]
 name = "lare-desktop"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
