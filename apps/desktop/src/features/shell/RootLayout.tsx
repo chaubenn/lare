@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router";
+import { Toaster } from "@/features/notifications/Toaster";
 import { takeInitialDeeplink, useTauriEvent } from "@/lib/tauri";
 
-/** Route-level listeners that need the router: deep links (`lare://...`). */
+/** Route-level listeners that need the router: deep links (`lare://...`), and the app's toasts. */
 export function RootLayout() {
   const navigate = useNavigate();
 
@@ -23,5 +24,10 @@ export function RootLayout() {
     };
   }, [navigate]);
 
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <Toaster />
+    </>
+  );
 }

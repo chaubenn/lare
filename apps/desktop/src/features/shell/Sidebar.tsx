@@ -3,7 +3,6 @@ import { Emblem, Wordmark } from "@lare/ui/brand";
 import { motion } from "motion/react";
 import { NavLink } from "react-router";
 import { CountBadge } from "@/components/ui/Badge";
-import { useUnreadNoticeCount } from "@/features/notifications/notices";
 import { useUnreadNotificationCount } from "@/features/notifications/queries";
 import { useDrafts } from "@/features/publishing/drafts/queries";
 import { useFollowRequests } from "@/features/requests/queries";
@@ -13,12 +12,11 @@ export function Sidebar() {
   const drafts = useDrafts();
   const requests = useFollowRequests();
   const unread = useUnreadNotificationCount();
-  const unreadNotices = useUnreadNoticeCount();
   const counts: Partial<Record<string, number>> = {
     "/drafts": drafts.data?.length ?? 0,
     "/friends": requests.data?.length ?? 0,
-    // One badge for both halves of the page: what people did, and what the app needs to say.
-    "/notifications": (unread.data ?? 0) + unreadNotices,
+    // What people did. The app's own alerts are toasts and never reach this badge.
+    "/notifications": unread.data ?? 0,
   };
 
   return (
