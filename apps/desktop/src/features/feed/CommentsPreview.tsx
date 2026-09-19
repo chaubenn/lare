@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
+import { CommentText } from "@/features/publishing/posts/Mentions";
 import type { PostComment } from "@/features/publishing/posts/social";
 
 /**
@@ -58,7 +59,7 @@ function CommentPreview({ comment }: { comment: PostComment }) {
         ) : (
           <span className="font-semibold text-zinc-200">{name}</span>
         )}{" "}
-        {comment.body}
+        <CommentText body={comment.body} />
       </p>
     </li>
   );

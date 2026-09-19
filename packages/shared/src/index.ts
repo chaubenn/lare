@@ -15,5 +15,6 @@ export * from "./session/protocol";
 export * from "./session/session";
 export * from "./session/skills";
 export * from "./session/timer";
+export * from "./social/mentions";
 export * from "./social/notifications";
 export * from "./social/postState";

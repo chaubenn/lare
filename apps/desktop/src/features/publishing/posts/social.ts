@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { postKey } from "./queries";
 
 const COMMENT_SELECT =
-  "id, post_id, user_id, body, edited_at, created_at, profiles!post_comments_user_id_fkey(handle, display_name, avatar_url)" as const;
+  "id, post_id, user_id, parent_id, body, edited_at, created_at, profiles!post_comments_user_id_fkey(handle, display_name, avatar_url)" as const;
 
 function commentsQuery(postId: string) {
   return supabase
@@ -85,7 +85,8 @@ export function useComments(postId: string) {
 }
 
 /**
- * The first few comments of each post (oldest first), for the feed card's inline preview.
+ * The first few top-level comments of each post (oldest first), for the feed card's inline preview.
+ * Replies stay on the post page, where they sit under the comment they answer.
  * One query for the whole page; posts with fewer comments simply come back shorter.
  */
 export const FEED_COMMENT_PREVIEW = 3;
@@ -99,6 +100,7 @@ export async function fetchTopComments(
     .from("post_comments")
     .select(COMMENT_SELECT)
     .in("post_id", postIds)
+    .is("parent_id", null)
     .order("created_at", { ascending: true });
   if (error) throw error;
   const map = new Map<string, PostComment[]>();
@@ -122,14 +124,48 @@ function useCommentMutation<TVars>(postId: string, run: (vars: TVars) => Promise
   });
 }
 
+/** `parentId` makes it a reply; it must be a top-level comment, since threads are one deep. */
 export function useAddComment(postId: string, userId: string) {
-  return useCommentMutation<string>(postId, async (body) => {
-    const trimmed = body.trim();
-    if (trimmed.length === 0) throw new Error("Write something first.");
-    const { error } = await supabase
-      .from("post_comments")
-      .insert({ post_id: postId, user_id: userId, body: trimmed });
-    if (error) throw error;
+  return useCommentMutation<{ body: string; parentId?: string | null }>(
+    postId,
+    async ({ body, parentId }) => {
+      const trimmed = body.trim();
+      if (trimmed.length === 0) throw new Error("Write something first.");
+      const { error } = await supabase
+        .from("post_comments")
+        .insert({ post_id: postId, user_id: userId, body: trimmed, parent_id: parentId ?? null });
+      if (error) throw error;
+    },
+  );
+}
+
+export interface MentionCandidate {
+  id: string;
+  handle: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+/** People whose handle starts with what is typed after `@`, for the composer's picker. */
+export function useMentionSuggestions(query: string | null) {
+  const term = (query ?? "")
+    .replace(/[^a-z0-9_]/gi, "")
+    .toLowerCase()
+    .slice(0, 20);
+  return useQuery({
+    queryKey: ["mention-suggestions", term],
+    enabled: query !== null,
+    staleTime: 30_000,
+    queryFn: async (): Promise<MentionCandidate[]> => {
+      let request = supabase
+        .from("profiles")
+        .select("id, handle, display_name, avatar_url")
+        .not("handle", "is", null);
+      if (term) request = request.ilike("handle", `${term}%`);
+      const { data, error } = await request.order("handle").limit(6);
+      if (error) throw error;
+      return (data ?? []).flatMap((row) => (row.handle ? [{ ...row, handle: row.handle }] : []));
+    },
   });
 }
 
