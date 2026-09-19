@@ -196,17 +196,18 @@ function DraftEditor({ draft }: { draft: Draft }) {
     return () => window.clearTimeout(timer);
   }, [snapshot, recoveryKey, saveDraft]);
 
+  const uploading = jobs.some(
+    (job) =>
+      isActive(job) &&
+      (job.postId === draft.id || (!!draft.session_id && job.sessionId === draft.session_id)),
+  );
   const validate = () => {
     const error = draftStepError(step, {
       title,
       body,
       visibility,
       recording: recording.postId === draft.id && !["idle", "error"].includes(recording.state),
-      uploading: jobs.some(
-        (job) =>
-          isActive(job) &&
-          (job.postId === draft.id || (!!draft.session_id && job.sessionId === draft.session_id)),
-      ),
+      uploading,
     });
     if (error) {
       notify({ title: error, variant: "error" });
@@ -577,10 +578,10 @@ function DraftEditor({ draft }: { draft: Draft }) {
                   variant="primary"
                   icon={<Send className="size-4" aria-hidden />}
                   loading={publish.isPending}
-                  disabled={busy}
-                  title="⌘/Ctrl + Enter"
+                  disabled={busy || uploading}
+                  title={uploading ? "Publishing waits for the video upload" : "⌘/Ctrl + Enter"}
                 >
-                  Publish
+                  {uploading ? "Waiting for upload…" : "Publish"}
                 </Button>
               )}
             </div>

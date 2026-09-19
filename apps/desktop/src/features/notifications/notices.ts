@@ -2,14 +2,11 @@
  * Everything the app has to tell you that did not come from another person: a permission macOS is
  * withholding, a video that finished processing, a save that failed, an update waiting to install.
  *
- * These used to arrive in four different places — a toast in the corner, a banner above the page, a
- * tray above the status bar, red text inside Settings — so which one you got depended on which part
- * of the app happened to be speaking. They now all land here, and the Notifications page shows them
- * next to likes and follows, behind one unread badge.
+ * Each one shows as a toast in the top-right corner (`Toaster`) and leaves on its own, so the
+ * Notifications page stays about people. Anything that must outlive the toast — a failed upload,
+ * an update — points somewhere with `href`, where the lasting state lives.
  *
- * In memory only: a notice describes what is true on this machine right now, so surviving a restart
- * would mean showing a stale one. The social half of the page is the part that persists, and it
- * comes from the server.
+ * In memory only: a notice describes what is true on this machine right now.
  */
 
 import { useCallback, useSyncExternalStore } from "react";
@@ -23,8 +20,8 @@ export interface Notice {
   tone: NoticeTone;
   /** Where clicking the notice goes, when there is somewhere useful. */
   href: string | null;
+  /** When it was last raised; a repeat resets it, which restarts the toast's timer. */
   createdAt: number;
-  readAt: number | null;
 }
 
 /** What a caller passes. `variant` matches the toast API these replaced, so call sites read the same. */
@@ -40,8 +37,8 @@ export interface NoticeOptions {
   key?: string;
 }
 
-/** Old notices are not worth memory; the page only ever shows a screenful. */
-const LIMIT = 100;
+/** More than this on screen at once is a wall, not a message; the oldest make way. */
+const LIMIT = 4;
 
 type Listener = () => void;
 
@@ -60,58 +57,60 @@ function subscribe(listener: Listener) {
   };
 }
 
+function forget(id: string) {
+  for (const [key, value] of keyed) if (value === id) keyed.delete(key);
+}
+
 /**
- * Record a notice. Safe to call from anywhere, including outside React — the pipeline and the
+ * Show a notice. Safe to call from anywhere, including outside React — the pipeline and the
  * updater both report from plain functions.
+ *
+ * A notice identical to one still on screen refreshes it rather than stacking a copy: pressing a
+ * button that keeps failing the same way says so once.
  */
 export function notify(options: NoticeOptions): string {
-  const previous = options.key ? keyed.get(options.key) : undefined;
+  const description = options.description ?? null;
+  const tone = options.variant ?? "info";
+  const href = options.href ?? null;
+  const same = notices.find(
+    (n) =>
+      n.title === options.title &&
+      n.description === description &&
+      n.tone === tone &&
+      n.href === href,
+  );
+  const previous = (options.key ? keyed.get(options.key) : undefined) ?? same?.id;
   const id = previous ?? `notice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const notice: Notice = {
     id,
     title: options.title,
-    description: options.description ?? null,
-    tone: options.variant ?? "info",
-    href: options.href ?? null,
+    description,
+    tone,
+    href,
     createdAt: Date.now(),
-    readAt: null,
   };
   if (options.key) keyed.set(options.key, id);
-  notices = [notice, ...notices.filter((n) => n.id !== id)].slice(0, LIMIT);
+  const next = [notice, ...notices.filter((n) => n.id !== id)];
+  for (const dropped of next.slice(LIMIT)) forget(dropped.id);
+  notices = next.slice(0, LIMIT);
   emit();
   return id;
 }
 
-export function markNoticesRead(): void {
-  if (!notices.some((n) => n.readAt === null)) return;
-  const now = Date.now();
-  notices = notices.map((n) => (n.readAt === null ? { ...n, readAt: now } : n));
-  emit();
-}
-
 export function dismissNotice(id: string): void {
+  if (!notices.some((n) => n.id === id)) return;
   notices = notices.filter((n) => n.id !== id);
-  for (const [key, value] of keyed) if (value === id) keyed.delete(key);
+  forget(id);
   emit();
 }
 
-export function clearNotices(): void {
-  notices = [];
-  keyed.clear();
-  emit();
-}
-
-/** The current list, newest first. What `useNotices` reads, and what tests assert against. */
+/** What is on screen now, newest first. What `useNotices` reads, and what tests assert against. */
 export function noticesSnapshot(): readonly Notice[] {
   return notices;
 }
 
 export function useNotices(): Notice[] {
   return useSyncExternalStore(subscribe, noticesSnapshot, noticesSnapshot) as Notice[];
-}
-
-export function useUnreadNoticeCount(): number {
-  return useNotices().filter((n) => n.readAt === null).length;
 }
 
 /**

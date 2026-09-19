@@ -313,7 +313,17 @@ jobs:
     needs: [create-release, assemble, extension]
     # Tag pushes become the public "latest" release (what the in-app updater reads).
     # Manual runs stay as drafts for inspection.
-    if: github.ref_type == 'tag'
+    #
+    # `!cancelled()` is load-bearing, not decoration. On the fast path `desktop` is skipped,
+    # and Actions propagates that skip down the needs graph: `assemble` overrides it with
+    # `always()` and succeeds, but a plain `if:` here still leaves this job skipped. v0.5.2
+    # uploaded all eleven assets correctly and then sat as a draft because of it. Opting out
+    # of the implicit gate means spelling the real one out, hence the explicit results.
+    if: >-
+      !cancelled() && github.ref_type == 'tag'
+      && needs.create-release.result == 'success'
+      && needs.assemble.result == 'success'
+      && needs.extension.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

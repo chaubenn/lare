@@ -1,11 +1,6 @@
 "use client";
 
-import type {
-  InputHTMLAttributes,
-  ReactNode,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
-} from "react";
+import type { ComponentProps, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 import { cn } from "../cn";
 
 const CONTROL =
@@ -34,7 +29,7 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
   return <input className={cn(CONTROL, "h-9", className)} {...rest} />;
 }
 
-export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function Textarea({ className, ...rest }: ComponentProps<"textarea">) {
   return <textarea className={cn(CONTROL, "min-h-24 py-2 leading-relaxed", className)} {...rest} />;
 }
 

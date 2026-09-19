@@ -1,5 +1,5 @@
 /**
- * Notifications about likes, comments and follows. Rows are written by database triggers and
+ * Notifications about likes, comments, replies, mentions and follows. Rows are written by database triggers and
  * read by their recipient; this module parses the joined rows and turns them into copy and a
  * link. Each app passes its own routes, since desktop and web address posts differently.
  */
@@ -11,6 +11,8 @@ export const NOTIFICATION_TYPES = [
   "follow",
   "follow_request",
   "follow_accepted",
+  "comment_reply",
+  "comment_mention",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -63,12 +65,17 @@ export function describeNotification(
   const profileHref = notification.actor?.handle ? links.profile(notification.actor.handle) : null;
   const postHref = notification.post ? links.post(notification.post) : null;
   const titled = notification.post?.title ? ` “${notification.post.title}”` : "";
+  const onTitled = titled ? ` on${titled}` : "";
 
   switch (notification.type) {
     case "post_like":
       return { text: `${name} liked your post${titled}`, href: postHref };
     case "post_comment":
       return { text: `${name} commented on your post${titled}`, href: postHref };
+    case "comment_reply":
+      return { text: `${name} replied to a thread you're in${onTitled}`, href: postHref };
+    case "comment_mention":
+      return { text: `${name} mentioned you in a comment${onTitled}`, href: postHref };
     case "follow":
       return { text: `${name} started following you`, href: profileHref };
     case "follow_request":

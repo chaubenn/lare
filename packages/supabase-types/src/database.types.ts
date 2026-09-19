@@ -171,6 +171,7 @@ export type Database = {
           created_at: string
           edited_at: string | null
           id: string
+          parent_id: string | null
           post_id: string
           updated_at: string
           user_id: string
@@ -180,6 +181,7 @@ export type Database = {
           created_at?: string
           edited_at?: string | null
           id?: string
+          parent_id?: string | null
           post_id: string
           updated_at?: string
           user_id: string
@@ -189,11 +191,19 @@ export type Database = {
           created_at?: string
           edited_at?: string | null
           id?: string
+          parent_id?: string | null
           post_id?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "post_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "post_comments_post_id_fkey"
             columns: ["post_id"]
@@ -894,6 +904,8 @@ export type Database = {
         | "follow"
         | "follow_request"
         | "follow_accepted"
+        | "comment_reply"
+        | "comment_mention"
       post_status: "draft" | "published"
       post_visibility: "public" | "private"
       problem_difficulty: "Easy" | "Medium" | "Hard"
@@ -1045,7 +1057,15 @@ export const Constants = {
     Enums: {
       follow_status: ["pending", "accepted"],
       capture_source: ["desktop", "extension", "web"],
-      notification_type: ["post_like", "post_comment", "follow", "follow_request", "follow_accepted"],
+      notification_type: [
+        "post_like",
+        "post_comment",
+        "follow",
+        "follow_request",
+        "follow_accepted",
+        "comment_reply",
+        "comment_mention",
+      ],
       post_status: ["draft", "published"],
       post_visibility: ["public", "private"],
       problem_difficulty: ["Easy", "Medium", "Hard"],

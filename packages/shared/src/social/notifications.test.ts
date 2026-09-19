@@ -37,6 +37,19 @@ describe("describeNotification", () => {
     ).toEqual({ text: "Bob commented on your post", href: "/p/two-sum" });
   });
 
+  it("links replies and mentions to the post", () => {
+    expect(describeNotification({ ...base, type: "comment_reply", post }, LINKS)).toEqual({
+      text: "Bob replied to a thread you're in on “Two Sum in O(n)”",
+      href: "/p/two-sum",
+    });
+    expect(
+      describeNotification(
+        { ...base, type: "comment_mention", post: { ...post, title: null } },
+        LINKS,
+      ),
+    ).toEqual({ text: "Bob mentioned you in a comment", href: "/p/two-sum" });
+  });
+
   it("links follows to the person, and requests to the requests tab", () => {
     expect(describeNotification(base, LINKS)).toEqual({
       text: "Bob started following you",

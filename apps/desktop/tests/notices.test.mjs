@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import {
   __resetNoticesForTest,
-  clearNotices,
   dismissNotice,
-  markNoticesRead,
   noticesSnapshot,
   notify,
 } from "../src/features/notifications/notices.ts";
@@ -22,7 +20,6 @@ test("a notice keeps what it was told, newest first", () => {
   assert.equal(newest.description, "detail");
   assert.equal(newest.tone, "error");
   assert.equal(newest.href, "/settings");
-  assert.equal(newest.readAt, null);
   assert.equal(oldest.title, "First");
   // Defaults, so a caller only has to pass a title.
   assert.equal(oldest.tone, "info");
@@ -32,9 +29,9 @@ test("a notice keeps what it was told, newest first", () => {
 
 test("a keyed notice replaces its predecessor instead of stacking", () => {
   notify({ key: "permission:microphone", title: "Microphone is blocked" });
-  notify({ key: "permission:microphone", title: "Microphone is blocked" });
-  notify({ key: "permission:microphone", title: "Microphone is blocked" });
+  notify({ key: "permission:microphone", title: "Microphone is still blocked" });
   assert.equal(noticesSnapshot().length, 1, "a poll that keeps failing is still one problem");
+  assert.equal(noticesSnapshot()[0].title, "Microphone is still blocked");
 });
 
 test("different keys are different notices", () => {
@@ -43,22 +40,21 @@ test("different keys are different notices", () => {
   assert.equal(noticesSnapshot().length, 2);
 });
 
-test("an unkeyed notice is always new", () => {
-  notify({ title: "Upload finished" });
-  notify({ title: "Upload finished" });
-  assert.equal(noticesSnapshot().length, 2, "two uploads finishing are two events, not one");
+test("an identical notice on screen is refreshed, not stacked", () => {
+  notify({ title: "Wait for the upload", variant: "error" });
+  const [first] = noticesSnapshot();
+  notify({ title: "Something else" });
+  notify({ title: "Wait for the upload", variant: "error" });
+
+  assert.equal(noticesSnapshot().length, 2, "pressing a button nine times is one toast");
+  const [newest] = noticesSnapshot();
+  assert.equal(newest.id, first.id);
+  assert.equal(newest.title, "Wait for the upload");
 });
 
-test("a keyed repeat moves back to the top and is unread again", () => {
-  notify({ key: "update:1.0.0", title: "Update" });
-  notify({ title: "Something else" });
-  markNoticesRead();
-  assert.ok(noticesSnapshot().every((n) => n.readAt !== null));
-
-  notify({ key: "update:1.0.0", title: "Update" });
-  const [newest] = noticesSnapshot();
-  assert.equal(newest.title, "Update");
-  assert.equal(newest.readAt, null, "a fact that is true again is worth surfacing again");
+test("the same title with a different outcome is a different notice", () => {
+  notify({ title: "Upload", variant: "success" });
+  notify({ title: "Upload", variant: "error" });
   assert.equal(noticesSnapshot().length, 2);
 });
 
@@ -72,19 +68,17 @@ test("dismissing a keyed notice frees the key for a fresh one", () => {
   assert.equal(noticesSnapshot().length, 1, "a dismissed notice must be able to come back");
 });
 
-test("marking read leaves the list alone and clearing empties it", () => {
-  notify({ title: "One" });
-  notify({ title: "Two" });
-  markNoticesRead();
-  assert.equal(noticesSnapshot().length, 2);
-  assert.ok(noticesSnapshot().every((n) => typeof n.readAt === "number"));
-
-  clearNotices();
-  assert.equal(noticesSnapshot().length, 0);
+test("only a few toasts show at once, and the newest win", () => {
+  for (let i = 0; i < 10; i += 1) notify({ title: `Notice ${i}` });
+  assert.equal(noticesSnapshot().length, 4);
+  assert.equal(noticesSnapshot()[0].title, "Notice 9");
 });
 
-test("the list is capped so a long session cannot grow without bound", () => {
-  for (let i = 0; i < 150; i += 1) notify({ title: `Notice ${i}` });
-  assert.equal(noticesSnapshot().length, 100);
-  assert.equal(noticesSnapshot()[0].title, "Notice 149", "the newest survive, not the oldest");
+test("a keyed notice pushed off screen can come back", () => {
+  notify({ key: "k", title: "Keyed" });
+  for (let i = 0; i < 4; i += 1) notify({ title: `Notice ${i}` });
+  assert.ok(!noticesSnapshot().some((n) => n.title === "Keyed"));
+
+  notify({ key: "k", title: "Keyed" });
+  assert.equal(noticesSnapshot()[0].title, "Keyed");
 });
