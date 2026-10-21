@@ -49,7 +49,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           onClose();
         },
       },
-      { id: "settings", label: "Open settings", hint: "⌘6", run: () => go("/settings") },
+      { id: "settings", label: "Open settings", hint: "⌘8", run: () => go("/settings") },
     ];
     const q = query.trim().toLowerCase();
     if (!q) return actions;

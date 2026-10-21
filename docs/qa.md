@@ -122,7 +122,7 @@ going through Bunny.
   again, which is the same thing as removing Lare from that list with "-" by hand.
 - The window drags from anywhere along its top strip on sign-in, onboarding and **Set up
   recording**, not only inside the app shell.
-- **Notifications** (⌘6) is the only place the app speaks: an upload in progress, a finished or
+- **Notifications** (⌘7) is the only place the app speaks: an upload in progress, a finished or
   failed job, a blocked microphone, an available update and every save error all land there,
   behind one badge. Nothing flashes in a corner any more, so a failed save is silent until you
   look — check the badge after anything that could fail.
@@ -177,6 +177,15 @@ going through Bunny.
   second account does not see it in the feed or at its link. When the video turns ready the post
   appears for the second account at the top of the feed and the badge goes. A failed video shows
   **Not visible** until it is replaced or hidden.
+
+- **Leaderboard** (⌘6) has its own sidebar entry, no longer a Friends tab (an old
+  `/friends?tab=leaderboard` link redirects to it). Two scopes, **Friends** and **Global**, and a
+  This week / Last week toggle that applies to both. Friends ranks you and the people you follow;
+  Global ranks every public account that solved something that week. With a private account
+  signed in: you are not in the Global list for a second (public) account, but your own row shows
+  beneath the list under **Your position** with "Only you can see this", ranked where your total
+  would put you. Switching the account to public in Edit profile and reopening the tab lists you
+  in the main list; a public account outside the top 100 also gets the **Your position** row.
 
 ## Web
 
@@ -238,6 +247,12 @@ fixture that does exactly this; it is **not** a migration and must never be run 
   replaces rather than duplicates.
 - An `interview_reviews` write is rejected when `sessions.graded` is false — including from the
   service role.
+
+`0022_global_leaderboard.sql` is idempotent; `supabase/functions/_tests/global_leaderboard.sql`
+is its isolated fixture. It proves private accounts never appear in anyone else's `rows` (or
+`ranked_count`), a private caller still gets their own ranked standing without moving anyone
+else's place, ties share a rank, an unsolved week has a standing but no rank, `max_rows` caps the
+list, the week offset clamps to -52, and `anon` and unauthenticated callers are rejected.
 
 ## Windows
 

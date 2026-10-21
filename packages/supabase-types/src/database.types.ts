@@ -891,6 +891,7 @@ export type Database = {
         Returns: string
       }
       toggle_post_like: { Args: { post: string }; Returns: Json }
+      global_leaderboard: { Args: { week_offset?: number; max_rows?: number }; Returns: Json }
       goal_progress: { Args: Record<PropertyKey, never>; Returns: Json }
       mark_notifications_read: { Args: { ids?: string[] | null }; Returns: number }
       weekly_leaderboard: { Args: { week_offset?: number }; Returns: Json }

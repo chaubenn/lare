@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { leaderboardHasFriends, leaderboardWeekLabel, parseLeaderboard } from "./leaderboard";
+import {
+  globalViewerInRows,
+  leaderboardHasFriends,
+  leaderboardWeekLabel,
+  parseGlobalLeaderboard,
+  parseLeaderboard,
+} from "./leaderboard";
 
 const ROW = {
   user_id: "u1",
@@ -47,5 +53,30 @@ describe("leaderboardHasFriends", () => {
       rows: [ROW, { ...ROW, user_id: "u2", handle: "bob", is_viewer: false, rank: 2 }],
     });
     expect(withFriend && leaderboardHasFriends(withFriend)).toBe(true);
+  });
+});
+
+describe("parseGlobalLeaderboard", () => {
+  const VIEWER = { ...ROW, rank: 2, is_private: true };
+  const GLOBAL = { ...BOARD, rows: [], viewer: VIEWER, ranked_count: 0 };
+
+  it("accepts the RPC payload, including a private viewer and one without a rank yet", () => {
+    expect(parseGlobalLeaderboard(GLOBAL)?.viewer).toEqual(VIEWER);
+    expect(
+      parseGlobalLeaderboard({ ...GLOBAL, viewer: { ...VIEWER, rank: null, total: 0 } }),
+    ).not.toBeNull();
+    expect(parseGlobalLeaderboard({ ...GLOBAL, viewer: null })).not.toBeNull();
+  });
+
+  it("rejects a payload without the global fields", () => {
+    expect(parseGlobalLeaderboard(BOARD)).toBeNull();
+    expect(parseGlobalLeaderboard({ ...GLOBAL, ranked_count: -1 })).toBeNull();
+  });
+
+  it("knows whether the viewer is already listed", () => {
+    const listed = parseGlobalLeaderboard({ ...GLOBAL, rows: [ROW] });
+    const unlisted = parseGlobalLeaderboard(GLOBAL);
+    expect(listed && globalViewerInRows(listed)).toBe(true);
+    expect(unlisted && globalViewerInRows(unlisted)).toBe(false);
   });
 });
