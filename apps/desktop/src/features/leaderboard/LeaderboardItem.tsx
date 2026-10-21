@@ -1,6 +1,6 @@
 import type { LeaderboardRow } from "@lare/shared";
 import { cn } from "@lare/ui";
-import type { ReactNode } from "react";
+import { Lock } from "lucide-react";
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
@@ -11,14 +11,14 @@ const DIFF = [
   { key: "hard", title: "Hard", color: "var(--lare-diff-hard)" },
 ] as const;
 
-/** One ranked person. `rank` is null for someone with no solves yet on a board that ranks only solvers. */
+/**
+ * One ranked person. `rank` is null for someone with no solves yet on a board that ranks only
+ * solvers; `is_private` marks a private account on the global board.
+ */
 export function LeaderboardItem({
   row,
-  note,
 }: {
-  row: Omit<LeaderboardRow, "rank"> & { rank: number | null };
-  /** Small line under the handle, e.g. why only the viewer can see this row. */
-  note?: ReactNode;
+  row: Omit<LeaderboardRow, "rank"> & { rank: number | null; is_private?: boolean };
 }) {
   const name = row.display_name?.trim() || `@${row.handle}`;
   const href = `/u/${row.handle}`;
@@ -43,12 +43,17 @@ export function LeaderboardItem({
           className="block truncate text-sm font-semibold text-[var(--text)] hover:underline"
         >
           {name}
+          {row.is_private ? (
+            <Lock
+              className="ml-1.5 inline size-3 align-[-1px] text-[var(--text-tertiary)]"
+              aria-label="Private account"
+            />
+          ) : null}
           {row.is_viewer ? (
             <span className="ml-1.5 text-xs font-normal text-[var(--text-secondary)]">(you)</span>
           ) : null}
         </Link>
         <p className="truncate text-xs text-[var(--text-secondary)]">@{row.handle}</p>
-        {note ? <p className="text-xs text-[var(--text-tertiary)]">{note}</p> : null}
       </div>
       <ul
         className="hidden items-center gap-3 text-xs tabular-nums sm:flex"

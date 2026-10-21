@@ -66,33 +66,39 @@ select pg_temp.solve('00000000-0000-0000-0000-00000000000b', 'last-week', 'Easy'
 select pg_temp.solve('00000000-0000-0000-0000-00000000000c', 'carol-hard', 'Hard', (select week_start from fixture_clock) + interval '1 hour');
 select pg_temp.solve('00000000-0000-0000-0000-00000000000d', 'dave-hard', 'Hard', (select week_start from fixture_clock) + interval '1 hour');
 
--- A public viewer sees the public board with their own place in it.
+-- Everyone is listed, private accounts included and marked.
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
 do $$
 declare board jsonb := public.global_leaderboard(0);
 begin
-  if jsonb_array_length(board -> 'rows') <> 3 then
-    raise exception 'Public accounts only (alice, bob, dave; carol is private, erin solved nothing): %', board;
+  if jsonb_array_length(board -> 'rows') <> 4 then
+    raise exception 'Everyone who solved something is listed (alice, carol, dave, bob; erin solved nothing): %', board;
   end if;
   if board -> 'rows' -> 0 ->> 'handle' <> 'alice'
      or (board -> 'rows' -> 0 ->> 'total')::int <> 2
      or (board -> 'rows' -> 0 ->> 'easy')::int <> 1
      or (board -> 'rows' -> 0 ->> 'hard')::int <> 1
      or (board -> 'rows' -> 0 ->> 'rank')::int <> 1
-     or not (board -> 'rows' -> 0 ->> 'is_viewer')::boolean then
+     or not (board -> 'rows' -> 0 ->> 'is_viewer')::boolean
+     or (board -> 'rows' -> 0 ->> 'is_private')::boolean then
     raise exception 'Viewer row wrong (distinct slugs, accepted only): %', board -> 'rows' -> 0;
   end if;
-  if board -> 'rows' -> 1 ->> 'handle' <> 'dave'
-     or board -> 'rows' -> 2 ->> 'handle' <> 'bob'
+  if board -> 'rows' -> 1 ->> 'handle' <> 'carol'
+     or board -> 'rows' -> 2 ->> 'handle' <> 'dave'
+     or board -> 'rows' -> 3 ->> 'handle' <> 'bob'
      or (board -> 'rows' -> 1 ->> 'rank')::int <> 2
-     or (board -> 'rows' -> 2 ->> 'rank')::int <> 2 then
-    raise exception 'Ties share a rank and break on harder problems first: %', board -> 'rows';
+     or (board -> 'rows' -> 2 ->> 'rank')::int <> 2
+     or (board -> 'rows' -> 3 ->> 'rank')::int <> 2 then
+    raise exception 'Ties share a rank and break on harder problems, then handle: %', board -> 'rows';
+  end if;
+  if not (board -> 'rows' -> 1 ->> 'is_private')::boolean then
+    raise exception 'A private account is listed and marked private: %', board -> 'rows' -> 1;
   end if;
   if (board -> 'viewer' ->> 'rank')::int <> 1 or (board -> 'viewer' ->> 'is_private')::boolean then
     raise exception 'Public viewer standing wrong: %', board -> 'viewer';
   end if;
-  if (board ->> 'ranked_count')::int <> 3 then
-    raise exception 'ranked_count must count public solvers: %', board;
+  if (board ->> 'ranked_count')::int <> 4 then
+    raise exception 'ranked_count must count everyone who solved something: %', board;
   end if;
   if (board ->> 'week_start')::date <> (select week_start from fixture_clock)::date
      or (board ->> 'week_end')::date <> (select week_start from fixture_clock)::date + 6 then
@@ -100,36 +106,45 @@ begin
   end if;
 end $$;
 
--- A private viewer sees where they stand, but is not on the board anyone else reads.
+-- A row carries only handle, name, picture, counts and rank: nothing of a private account's
+-- problems or submissions.
+do $$
+declare keys text[];
+begin
+  select array_agg(k order by k) into keys
+  from jsonb_object_keys(public.global_leaderboard(0) -> 'rows' -> 1) k;
+  if keys <> array['avatar_url','display_name','easy','handle','hard','is_private','is_viewer','medium','rank','total','user_id'] then
+    raise exception 'Row exposes unexpected fields: %', keys;
+  end if;
+end $$;
+
+-- A private viewer is in the list like anyone else.
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
 do $$
 declare board jsonb := public.global_leaderboard(0);
 begin
-  if board -> 'rows' @> '[{"handle": "carol"}]'::jsonb then
-    raise exception 'A private account must not be in rows, even for itself: %', board -> 'rows';
+  if jsonb_array_length(board -> 'rows') <> 4 or (board ->> 'ranked_count')::int <> 4 then
+    raise exception 'A private viewer is listed with everyone else: %', board;
   end if;
-  if jsonb_array_length(board -> 'rows') <> 3 or (board ->> 'ranked_count')::int <> 3 then
-    raise exception 'A private viewer must not change the public board: %', board;
-  end if;
-  if board -> 'rows' -> 1 ->> 'handle' <> 'dave' or (board -> 'rows' -> 1 ->> 'rank')::int <> 2 then
-    raise exception 'A private viewer must not move anyone elses place: %', board -> 'rows';
+  if board -> 'rows' -> 1 ->> 'handle' <> 'carol' or not (board -> 'rows' -> 1 ->> 'is_viewer')::boolean then
+    raise exception 'Private viewer row wrong: %', board -> 'rows' -> 1;
   end if;
   if board -> 'viewer' ->> 'handle' <> 'carol'
      or not (board -> 'viewer' ->> 'is_private')::boolean
      or (board -> 'viewer' ->> 'total')::int <> 1
      or (board -> 'viewer' ->> 'hard')::int <> 1
      or (board -> 'viewer' ->> 'rank')::int <> 2 then
-    raise exception 'Private viewer must see their own standing (tied with bob and dave): %', board -> 'viewer';
+    raise exception 'Private viewer standing wrong (tied with dave and bob): %', board -> 'viewer';
   end if;
 end $$;
 
--- Nobody else ever sees the private account, and it never changes a public caller's board.
+-- Another viewer sees the private account in the list, marked.
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
 do $$
 declare board jsonb := public.global_leaderboard(0);
 begin
-  if board -> 'rows' @> '[{"handle": "carol"}]'::jsonb or board::text like '%00000000-0000-0000-0000-00000000000c%' then
-    raise exception 'A private account leaked into another viewers board: %', board;
+  if not (board -> 'rows' @> '[{"handle": "carol", "is_private": true, "is_viewer": false}]'::jsonb) then
+    raise exception 'A private account must be listed for other viewers: %', board;
   end if;
 end $$;
 
@@ -166,7 +181,7 @@ begin
   if (prev -> 'viewer' ->> 'total')::int <> 0 or prev -> 'viewer' -> 'rank' <> 'null'::jsonb then
     raise exception 'Alice solved nothing last week: %', prev -> 'viewer';
   end if;
-  if jsonb_array_length(capped -> 'rows') <> 1 or (capped ->> 'ranked_count')::int <> 3 then
+  if jsonb_array_length(capped -> 'rows') <> 1 or (capped ->> 'ranked_count')::int <> 4 then
     raise exception 'max_rows caps rows but not ranked_count: %', capped;
   end if;
   if (far ->> 'week_start')::date <> (select week_start from fixture_clock)::date - 364 then

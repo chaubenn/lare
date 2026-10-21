@@ -58,7 +58,7 @@ export function ProfileEditor() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
       void queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
-      // Going private (or public) changes who the global board lists.
+      // Going private (or public) changes the lock shown beside you on the global board.
       void queryClient.invalidateQueries({ queryKey: ["global-leaderboard"] });
       notify({ title: "Profile saved", variant: "success" });
       navigate("/profile");

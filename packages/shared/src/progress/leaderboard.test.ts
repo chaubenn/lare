@@ -57,7 +57,8 @@ describe("leaderboardHasFriends", () => {
 });
 
 describe("parseGlobalLeaderboard", () => {
-  const VIEWER = { ...ROW, rank: 2, is_private: true };
+  const GLOBAL_ROW = { ...ROW, is_private: false };
+  const VIEWER = { ...GLOBAL_ROW, rank: 2, is_private: true };
   const GLOBAL = { ...BOARD, rows: [], viewer: VIEWER, ranked_count: 0 };
 
   it("accepts the RPC payload, including a private viewer and one without a rank yet", () => {
@@ -71,10 +72,11 @@ describe("parseGlobalLeaderboard", () => {
   it("rejects a payload without the global fields", () => {
     expect(parseGlobalLeaderboard(BOARD)).toBeNull();
     expect(parseGlobalLeaderboard({ ...GLOBAL, ranked_count: -1 })).toBeNull();
+    expect(parseGlobalLeaderboard({ ...GLOBAL, rows: [ROW] })).toBeNull();
   });
 
   it("knows whether the viewer is already listed", () => {
-    const listed = parseGlobalLeaderboard({ ...GLOBAL, rows: [ROW] });
+    const listed = parseGlobalLeaderboard({ ...GLOBAL, rows: [GLOBAL_ROW] });
     const unlisted = parseGlobalLeaderboard(GLOBAL);
     expect(listed && globalViewerInRows(listed)).toBe(true);
     expect(unlisted && globalViewerInRows(unlisted)).toBe(false);

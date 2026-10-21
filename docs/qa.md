@@ -181,11 +181,11 @@ going through Bunny.
 - **Leaderboard** (⌘6) has its own sidebar entry, no longer a Friends tab (an old
   `/friends?tab=leaderboard` link redirects to it). Two scopes, **Friends** and **Global**, and a
   This week / Last week toggle that applies to both. Friends ranks you and the people you follow;
-  Global ranks every public account that solved something that week. With a private account
-  signed in: you are not in the Global list for a second (public) account, but your own row shows
-  beneath the list under **Your position** with "Only you can see this", ranked where your total
-  would put you. Switching the account to public in Edit profile and reopening the tab lists you
-  in the main list; a public account outside the top 100 also gets the **Your position** row.
+  Global ranks everyone who solved something that week, private accounts included (marked with a
+  lock). Open a private account from the list: you see only the header and "This account is
+  private" until a follow request is accepted, and none of their problems. Your own row shows
+  beneath the list under **Your position** when you are past the top 100 or have not solved
+  anything yet (no rank then).
 
 ## Web
 
@@ -249,10 +249,10 @@ fixture that does exactly this; it is **not** a migration and must never be run 
   service role.
 
 `0022_global_leaderboard.sql` is idempotent; `supabase/functions/_tests/global_leaderboard.sql`
-is its isolated fixture. It proves private accounts never appear in anyone else's `rows` (or
-`ranked_count`), a private caller still gets their own ranked standing without moving anyone
-else's place, ties share a rank, an unsolved week has a standing but no rank, `max_rows` caps the
-list, the week offset clamps to -52, and `anon` and unauthenticated callers are rejected.
+is its isolated fixture. It proves private accounts are listed and marked, a row exposes only
+handle, name, picture, counts and rank, ties share a rank, an unsolved week has a standing but no
+rank, `max_rows` caps the list but not `ranked_count`, the week offset clamps to -52, and `anon`
+and unauthenticated callers are rejected.
 
 ## Windows
 

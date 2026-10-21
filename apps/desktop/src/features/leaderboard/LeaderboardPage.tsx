@@ -21,7 +21,7 @@ const WEEKS: Array<{ key: Week; label: string }> = [
 
 const SUBTITLES: Record<Scope, string> = {
   friends: "You and the people you follow, by problems solved.",
-  global: "Everyone with a public account, by problems solved.",
+  global: "Everyone on Lare, by problems solved.",
 };
 
 /** Weekly rankings: the people you follow, or everyone with a public account. */

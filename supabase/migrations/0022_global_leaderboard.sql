@@ -1,21 +1,19 @@
 -- Lare 0022: global leaderboard.
 --
 -- Adds global_leaderboard(week_offset, max_rows) — distinct problems solved in a UTC
--- Monday–Sunday week by everyone with a public account, ranked. weekly_leaderboard (0017) stays
--- the friends board.
+-- Monday–Sunday week by everyone, ranked. weekly_leaderboard (0017) stays the friends board.
 --
--- Private accounts are never on the board anyone else reads: rows holds public profiles only, and
--- the board is built per caller. A private caller still sees where they stand — `viewer` is their
--- own row, ranked as if they were on the board (one place below everyone strictly ahead of them,
--- tied with anyone on the same total) without that ranking moving anyone else's place. Public
--- places are computed among public profiles only, so every caller sees the same ones.
+-- Private accounts are listed too. All the board reveals about them is a weekly solve count and
+-- its split by difficulty; their profile still shows only the header (name, picture, handle) until
+-- a follow request is accepted, and none of their problems, posts or submissions are exposed.
+-- `is_private` is in each row so the app can mark them.
 --
--- Only people who solved something that week are ranked. A problem solved several times in the
--- week counts once, and accounts without a handle (not onboarded) are left out, exactly as in the
--- friends board.
+-- `viewer` is the caller's own row, returned even when it is outside the `max_rows` cut-off or
+-- has no solves yet (then its rank is null). Only people who solved something that week are
+-- ranked. A problem solved several times in the week counts once, and accounts without a handle
+-- (not onboarded) are left out, exactly as in the friends board.
 --
--- Security definer because `submissions` is owner-only under RLS; the function only ever returns
--- public profiles' counts plus the caller's own. Idempotent: safe to run twice.
+-- Security definer because `submissions` is owner-only under RLS. Idempotent: safe to run twice.
 
 create or replace function public.global_leaderboard(
   week_offset integer default 0,
@@ -50,7 +48,6 @@ begin
       and su.submitted_at >= from_ts
       and su.submitted_at < to_ts
       and pr.handle is not null
-      and (not pr.is_private or s.user_id = viewer)
     order by s.user_id, sp.slug, su.submitted_at
   ), totals as (
     select
@@ -62,15 +59,13 @@ begin
     from solved so
     join public.profiles pr on pr.id = so.user_id
     group by pr.id
-  ), public_totals as (
-    select * from totals t where not t.is_private
   ), ranked as (
     select t.*, (rank() over (order by t.total desc))::int as place
-    from public_totals t
+    from totals t
   ), top as (
     select * from ranked r order by r.place, r.hard desc, r.medium desc, r.handle limit row_limit
   ), me as (
-    -- The caller's own standing, public or private. No solves this week means no place yet.
+    -- The caller's own standing. No solves this week means no place yet.
     select
       pr.id, pr.handle::text as handle, pr.display_name, pr.avatar_url, pr.is_private,
       coalesce(t.total, 0) as total,
@@ -79,7 +74,7 @@ begin
       coalesce(t.hard, 0) as hard,
       case
         when coalesce(t.total, 0) = 0 then null
-        else 1 + (select count(*) from public_totals o where o.total > t.total)
+        else 1 + (select count(*) from totals o where o.total > t.total)
       end as place
     from public.profiles pr
     left join totals t on t.user_id = pr.id
@@ -100,7 +95,8 @@ begin
           'medium', r.medium,
           'hard', r.hard,
           'rank', r.place,
-          'is_viewer', r.user_id = viewer
+          'is_viewer', r.user_id = viewer,
+          'is_private', r.is_private
         )
         order by r.place, r.hard desc, r.medium desc, r.handle
       )
@@ -122,7 +118,7 @@ begin
       )
       from me m
     ),
-    'ranked_count', (select count(*)::int from public_totals)
+    'ranked_count', (select count(*)::int from totals)
   ) into result;
 
   return result;

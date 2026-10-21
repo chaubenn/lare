@@ -1,5 +1,5 @@
 import { globalViewerInRows } from "@lare/shared";
-import { Globe, Lock } from "lucide-react";
+import { Globe } from "lucide-react";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { LeaderboardItem } from "./LeaderboardItem";
 import type { WeekOffset } from "./queries";
@@ -7,8 +7,9 @@ import { useGlobalLeaderboard } from "./queries";
 import { LIST_CLASS } from "./styles";
 
 /**
- * Everyone with a public account, ranked. A private account is never listed for anyone else, but
- * its owner still gets their own row beneath the list so they can see where they would stand.
+ * Everyone who solved something that week, ranked. Private accounts are listed too (marked with a
+ * lock); a profile click still shows them only the header until a follow request is accepted. The
+ * viewer gets their own row beneath the list when it isn't in it — past the cut-off, or no solves.
  */
 export function GlobalLeaderboard({ weekOffset }: { weekOffset: WeekOffset }) {
   const board = useGlobalLeaderboard(weekOffset);
@@ -26,7 +27,7 @@ export function GlobalLeaderboard({ weekOffset }: { weekOffset: WeekOffset }) {
 
   const { rows, viewer } = board.data;
   const listed = globalViewerInRows(board.data);
-  // Beneath the list when the viewer is private, past the cut-off, or has not solved anything yet.
+  // Beneath the list when the viewer is past the cut-off or has not solved anything yet.
   const showViewer = viewer !== null && !listed;
 
   if (rows.length === 0 && !showViewer) {
@@ -59,17 +60,7 @@ export function GlobalLeaderboard({ weekOffset }: { weekOffset: WeekOffset }) {
             Your position
           </h2>
           <ol className={LIST_CLASS}>
-            <LeaderboardItem
-              row={viewer}
-              note={
-                viewer.is_private ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Lock className="size-3" aria-hidden />
-                    Only you can see this — your account is private
-                  </span>
-                ) : null
-              }
-            />
+            <LeaderboardItem row={viewer} />
           </ol>
           {viewer.rank === null ? (
             <p className="mt-2 text-xs text-[var(--text-secondary)]">

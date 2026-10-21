@@ -51,18 +51,22 @@ export function leaderboardHasFriends(board: Leaderboard): boolean {
   return board.rows.some((row) => !row.is_viewer);
 }
 
-/** The caller's own standing on the global board, which a private account sees only for itself. */
-export const GlobalViewerSchema = LeaderboardRowSchema.extend({
+/** A global row also says whether the account is private, so the app can mark it. */
+export const GlobalRowSchema = LeaderboardRowSchema.extend({ is_private: z.boolean() });
+export type GlobalRow = z.infer<typeof GlobalRowSchema>;
+
+/** The caller's own standing on the global board. */
+export const GlobalViewerSchema = GlobalRowSchema.extend({
   /** Null until the caller has solved something this week. */
   rank: z.number().int().positive().nullable(),
-  is_private: z.boolean(),
 });
 export type GlobalViewer = z.infer<typeof GlobalViewerSchema>;
 
 export const GlobalLeaderboardSchema = LeaderboardSchema.extend({
+  rows: z.array(GlobalRowSchema),
   /** Null when the caller has no handle yet. */
   viewer: GlobalViewerSchema.nullable(),
-  /** Public accounts that solved something this week, whether or not `rows` shows them all. */
+  /** Everyone who solved something this week, whether or not `rows` shows them all. */
   ranked_count: Count,
 });
 export type GlobalLeaderboard = z.infer<typeof GlobalLeaderboardSchema>;
