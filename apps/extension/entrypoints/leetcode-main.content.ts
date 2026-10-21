@@ -197,7 +197,10 @@ export default defineContentScript({
           const url = this.__lareUrl;
           if (!url) return;
           const abs = absolute(url);
-          const text = typeof this.responseText === "string" ? this.responseText : "";
+          // Reading responseText throws for blob/arraybuffer/json requests, and none of
+          // those carry the JSON we parse, so skip them instead of rejecting unhandled.
+          if (this.responseType !== "" && this.responseType !== "text") return;
+          const text = this.responseText;
           let reqBody: string | null = null;
           try {
             if (typeof bodyForKind === "string") reqBody = bodyForKind;

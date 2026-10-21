@@ -1,4 +1,3 @@
-import { parseLeaderboard } from "@lare/shared";
 import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
@@ -168,22 +167,5 @@ export function useUnfollow() {
       if (error) throw error;
     },
     onSuccess: () => invalidateGraph(queryClient),
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Weekly leaderboard
-// ---------------------------------------------------------------------------
-/** The viewer and the people they follow, ranked by distinct problems solved in the week. */
-export function useWeeklyLeaderboard(weekOffset: 0 | -1) {
-  const { userId } = useUser();
-  return useQuery({
-    queryKey: ["weekly-leaderboard", userId, weekOffset],
-    staleTime: 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("weekly_leaderboard", { week_offset: weekOffset });
-      if (error) throw error;
-      return parseLeaderboard(data);
-    },
   });
 }

@@ -1,6 +1,7 @@
 /**
- * Weekly friends leaderboard. The `weekly_leaderboard` RPC counts distinct problems solved in a
- * UTC Monday–Sunday week by the viewer and the people they follow; this module parses it and
+ * Weekly leaderboards. The `weekly_leaderboard` RPC counts distinct problems solved in a UTC
+ * Monday–Sunday week by the viewer and the people they follow (the friends board);
+ * `global_leaderboard` does the same for every public account. This module parses both and
  * labels the week.
  */
 import { z } from "zod";
@@ -48,4 +49,34 @@ export function leaderboardWeekLabel(offset: number, weekStart: string, weekEnd:
 /** Whether anyone besides the viewer is on the board. */
 export function leaderboardHasFriends(board: Leaderboard): boolean {
   return board.rows.some((row) => !row.is_viewer);
+}
+
+/** A global row also says whether the account is private, so the app can mark it. */
+export const GlobalRowSchema = LeaderboardRowSchema.extend({ is_private: z.boolean() });
+export type GlobalRow = z.infer<typeof GlobalRowSchema>;
+
+/** The caller's own standing on the global board. */
+export const GlobalViewerSchema = GlobalRowSchema.extend({
+  /** Null until the caller has solved something this week. */
+  rank: z.number().int().positive().nullable(),
+});
+export type GlobalViewer = z.infer<typeof GlobalViewerSchema>;
+
+export const GlobalLeaderboardSchema = LeaderboardSchema.extend({
+  rows: z.array(GlobalRowSchema),
+  /** Null when the caller has no handle yet. */
+  viewer: GlobalViewerSchema.nullable(),
+  /** Everyone who solved something this week, whether or not `rows` shows them all. */
+  ranked_count: Count,
+});
+export type GlobalLeaderboard = z.infer<typeof GlobalLeaderboardSchema>;
+
+export function parseGlobalLeaderboard(value: unknown): GlobalLeaderboard | null {
+  const parsed = GlobalLeaderboardSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Whether the caller already has a row in `rows`; if not, their standing is shown beneath it. */
+export function globalViewerInRows(board: GlobalLeaderboard): boolean {
+  return board.rows.some((row) => row.is_viewer);
 }

@@ -37,6 +37,8 @@ export function RuntimeChart({
   const data = distribution.bins;
   const maxPct = Math.max(1, ...data.map((b) => b.pct));
   const [hover, setHover] = useState<number | null>(null);
+  /** Cursor position inside the chart frame, so the tooltip can sit beside it. */
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [width, setWidth] = useState(0);
   const frameRef = useRef<HTMLDivElement>(null);
   const gid = useId();
@@ -66,6 +68,19 @@ export function RuntimeChart({
 
   const active = hover ?? (highlight >= 0 ? highlight : null);
   const tip = active !== null ? data[active] : null;
+  // Follow the cursor while hovering, flipping to its left/top near the far edges so it stays
+  // inside the chart; with nothing hovered it rests in the corner showing the user's own bin.
+  const follow = hover !== null && cursor !== null;
+  const tipStyle =
+    follow && cursor
+      ? {
+          left: cursor.x,
+          top: cursor.y,
+          transform: `translate(${cursor.x > width / 2 ? "calc(-100% - 12px)" : "12px"}, ${
+            cursor.y > height / 2 ? "calc(-100% - 12px)" : "12px"
+          })`,
+        }
+      : undefined;
 
   return (
     <div ref={frameRef} className={cn("relative w-full", className)} style={{ height }}>
@@ -80,9 +95,16 @@ export function RuntimeChart({
           onMouseMove={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
             const i = Math.floor((event.clientX - rect.left - PAD.left) / (step || 1));
-            setHover(i >= 0 && i < data.length ? i : null);
+            const inside = i >= 0 && i < data.length;
+            setHover(inside ? i : null);
+            setCursor(
+              inside ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null,
+            );
           }}
-          onMouseLeave={() => setHover(null)}
+          onMouseLeave={() => {
+            setHover(null);
+            setCursor(null);
+          }}
         >
           <g transform={`translate(${PAD.left},${PAD.top})`}>
             {[0, 0.5, 1].map((t) => {
@@ -144,7 +166,11 @@ export function RuntimeChart({
       {tip ? (
         <div
           id={gid}
-          className="pointer-events-none absolute top-2 right-2 rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-1 text-[11px] text-[var(--text)] shadow-[var(--lare-shadow-1)]"
+          style={tipStyle}
+          className={cn(
+            "pointer-events-none absolute whitespace-nowrap rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-1 text-[11px] text-[var(--text)] shadow-[var(--lare-shadow-1)]",
+            !follow && "top-2 right-2",
+          )}
         >
           {tip.value}
           {unit} · {tip.pct.toFixed(2)}% submissions

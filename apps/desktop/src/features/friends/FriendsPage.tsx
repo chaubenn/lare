@@ -1,6 +1,6 @@
 import { Check, Lock, Search, UserPlus, Users, X } from "lucide-react";
 import { type ReactNode, useDeferredValue, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, Navigate, useSearchParams } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { CountBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -18,7 +18,6 @@ import {
 import { errorMessage } from "@/lib/supabase";
 import { FollowButton } from "./FollowButton";
 import { FriendsSidebar, useSuggestedPeople } from "./FriendsSidebar";
-import { LeaderboardTab } from "./LeaderboardTab";
 import {
   type FollowState,
   type PersonSummary,
@@ -29,11 +28,10 @@ import {
 } from "./queries";
 import { personName } from "./UserRow";
 
-const TABS = ["leaderboard", "following", "followers", "requests", "find"] as const;
+const TABS = ["following", "followers", "requests", "find"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
-  leaderboard: "Leaderboard",
   following: "Following",
   followers: "Followers",
   requests: "Requests",
@@ -46,6 +44,9 @@ export function FriendsPage() {
   const tab: Tab = TABS.includes(raw as Tab) ? (raw as Tab) : "following";
   const requests = useFollowRequests();
   const setTab = (key: Tab) => setParams({ tab: key });
+
+  // The leaderboard has its own sidebar entry now; keep old links to the tab working.
+  if (raw === "leaderboard") return <Navigate to="/leaderboard" replace />;
 
   return (
     // Same shape as the feed: the side column starts level with the lists, not the title.
@@ -71,7 +72,6 @@ export function FriendsPage() {
       </div>
 
       <div className="min-w-0 lg:col-start-1 lg:row-start-2">
-        {tab === "leaderboard" ? <LeaderboardTab onFind={() => setTab("find")} /> : null}
         {tab === "following" ? <FollowingTab onFind={() => setTab("find")} /> : null}
         {tab === "followers" ? <FollowersTab /> : null}
         {tab === "requests" ? <RequestsTab /> : null}

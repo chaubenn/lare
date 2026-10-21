@@ -72,6 +72,8 @@ going through Bunny.
   worker also re-checks every two minutes).
 - **Clear all** in the side panel (or tick some and **Clear N selected**) asks to confirm, then
   deletes those rows from the inbox: gone from the panel, the badge, and the desktop picker.
+  The desktop Drafts page's Tracked problems card works the same way: **Clear all**, or tick some
+  and it becomes **Clear N selected** (and **Deselect** drops the ticks without deleting).
 - **Publishing** a subset from the panel or from Drafts calls `publish_practice_problems`: the
   chosen problems move off the inbox onto the new post's session and disappear from the picker;
   the ones left behind stay. `active_ms` is 0 for passively captured problems and no duration is
@@ -120,7 +122,7 @@ going through Bunny.
   again, which is the same thing as removing Lare from that list with "-" by hand.
 - The window drags from anywhere along its top strip on sign-in, onboarding and **Set up
   recording**, not only inside the app shell.
-- **Notifications** (⌘6) is the only place the app speaks: an upload in progress, a finished or
+- **Notifications** (⌘7) is the only place the app speaks: an upload in progress, a finished or
   failed job, a blocked microphone, an available update and every save error all land there,
   behind one badge. Nothing flashes in a corner any more, so a failed save is silent until you
   look — check the badge after anything that could fail.
@@ -175,6 +177,15 @@ going through Bunny.
   second account does not see it in the feed or at its link. When the video turns ready the post
   appears for the second account at the top of the feed and the badge goes. A failed video shows
   **Not visible** until it is replaced or hidden.
+
+- **Leaderboard** (⌘6) has its own sidebar entry, no longer a Friends tab (an old
+  `/friends?tab=leaderboard` link redirects to it). Two scopes, **Friends** and **Global**, and a
+  This week / Last week toggle that applies to both. Friends ranks you and the people you follow;
+  Global ranks everyone who solved something that week, private accounts included (marked with a
+  lock). Open a private account from the list: you see only the header and "This account is
+  private" until a follow request is accepted, and none of their problems. Your own row shows
+  beneath the list under **Your position** when you are past the top 100 or have not solved
+  anything yet (no rank then).
 
 ## Web
 
@@ -236,6 +247,12 @@ fixture that does exactly this; it is **not** a migration and must never be run 
   replaces rather than duplicates.
 - An `interview_reviews` write is rejected when `sessions.graded` is false — including from the
   service role.
+
+`0022_global_leaderboard.sql` is idempotent; `supabase/functions/_tests/global_leaderboard.sql`
+is its isolated fixture. It proves private accounts are listed and marked, a row exposes only
+handle, name, picture, counts and rank, ties share a rank, an unsolved week has a standing but no
+rank, `max_rows` caps the list but not `ranked_count`, the week offset clamps to -52, and `anon`
+and unauthenticated callers are rejected.
 
 ## Windows
 
