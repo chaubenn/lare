@@ -72,6 +72,8 @@ going through Bunny.
   worker also re-checks every two minutes).
 - **Clear all** in the side panel (or tick some and **Clear N selected**) asks to confirm, then
   deletes those rows from the inbox: gone from the panel, the badge, and the desktop picker.
+  The desktop Drafts page's Tracked problems card works the same way: **Clear all**, or tick some
+  and it becomes **Clear N selected** (and **Deselect** drops the ticks without deleting).
 - **Publishing** a subset from the panel or from Drafts calls `publish_practice_problems`: the
   chosen problems move off the inbox onto the new post's session and disappear from the picker;
   the ones left behind stay. `active_ms` is 0 for passively captured problems and no duration is

@@ -16,8 +16,10 @@ import {
   useTrackedProblems,
 } from "./queries";
 
-async function confirmClearAll(count: number): Promise<boolean> {
-  const message = `Remove all ${plural(count, "tracked problem")}? They will no longer be available to post.`;
+async function confirmClear(count: number, all: boolean): Promise<boolean> {
+  const message = `Remove ${all ? "all " : ""}${plural(count, "tracked problem")}? ${
+    count === 1 ? "It" : "They"
+  } will no longer be available to post.`;
   if (inTauri) {
     return ask(message, { title: "Clear tracked problems", kind: "warning", okLabel: "Clear" });
   }
@@ -68,10 +70,12 @@ export function TrackedProblems() {
     }
   }
 
-  async function doClearAll() {
-    if (rows.length === 0 || !(await confirmClearAll(rows.length))) return;
+  // With a selection, clear just those; otherwise clear everything tracked.
+  async function doClear() {
+    const targets = chosen.length > 0 ? chosen : rows;
+    if (targets.length === 0 || !(await confirmClear(targets.length, chosen.length === 0))) return;
     try {
-      await clear.mutateAsync(rows.map((r) => r.id));
+      await clear.mutateAsync(targets.map((r) => r.id));
       setSelected(new Set());
     } catch (err) {
       notify({
@@ -104,9 +108,9 @@ export function TrackedProblems() {
               variant="ghost"
               size="sm"
               loading={clear.isPending}
-              onClick={() => void doClearAll()}
+              onClick={() => void doClear()}
             >
-              Clear all
+              {chosen.length > 0 ? `Clear ${chosen.length} selected` : "Clear all"}
             </Button>
           )}
         </div>
@@ -139,7 +143,7 @@ export function TrackedProblems() {
             </Button>
             {chosen.length > 0 && (
               <Button variant="ghost" onClick={() => setSelected(new Set())}>
-                Clear
+                Deselect
               </Button>
             )}
           </div>
