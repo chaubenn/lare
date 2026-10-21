@@ -1,9 +1,10 @@
-import { excerptFromHtml, postStateOf } from "@lare/shared";
+import { postStateOf } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Heart, Lock, MessageCircle, Sparkles } from "lucide-react";
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { PostStateBadge } from "@/components/ui/Badge";
+import { ExpandableText } from "@/components/ui/ExpandableText";
 import { CommentsPreview } from "@/features/feed/CommentsPreview";
 import { PostSlides } from "@/features/feed/PostSlides";
 import type { FeedPost } from "@/features/feed/queries";
@@ -36,7 +37,7 @@ export function PostCard({
   const name = author?.display_name ?? (author?.handle ? `@${author.handle}` : "Someone");
   const when = post.published_at ?? post.created_at;
   const title = post.title?.trim() || "Untitled session";
-  const excerpt = excerptFromHtml(post.body, 220);
+  const body = post.body?.trim() ?? "";
   const href = `/posts/${post.id}`;
   const isLiked = toggle.data?.liked ?? liked;
   const likeCount = toggle.data?.like_count ?? post.like_count;
@@ -98,7 +99,11 @@ export function PostCard({
             {title}
           </Link>
         </h2>
-        {excerpt && <p className="mt-1 text-sm leading-relaxed text-zinc-400">{excerpt}</p>}
+        {body && (
+          <div className="mt-1">
+            <ExpandableText text={body} className="text-zinc-400" />
+          </div>
+        )}
       </div>
 
       <div className="px-4 pt-3 sm:px-5">

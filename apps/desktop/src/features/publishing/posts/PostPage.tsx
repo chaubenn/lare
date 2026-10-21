@@ -9,7 +9,7 @@
 import { formatDurationHuman, formatLocalTimestamp, postStateOf } from "@lare/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -18,6 +18,7 @@ import { Badge, KindBadge, PostStateBadge } from "@/components/ui/Badge";
 import { Button, buttonClass } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
+import { ExpandableText } from "@/components/ui/ExpandableText";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { PostCarousel } from "@/features/feed/PostCarousel";
@@ -144,7 +145,10 @@ function PostView({ post }: { post: PostDetail }) {
           ) : null}
           {post.body ? (
             <div className="mt-3">
-              <PostBody body={post.body} />
+              <ExpandableText
+                text={post.body}
+                className="max-w-prose select-text text-[var(--text-secondary)]"
+              />
             </div>
           ) : null}
         </header>
@@ -256,49 +260,6 @@ function PostContent({
       </PostCarousel>
       {hiddenFromOthers ? <HiddenNote postId={post.id} /> : null}
     </section>
-  );
-}
-
-/** Clamped like a video description, since the comments sit right underneath it. */
-function PostBody({ body }: { body: string }) {
-  const ref = useRef<HTMLParagraphElement>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [overflows, setOverflows] = useState(false);
-
-  useLayoutEffect(() => {
-    // An expanded paragraph never reports overflow, which would pull the
-    // control out from under the reader mid-read. Only measure while clamped.
-    if (expanded) return;
-    const el = ref.current;
-    if (!el) return;
-    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [expanded]);
-
-  return (
-    <div>
-      <p
-        ref={ref}
-        className={`max-w-prose select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)] ${
-          expanded ? "" : "line-clamp-3"
-        }`}
-      >
-        {body}
-      </p>
-      {overflows ? (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className="mt-1 rounded-[var(--lare-r-1)] text-sm font-medium text-[var(--text-tertiary)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
-        >
-          {expanded ? "Show less" : "Show more"}
-        </button>
-      ) : null}
-    </div>
   );
 }
 
