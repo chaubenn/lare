@@ -406,8 +406,17 @@ impl Recorder {
         match &result {
             Ok(payload) => {
                 self.emit_state(payload);
-                if let Err(e) = crate::windows::open_recorder(&self.app, display_id.as_deref()) {
-                    warn!(%e, "recorder window failed to open");
+                // `stop` and `cancel` can run between `start_inner` and here: the extension may
+                // end a session the instant it starts one. Putting the pill up after that would
+                // leave it, and its shortcut, with nothing to control. Holding `finishing` keeps
+                // them from slipping in between this check and the window opening.
+                let _finishing = self.finishing.lock().await;
+                if self.active.lock().await.is_some() {
+                    if let Err(e) =
+                        crate::windows::open_recorder(&self.app, display_id.as_deref())
+                    {
+                        warn!(%e, "recorder window failed to open");
+                    }
                 }
             }
             Err(message) => {
