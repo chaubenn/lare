@@ -212,6 +212,17 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // The pill is the only thing Lare registers a global shortcut for (see
+        // `windows::sync_pill_shortcut`), so every press is a request to hide or show it.
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        crate::windows::toggle_recorder(app);
+                    }
+                })
+                .build(),
+        )
         .manage(AppState {
             current_user,
             ws: hub,

@@ -48,6 +48,11 @@ export interface RecorderSettings {
   cameraId: string | null;
   whisperModel: WhisperModel | null;
   maxOutputSize: number | null;
+  /**
+   * Accelerator that hides and shows the recorder pill mid-recording (`Control+Alt+Shift+H`
+   * syntax). null = the default, Ctrl+Alt+Shift+H; "" = no shortcut.
+   */
+  pillShortcut: string | null;
 }
 
 export interface RecorderStatus {

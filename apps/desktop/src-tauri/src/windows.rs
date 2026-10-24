@@ -19,9 +19,20 @@ use std::thread::ThreadId;
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 pub const RECORDER_LABEL: &str = "recorder";
 pub const CAMERA_LABEL: &str = "camera";
+
+/// Hides and shows the pill until the user picks their own. Three modifiers plus a letter that no
+/// OS, browser or editor binds, and nothing a recording session types (code, speech) produces,
+/// so it is the same on every platform and never collides with anything.
+pub const DEFAULT_PILL_SHORTCUT: &str = "Control+Alt+Shift+H";
+
+/// True from the moment the pill is put up for a recording until it is taken down. The shortcut is
+/// only registered, and only does anything, in between, so it can never shadow the same keys in
+/// another app outside a take.
+static PILL_LIVE: AtomicBool = AtomicBool::new(false);
 
 /// Tells the facecam preview whether it should be holding the webcam open. A hidden window keeps
 /// running its script, and nobody wants the camera light on between takes.
@@ -297,11 +308,73 @@ fn start_overlay_watchdog(app: &AppHandle) {
     });
 }
 
+/// Reads the user's pill shortcut: `None` is the default, `Some("")` turns it off.
+pub fn parse_pill_shortcut(setting: Option<&str>) -> Result<Option<Shortcut>, String> {
+    let raw = match setting.map(str::trim) {
+        None => DEFAULT_PILL_SHORTCUT,
+        Some("") => return Ok(None),
+        Some(raw) => raw,
+    };
+    raw.parse::<Shortcut>()
+        .map(Some)
+        .map_err(|e| format!("\"{raw}\" is not a valid shortcut: {e}"))
+}
+
+/// Makes the registered global shortcut match the recording state and the saved setting.
+/// Lare has no other global shortcut, so everything is cleared and the one wanted is re-added.
+pub fn sync_pill_shortcut(app: &AppHandle) {
+    on_main_unit(app, |app| {
+        let shortcuts = app.global_shortcut();
+        if let Err(e) = shortcuts.unregister_all() {
+            tracing::warn!(%e, "could not clear the pill shortcut");
+        }
+        if !PILL_LIVE.load(Ordering::SeqCst) {
+            return;
+        }
+        let setting = app
+            .try_state::<std::sync::Arc<crate::recorder::Recorder>>()
+            .and_then(|rec| rec.settings().pill_shortcut);
+        match parse_pill_shortcut(setting.as_deref()) {
+            Ok(Some(shortcut)) => {
+                // Typically the OS or another app already owns a combination the user picked;
+                // the pill then simply stays put.
+                if let Err(e) = shortcuts.register(shortcut) {
+                    tracing::warn!(%e, "could not register the pill shortcut");
+                }
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!(%e, "ignoring the saved pill shortcut"),
+        }
+    });
+}
+
+/// Hide the pill if it is showing, bring it back if it is hidden. The webview keeps running while
+/// it is off screen, and it comes back where the user left it, so the timer and the recording are
+/// untouched either way. Does nothing unless a recording has the pill up.
+pub fn toggle_recorder(app: &AppHandle) {
+    on_main_unit(app, |app| {
+        if !PILL_LIVE.load(Ordering::SeqCst) {
+            return;
+        }
+        let Some(w) = app.get_webview_window(RECORDER_LABEL) else {
+            return;
+        };
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        } else if w.show().is_ok() {
+            promote_overlay(&w);
+            start_overlay_watchdog(app);
+        }
+    });
+}
+
 /// Show the recorder pill (bottom-centre of the recorded display, above the Dock).
 pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), String> {
     let display_id = display_id.map(str::to_owned);
     on_main(app, move |app| {
         let (x, y) = recorder_position(target_work_area(app, display_id.as_deref()));
+        PILL_LIVE.store(true, Ordering::SeqCst);
+        sync_pill_shortcut(app);
         if let Some(w) = app.get_webview_window(RECORDER_LABEL) {
             let _ = w.set_position(LogicalPosition::new(x, y));
             w.show().map_err(|e| e.to_string())?;
@@ -332,6 +405,8 @@ pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), St
 /// Take the pill off screen. It keeps its webview so a stop still in flight can finish.
 pub fn hide_recorder(app: &AppHandle) {
     on_main_unit(app, |app| {
+        PILL_LIVE.store(false, Ordering::SeqCst);
+        sync_pill_shortcut(app);
         if let Some(w) = app.get_webview_window(RECORDER_LABEL) {
             let _ = w.hide();
         }
@@ -424,4 +499,46 @@ pub fn resize_camera(app: &AppHandle, size: f64) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DEFAULT_PILL_SHORTCUT, parse_pill_shortcut};
+
+    #[test]
+    fn unset_is_the_default_and_empty_is_off() {
+        assert_eq!(
+            parse_pill_shortcut(None).unwrap(),
+            Some(DEFAULT_PILL_SHORTCUT.parse().unwrap())
+        );
+        assert_eq!(parse_pill_shortcut(Some("")).unwrap(), None);
+        assert_eq!(parse_pill_shortcut(Some("  ")).unwrap(), None);
+    }
+
+    #[test]
+    fn every_accelerator_the_settings_page_can_produce_parses() {
+        for accelerator in [
+            "Command+Space",
+            "Control+Space",
+            "Super+Shift+H",
+            "Control+Alt+Shift+P",
+            "Alt+7",
+            "Control+Up",
+            "Control+`",
+            "Control+-",
+            "Control+\\",
+            "F9",
+        ] {
+            assert!(
+                parse_pill_shortcut(Some(accelerator)).is_ok(),
+                "{accelerator} should parse"
+            );
+        }
+    }
+
+    #[test]
+    fn nonsense_is_rejected() {
+        assert!(parse_pill_shortcut(Some("Control+Banana")).is_err());
+        assert!(parse_pill_shortcut(Some("Control+")).is_err());
+    }
 }

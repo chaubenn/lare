@@ -31,10 +31,36 @@ function openDb(): Promise<IDBDatabase> {
         store.createIndex("bySession", "sessionId", { unique: false });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error("indexedDB open failed"));
+    req.onsuccess = () => {
+      const db = req.result;
+      // The browser can close the connection under us (site data cleared, extension
+      // reloaded, storage eviction). Drop the cached handle so the next call reopens.
+      db.onclose = () => {
+        dbPromise = null;
+      };
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      dbPromise = null;
+      reject(req.error ?? new Error("indexedDB open failed"));
+    };
   });
   return dbPromise;
+}
+
+/** Starts a transaction, reopening the database once if the cached connection has gone stale. */
+async function beginTx(mode: IDBTransactionMode): Promise<IDBTransaction> {
+  try {
+    return (await openDb()).transaction(STORE, mode);
+  } catch (err) {
+    if (!(err instanceof DOMException) || err.name !== "InvalidStateError") throw err;
+    dbPromise = null;
+    return (await openDb()).transaction(STORE, mode);
+  }
 }
 
 function txDone(tx: IDBTransaction): Promise<void> {
@@ -53,8 +79,7 @@ export async function appendEvents(
   events: readonly EditEvent[],
 ): Promise<void> {
   if (events.length === 0) return;
-  const db = await openDb();
-  const tx = db.transaction(STORE, "readwrite");
+  const tx = await beginTx("readwrite");
   const store = tx.objectStore(STORE);
   for (const event of events) {
     const row: EventRow = { sessionId, sessionProblemId, slug, language, event };
@@ -67,8 +92,7 @@ export async function readEvents(
   sessionId: string,
   sessionProblemId: string,
 ): Promise<{ language: string | null; events: EditEvent[] }> {
-  const db = await openDb();
-  const tx = db.transaction(STORE, "readonly");
+  const tx = await beginTx("readonly");
   const index = tx.objectStore(STORE).index("byProblem");
   const rows: EventRow[] = await new Promise((resolve, reject) => {
     const req = index.getAll(IDBKeyRange.only([sessionId, sessionProblemId]));
@@ -81,8 +105,7 @@ export async function readEvents(
 }
 
 export async function deleteSessionEvents(sessionId: string): Promise<void> {
-  const db = await openDb();
-  const tx = db.transaction(STORE, "readwrite");
+  const tx = await beginTx("readwrite");
   const index = tx.objectStore(STORE).index("bySession");
   await new Promise<void>((resolve, reject) => {
     const req = index.openKeyCursor(IDBKeyRange.only(sessionId));

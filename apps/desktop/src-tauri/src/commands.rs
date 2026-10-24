@@ -131,8 +131,12 @@ pub fn recorder_settings(rec: Rec<'_>) -> RecorderSettings {
 }
 
 #[tauri::command]
-pub fn set_recorder_settings(rec: Rec<'_>, settings: RecorderSettings) {
+pub fn set_recorder_settings(rec: Rec<'_>, settings: RecorderSettings) -> Result<(), String> {
+    // Refuse a shortcut that would never register, rather than saving it and failing silently
+    // the next time a recording starts.
+    windows::parse_pill_shortcut(settings.pill_shortcut.as_deref())?;
     rec.set_settings(settings);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
