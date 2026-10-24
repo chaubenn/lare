@@ -27,6 +27,8 @@ tauri-plugin-process = "2"
 tauri-plugin-notification = "~2.3"
 # Desktop-only (no mobile build for Lare); pulls updates from the GitHub release `latest.json`.
 tauri-plugin-updater = "2"
+# Hides and shows the recorder pill from the keyboard while a recording is running.
+tauri-plugin-global-shortcut = "2"
 
 axum = { version = "0.8", features = ["ws"] }
 # `signal`: SIGINT/SIGTERM/SIGHUP have to release the capture devices (see `src/shutdown.rs`).

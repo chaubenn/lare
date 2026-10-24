@@ -43,6 +43,10 @@ pub struct RecorderSettings {
     pub whisper_model: Option<lare_transcribe::ModelKind>,
     /// Instant mode longest-edge cap. `None` = 1920.
     pub max_output_size: Option<u32>,
+    /// Accelerator that hides and shows the recorder pill while recording. `None` = the platform
+    /// default (`windows::DEFAULT_PILL_SHORTCUT`); `Some("")` = no shortcut.
+    #[serde(default)]
+    pub pill_shortcut: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -294,6 +298,8 @@ impl Recorder {
         if let Some(base) = self.recordings_dir.parent() {
             save_settings(base, &settings);
         }
+        // A new shortcut takes effect straight away if a recording is already running.
+        crate::windows::sync_pill_shortcut(&self.app);
     }
 
     async fn feeds(&self) -> &Feeds {

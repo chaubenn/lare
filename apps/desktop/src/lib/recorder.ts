@@ -48,6 +48,11 @@ export interface RecorderSettings {
   cameraId: string | null;
   whisperModel: WhisperModel | null;
   maxOutputSize: number | null;
+  /**
+   * Accelerator that hides and shows the recorder pill mid-recording (`CommandOrControl+Space`
+   * syntax). null = the default, Cmd+Space on macOS and Ctrl+Space elsewhere; "" = no shortcut.
+   */
+  pillShortcut: string | null;
 }
 
 export interface RecorderStatus {
