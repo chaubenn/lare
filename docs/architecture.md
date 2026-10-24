@@ -98,7 +98,7 @@ already in media time; edit events (wall-clock epoch from Monaco) and submission
    process. `destroy_overlays` closes them when the main window goes, which is also what quits the
    app now that the overlays outlive every recording.
    A global shortcut (`windows::sync_pill_shortcut`, setting `pillShortcut`, default
-   Cmd+Space on macOS and Ctrl+Space elsewhere) hides and shows the pill mid-recording. It is only
+   Ctrl+Alt+Shift+H on every platform) hides and shows the pill mid-recording. It is only
    registered between `open_recorder` and `hide_recorder`, so it never claims the key combination
    outside a take, and hiding is just `hide()` — the webview, timer and window position survive.
 3. On stop, the `recording:completed` event hands the recording to the React pipeline.

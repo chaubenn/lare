@@ -156,12 +156,11 @@ going through Bunny.
 - Pause a take for a while, resume, then stop: the pill's timer counts only the recorded
   stretches.
 - Pill shortcut: during a take press the shortcut (Settings → Recording → Hide the recorder pill;
-  default ⌘ Space on macOS, Ctrl Space on Windows). The pill disappears, the timer keeps counting,
-  and pressing it again brings the pill back where you left it, also after dragging it first. Over
-  a fullscreen app it still returns on top. Outside a recording the combination is free: Spotlight
-  or an IDE's completion gets it back. Change it in Settings, start a take, and the new one works;
-  *Turn off* leaves no shortcut and *Reset to default* restores it. macOS reserves ⌘ Space for
-  Spotlight, so confirm whether the default fires there or Spotlight takes it.
+  default Ctrl+Alt+Shift+H on every platform). The pill disappears, the timer keeps counting, and
+  pressing it again brings the pill back where you left it, also after dragging it first. Over a
+  fullscreen app it still returns on top. Outside a recording the combination is not claimed.
+  Change it in Settings, start a take, and the new one works; *Turn off* leaves no shortcut and
+  *Reset to default* restores it.
 - Force-quit mid-recording (Activity Monitor), reopen: the take is recovered from Cap's original
   DASH tracks into a separate `output.mp4` — never by resuming the partial combined file at a
   stale offset — and the draft can still be finished.

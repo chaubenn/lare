@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { captureAccelerator, describeAccelerator } from "../src/lib/shortcuts.ts";
+import {
+  captureAccelerator,
+  DEFAULT_PILL_SHORTCUT,
+  describeAccelerator,
+} from "../src/lib/shortcuts.ts";
 
 const press = (code, mods = {}) => ({
   code,
@@ -64,4 +68,15 @@ test("keycaps follow the platform", () => {
   assert.deepEqual(describeAccelerator("CommandOrControl+Space", false), ["Ctrl", "Space"]);
   assert.deepEqual(describeAccelerator("Control+Alt+Shift+p", true), ["⌃", "⌥", "⇧", "P"]);
   assert.deepEqual(describeAccelerator("Super+Up", false), ["Win", "Up"]);
+});
+
+test("the default shortcut is a three-modifier chord, drawn per platform", () => {
+  assert.equal(DEFAULT_PILL_SHORTCUT, "Control+Alt+Shift+H");
+  assert.deepEqual(describeAccelerator(DEFAULT_PILL_SHORTCUT, true), ["⌃", "⌥", "⇧", "H"]);
+  assert.deepEqual(describeAccelerator(DEFAULT_PILL_SHORTCUT, false), [
+    "Ctrl",
+    "Alt",
+    "Shift",
+    "H",
+  ]);
 });

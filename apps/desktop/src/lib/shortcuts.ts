@@ -1,11 +1,11 @@
 /**
  * Accelerator strings for the recorder-pill shortcut, in the syntax Tauri's global-shortcut plugin
- * parses (`CommandOrControl+Space`, `Alt+Shift+H`). Kept free of React and Tauri so the capture and
+ * parses (`Control+Alt+Shift+H`, `CommandOrControl+Space`). Kept free of React and Tauri so the capture and
  * display rules can be tested on their own.
  */
 
-/** What the setting means when nothing has been chosen. `CommandOrControl` is Cmd on macOS. */
-export const DEFAULT_PILL_SHORTCUT = "CommandOrControl+Space";
+/** What the setting means when nothing has been chosen. Matches `windows::DEFAULT_PILL_SHORTCUT`. */
+export const DEFAULT_PILL_SHORTCUT = "Control+Alt+Shift+H";
 
 export interface KeyLike {
   code: string;

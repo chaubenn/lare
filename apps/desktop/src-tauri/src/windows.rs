@@ -24,13 +24,14 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 pub const RECORDER_LABEL: &str = "recorder";
 pub const CAMERA_LABEL: &str = "camera";
 
-/// Hides and shows the pill until the user picks their own. `CommandOrControl` resolves to Cmd on
-/// macOS and Ctrl everywhere else.
-pub const DEFAULT_PILL_SHORTCUT: &str = "CommandOrControl+Space";
+/// Hides and shows the pill until the user picks their own. Three modifiers plus a letter that no
+/// OS, browser or editor binds, and nothing a recording session types (code, speech) produces,
+/// so it is the same on every platform and never collides with anything.
+pub const DEFAULT_PILL_SHORTCUT: &str = "Control+Alt+Shift+H";
 
 /// True from the moment the pill is put up for a recording until it is taken down. The shortcut is
-/// only registered, and only does anything, in between: Cmd/Ctrl+Space belongs to Spotlight, input
-/// method switchers and editors' completion the rest of the time.
+/// only registered, and only does anything, in between, so it can never shadow the same keys in
+/// another app outside a take.
 static PILL_LIVE: AtomicBool = AtomicBool::new(false);
 
 /// Tells the facecam preview whether it should be holding the webcam open. A hidden window keeps
@@ -335,8 +336,8 @@ pub fn sync_pill_shortcut(app: &AppHandle) {
             .and_then(|rec| rec.settings().pill_shortcut);
         match parse_pill_shortcut(setting.as_deref()) {
             Ok(Some(shortcut)) => {
-                // Typically the OS or another app already owns the combination (Cmd+Space is
-                // Spotlight's); the pill then simply stays put.
+                // Typically the OS or another app already owns a combination the user picked;
+                // the pill then simply stays put.
                 if let Err(e) = shortcuts.register(shortcut) {
                     tracing::warn!(%e, "could not register the pill shortcut");
                 }

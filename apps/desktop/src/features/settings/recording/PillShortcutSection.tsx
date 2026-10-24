@@ -117,11 +117,9 @@ export function PillShortcutSection() {
           </div>
           {rejection ? <FieldError>{rejection}</FieldError> : null}
           <p className="text-xs text-zinc-500">
-            The default is {isMac ? "⌘ Space" : "Ctrl Space"}. It is only claimed while a recording
-            is running, so it never gets in the way of other apps the rest of the time.
-            {isMac
-              ? " macOS reserves ⌘ Space for Spotlight: if the default does nothing, pick another shortcut or free it up in System Settings → Keyboard → Keyboard Shortcuts → Spotlight."
-              : ""}
+            The default is {describeAccelerator(DEFAULT_PILL_SHORTCUT, isMac).join(" ")}. It is only
+            claimed while a recording is running, so it never gets in the way of other apps the rest
+            of the time.
           </p>
         </div>
       )}
