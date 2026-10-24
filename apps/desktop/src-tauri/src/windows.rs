@@ -19,7 +19,7 @@ use std::thread::ThreadId;
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
 pub const RECORDER_LABEL: &str = "recorder";
 pub const CAMERA_LABEL: &str = "camera";
@@ -308,6 +308,18 @@ fn start_overlay_watchdog(app: &AppHandle) {
     });
 }
 
+/// Whether a shortcut is safe to claim system-wide: a function key, or any key held with a
+/// modifier other than Shift. Anything else would swallow ordinary typing for as long as a
+/// recording runs. The settings page enforces the same rule when it captures a chord.
+fn is_claimable(shortcut: &Shortcut) -> bool {
+    let function_keys = [
+        Code::F1, Code::F2, Code::F3, Code::F4, Code::F5, Code::F6, Code::F7, Code::F8,
+        Code::F9, Code::F10, Code::F11, Code::F12, Code::F13, Code::F14, Code::F15, Code::F16,
+        Code::F17, Code::F18, Code::F19, Code::F20, Code::F21, Code::F22, Code::F23, Code::F24,
+    ];
+    function_keys.contains(&shortcut.key) || !shortcut.mods.difference(Modifiers::SHIFT).is_empty()
+}
+
 /// Reads the user's pill shortcut: `None` is the default, `Some("")` turns it off.
 pub fn parse_pill_shortcut(setting: Option<&str>) -> Result<Option<Shortcut>, String> {
     let raw = match setting.map(str::trim) {
@@ -315,9 +327,15 @@ pub fn parse_pill_shortcut(setting: Option<&str>) -> Result<Option<Shortcut>, St
         Some("") => return Ok(None),
         Some(raw) => raw,
     };
-    raw.parse::<Shortcut>()
-        .map(Some)
-        .map_err(|e| format!("\"{raw}\" is not a valid shortcut: {e}"))
+    let shortcut = raw
+        .parse::<Shortcut>()
+        .map_err(|e| format!("\"{raw}\" is not a valid shortcut: {e}"))?;
+    if !is_claimable(&shortcut) {
+        return Err(format!(
+            "\"{raw}\" would take over a plain typing key: hold Ctrl, Alt or Cmd with it."
+        ));
+    }
+    Ok(Some(shortcut))
 }
 
 /// Makes the registered global shortcut match the recording state and the saved setting.
@@ -532,6 +550,22 @@ mod tests {
             assert!(
                 parse_pill_shortcut(Some(accelerator)).is_ok(),
                 "{accelerator} should parse"
+            );
+        }
+    }
+
+    #[test]
+    fn a_plain_typing_key_cannot_be_claimed_globally() {
+        for accelerator in ["H", "Space", "Shift+H", "Shift+Space", "Up", "7"] {
+            assert!(
+                parse_pill_shortcut(Some(accelerator)).is_err(),
+                "{accelerator} should be refused"
+            );
+        }
+        for accelerator in ["F9", "Shift+F9", "Alt+H", "Control+Shift+H", "Command+Space"] {
+            assert!(
+                parse_pill_shortcut(Some(accelerator)).is_ok(),
+                "{accelerator} should be accepted"
             );
         }
     }
