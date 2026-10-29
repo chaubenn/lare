@@ -1,0 +1,57 @@
+name: Publish whisper models
+
+# Mirrors the ggml whisper models to a GitHub release so the desktop app can fetch them from a
+# fast CDN instead of HuggingFace, which throttles individual connections heavily from some
+# networks. Runs when this file changes on main (so the first merge publishes the release) and
+# can be re-run manually; re-running replaces the assets.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-models.yml]
+
+concurrency:
+  group: publish-models
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      TAG: whisper-models
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download models from HuggingFace and verify checksums
+        run: |
+          set -euo pipefail
+          declare -A SHA=(
+            [ggml-tiny.en.bin]=921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f
+            [ggml-base.en.bin]=a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002
+            [ggml-small.en.bin]=c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d
+            [ggml-medium.en.bin]=cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356
+          )
+          mkdir -p models
+          for name in "${!SHA[@]}"; do
+            echo "::group::$name"
+            curl -fL --retry 5 --retry-delay 5 -o "models/$name" \
+              "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$name"
+            echo "${SHA[$name]}  models/$name" | sha256sum -c -
+            echo "::endgroup::"
+          done
+          ls -la models
+
+      - name: Create or update the release
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Whisper speech models" \
+              --notes "ggml whisper.cpp models mirrored from https://huggingface.co/ggerganov/whisper.cpp for the Lare desktop app. Checksums are pinned in crates/lare-transcribe/src/lib.rs." \
+              --latest=false
+          fi
+          gh release upload "$TAG" models/*.bin --clobber

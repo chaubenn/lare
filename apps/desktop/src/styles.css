@@ -1,0 +1,93 @@
+@import "tailwindcss";
+@import "@lare/ui/tokens.css";
+@import "@lare/ui/tailwind-bridge.css";
+@import "@lare/ui/type.css";
+@import "@lare/ui/motion.css";
+@import "@lare/ui/prose.css";
+@source "../../../packages/ui/src";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* @fontsource-variable/outfit registers "Outfit Variable"; plain "Outfit" never matched. */
+  --font-sans: "Outfit Variable", "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* On <html>, `overflow: clip` reaches the viewport as `hidden`, which scripts and focus can still
+   scroll. Clipping and positioning #root instead gives stray absolutes a containing block that
+   genuinely cannot scroll, so the shell never slides out of the window. */
+#root {
+  position: relative;
+  overflow: clip;
+}
+
+html,
+body {
+  /* Only <main> should ever scroll — the shell (sidebar, footer, jobs tray) stays fixed.
+     Without a y clip here, the document itself gets its own scrollable overflow on top of
+     <main>'s, so the whole page (footer included) can be dragged up past its content. */
+  overflow: clip;
+}
+
+body {
+  @apply text-zinc-100;
+  background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  user-select: none;
+  cursor: default;
+}
+
+/* Overlay windows (recorder pill, camera preview) sit on a transparent window. */
+html.overlay-window,
+html.overlay-window body,
+html.overlay-window #root {
+  background-color: transparent;
+  overflow: hidden;
+}
+
+input,
+textarea,
+select,
+pre,
+code,
+.select-text {
+  user-select: text;
+  cursor: auto;
+}
+
+button,
+a,
+[role="button"] {
+  cursor: pointer;
+}
+
+/* Keyboard-first focus rings */
+:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--focus);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-zinc-800;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

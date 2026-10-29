@@ -1,0 +1,162 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildActivityDays,
+  buildActivityWeekBars,
+  describeActivityWeek,
+  formatWeekRange,
+  maxPage,
+  pageWindow,
+  type SolvedActivity,
+  summarizeActivity,
+} from "./activity";
+
+const SAMPLE: SolvedActivity = {
+  visible: true,
+  start: "2026-01-01",
+  end: "2026-01-21",
+  days: [
+    { day: "2026-01-02", count: 2 },
+    { day: "2026-01-08", count: 1 },
+    { day: "2026-01-09", count: 3 },
+  ],
+  total: 6,
+  max: 3,
+  all_time: 10,
+};
+
+describe("buildActivityWeekBars", () => {
+  it("rolls daily solves into Sunday-first weeks", () => {
+    const weeks = buildActivityWeekBars(SAMPLE);
+    expect(weeks.length).toBeGreaterThanOrEqual(3);
+
+    const weekOfJan4 = weeks.find((w) => w.firstDay <= "2026-01-02" && w.lastDay >= "2026-01-02");
+    expect(weekOfJan4?.count).toBe(2);
+    expect(weekOfJan4?.daysActive).toBe(1);
+
+    const weekOfJan11 = weeks.find((w) => w.firstDay <= "2026-01-08" && w.lastDay >= "2026-01-09");
+    expect(weekOfJan11?.count).toBe(4);
+    expect(weekOfJan11?.daysActive).toBe(2);
+    expect(weekOfJan11?.maxDay).toBe(3);
+  });
+
+  it("marks the week that contains the window end as current", () => {
+    const weeks = buildActivityWeekBars(SAMPLE);
+    const current = weeks.filter((w) => w.current);
+    expect(current).toHaveLength(1);
+    const lastDay = current[0]?.lastDay ?? "";
+    expect(lastDay >= "2026-01-21").toBe(true);
+  });
+});
+
+describe("formatWeekRange", () => {
+  it("prints a short UTC range", () => {
+    expect(formatWeekRange("2026-01-04", "2026-01-10")).toBe("Jan 4 – Jan 10, 2026");
+  });
+});
+
+describe("describeActivityWeek", () => {
+  it("names the count and the week", () => {
+    const week = buildActivityWeekBars(SAMPLE).find((w) => w.count === 4);
+    expect(week).toBeDefined();
+    expect(describeActivityWeek(week!)).toContain("4 problems solved");
+    expect(describeActivityWeek(week!)).not.toContain("days active");
+  });
+
+  it("uses the singular for a week with one solve", () => {
+    const one: SolvedActivity = {
+      ...SAMPLE,
+      days: [{ day: "2026-01-08", count: 1 }],
+      total: 1,
+      max: 1,
+    };
+    const week = buildActivityWeekBars(one).find((w) => w.count === 1);
+    expect(week).toBeDefined();
+    expect(describeActivityWeek(week!)).toContain("1 problem solved");
+  });
+});
+
+describe("buildActivityDays", () => {
+  it("returns one entry per real day in the window, in chronological order, no padding", () => {
+    const days = buildActivityDays(SAMPLE);
+    expect(days).toHaveLength(21); // Jan 1 - Jan 21 inclusive
+    expect(days[0]?.iso).toBe("2026-01-01");
+    expect(days[days.length - 1]?.iso).toBe("2026-01-21");
+    expect(days.find((d) => d.iso === "2026-01-09")?.count).toBe(3);
+    expect(days.find((d) => d.iso === "2026-01-01")?.count).toBe(0);
+  });
+});
+
+describe("pageWindow", () => {
+  const items = Array.from({ length: 21 }, (_, i) => i); // 0..20
+
+  it("page 0 is the most recent `pageSize` items", () => {
+    expect(pageWindow(items, 7, 0)).toEqual([14, 15, 16, 17, 18, 19, 20]);
+  });
+
+  it("page 1 is the 7 items before that", () => {
+    expect(pageWindow(items, 7, 1)).toEqual([7, 8, 9, 10, 11, 12, 13]);
+  });
+
+  it("clamps a partial final page to what's actually available", () => {
+    expect(pageWindow(items, 7, 2)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(pageWindow(items, 8, 2)).toEqual([0, 1, 2, 3, 4]); // only 5 left before the start
+  });
+});
+
+describe("maxPage", () => {
+  it("is the last page index that still has at least one item", () => {
+    expect(maxPage(21, 7)).toBe(2);
+    expect(maxPage(20, 7)).toBe(2);
+    expect(maxPage(14, 7)).toBe(1);
+    expect(maxPage(0, 7)).toBe(0);
+  });
+});
+
+describe("summarizeActivity", () => {
+  const day = (iso: string, count: number) => ({ iso, date: new Date(`${iso}T00:00:00Z`), count });
+
+  it("counts a streak through yesterday while today is still empty", () => {
+    const days = [
+      day("2026-01-01", 0),
+      day("2026-01-02", 1),
+      day("2026-01-03", 2),
+      day("2026-01-04", 0),
+    ];
+    expect(summarizeActivity(days)).toMatchObject({
+      streak: 2,
+      bestDay: 2,
+      last7: 3,
+      activeDays30: 2,
+    });
+  });
+
+  it("breaks the streak on a missed day", () => {
+    const days = [day("2026-01-01", 3), day("2026-01-02", 0), day("2026-01-03", 1)];
+    expect(summarizeActivity(days).streak).toBe(1);
+  });
+
+  it("finds the longest run of solving days in the window", () => {
+    const days = [
+      day("2026-01-01", 1),
+      day("2026-01-02", 1),
+      day("2026-01-03", 0),
+      day("2026-01-04", 2),
+      day("2026-01-05", 1),
+      day("2026-01-06", 3),
+      day("2026-01-07", 0),
+    ];
+    const summary = summarizeActivity(days);
+    expect(summary.longestStreak).toBe(3);
+    expect(summary.streak).toBe(3);
+  });
+
+  it("returns zeros for an empty window", () => {
+    expect(summarizeActivity([])).toEqual({
+      last7: 0,
+      streak: 0,
+      longestStreak: 0,
+      activeDays30: 0,
+      bestDay: 0,
+    });
+  });
+});

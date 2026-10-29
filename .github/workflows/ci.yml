@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  # Every PR, which in practice means dev -> main. Pushes to dev run the fast lane in
+  # ci-dev.yml instead; this workflow is the slow one (~10 min warm) and is paid once, at the PR.
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  js:
+    name: TypeScript (lint, typecheck, unit, extension e2e, web build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm -r --if-present typecheck
+      # Every package that has tests, not just @lare/shared: the desktop, web and capture
+      # suites existed but nothing ran them.
+      - run: pnpm -r --if-present test
+      - name: Extension e2e (Playwright + Monaco fixture)
+        working-directory: apps/extension
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm build:e2e
+          pnpm exec playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: extension-e2e-report
+          path: apps/extension/test-results
+      - name: Extension production build
+        working-directory: apps/extension
+        run: pnpm build && pnpm zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-chrome-mv3
+          path: apps/extension/.output/*.zip
+          # wxt writes to `.output`, and upload-artifact skips dotted paths by default —
+          # without this the step finds nothing and only warns.
+          include-hidden-files: true
+
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows-2022 ships the Visual Studio LLVM component bindgen needs (same runner Cap uses).
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          targets: ${{ matrix.target }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: ${{ matrix.target }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Native deps (prebuilt ffmpeg, cargo env)
+        env:
+          RUST_TARGET_TRIPLE: ${{ matrix.target }}
+        run: node scripts/setup-native-deps.mjs
+      - name: cmake (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake || true
+      - name: Check
+        run: cargo check --workspace --all-targets --target ${{ matrix.target }}
+      - name: Test (portable crates)
+        run: cargo test -p lare-core -p lare-bunny -p lare-transcribe -p scap-dxgi --target ${{ matrix.target }}
+      - name: Clippy (Lare crates)
+        run: cargo clippy -p lare-core -p lare-bunny -p lare-recording -p lare-transcribe -p lare-desktop --target ${{ matrix.target }} -- -D warnings

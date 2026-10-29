@@ -1,0 +1,147 @@
+name: Desktop build
+
+# The desktop bundles, built once per commit and reused.
+#
+# `prebuild.yml` calls this on every push to `main`, so the installers for a commit are
+# already built and waiting before anyone tags it. `release.yml` calls it only as a
+# fallback, when a tag points at a commit no prebuild ever covered. Nothing else should
+# build the desktop app — one definition means the bundle a tag publishes is byte-for-byte
+# the thing CI produced, not a second recipe that drifted.
+#
+# Each target uploads a `desktop-<target>` artifact holding exactly the files a release
+# needs and nothing else: the stable-named installer, plus the updater bundle and its
+# minisign .sig. `release.yml` uploads those verbatim and writes `latest.json` around them.
+on:
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # Public client configuration baked into the desktop bundle.
+  VITE_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
+  VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
+  VITE_SITE_URL: https://lare-one.vercel.app
+  VITE_BUNNY_LIBRARY_ID: "743884"
+
+jobs:
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            installer_glob: "target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"
+            installer_name: Lare-macOS-AppleSilicon.dmg
+            updater_glob: "target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz"
+            # Both macOS targets bundle a `Lare.app.tar.gz`; the arch goes in the name so
+            # the two can live on one release. The .sig covers the bytes, not the filename.
+            updater_name: Lare_aarch64.app.tar.gz
+          - name: macOS x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            installer_glob: "target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"
+            installer_name: Lare-macOS-Intel.dmg
+            updater_glob: "target/x86_64-apple-darwin/release/bundle/macos/*.app.tar.gz"
+            updater_name: Lare_x64.app.tar.gz
+          - name: Windows x64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            installer_glob: "target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"
+            installer_name: Lare-Windows-x64-Setup.exe
+            # Same file as the installer, under the versioned name the updater reads.
+            updater_glob: "target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"
+            updater_name: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+          # Only `main` writes the cache. GitHub scopes caches by ref and lets any ref read
+          # the default branch's, so a save from a tag run is unreadable by the next tag —
+          # that is why every release before this one compiled stone cold. Saving from tags
+          # as well would just churn the repo's 10 GB cache budget.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: pnpm install --frozen-lockfile
+      - name: cmake (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake || true
+      - name: Native deps (prebuilt ffmpeg, cargo env)
+        env:
+          RUST_TARGET_TRIPLE: ${{ matrix.target }}
+        run: node scripts/setup-native-deps.mjs
+      - name: Stable macOS signing identity (when configured)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        # macOS keys camera/mic/screen permissions to the code signature. Unsigned builds get a new
+        # one every time, so each update revokes them. Only exported when set: an empty
+        # APPLE_CERTIFICATE makes the bundler fail at "security import". See docs/releasing.md.
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::APPLE_CERTIFICATE unset: macOS permissions reset on every update"
+            exit 0
+          fi
+          {
+            echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+            echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+          } >> "$GITHUB_ENV"
+      - name: Build and sign updater bundles
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing (minisign). The matching public key is in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Notarisation stays off; it additionally needs APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID.
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          args: --target ${{ matrix.target }}
+          # No releaseId: at prebuild time there is no release yet, and the tag job uploads
+          # these artifacts itself so both paths produce an identical set of assets.
+      - name: Stage release assets
+        shell: bash
+        env:
+          UPDATER_NAME: ${{ matrix.updater_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p dist
+
+          installer=( ${{ matrix.installer_glob }} )
+          [ ${#installer[@]} -gt 0 ] || { echo "::error::no installer matched ${{ matrix.installer_glob }}"; exit 1; }
+          cp "${installer[0]}" "dist/${{ matrix.installer_name }}"
+
+          updater=( ${{ matrix.updater_glob }} )
+          [ ${#updater[@]} -gt 0 ] || { echo "::error::no updater bundle matched ${{ matrix.updater_glob }}"; exit 1; }
+          # Windows keeps the bundler's versioned name; macOS gets the arch-qualified one.
+          name="$UPDATER_NAME"
+          [ -n "$name" ] || name="$(basename "${updater[0]}")"
+          cp "${updater[0]}" "dist/$name"
+          [ -f "${updater[0]}.sig" ] || { echo "::error::no signature beside ${updater[0]} — is TAURI_SIGNING_PRIVATE_KEY set?"; exit 1; }
+          cp "${updater[0]}.sig" "dist/$name.sig"
+
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error

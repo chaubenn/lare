@@ -1,0 +1,104 @@
+import { cn } from "@lare/ui";
+import { Lock } from "lucide-react";
+import type { ReactNode } from "react";
+import { Link } from "react-router";
+import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
+import { FollowButton } from "./FollowButton";
+import type { FollowState, PersonSummary } from "./queries";
+
+export function personName(person: PersonSummary): string {
+  return person.display_name ?? (person.handle ? `@${person.handle}` : "Unknown user");
+}
+
+/**
+ * One person in a friends list: avatar, name, a private-account indicator and either a follow
+ * button or the caller's own action (accept / decline on the requests tab).
+ */
+export function UserRow({
+  person,
+  state,
+  meta,
+  action,
+  flush,
+}: {
+  person: PersonSummary;
+  /** Omit to render no follow button. */
+  state?: FollowState;
+  meta?: ReactNode;
+  action?: ReactNode;
+  /** Drop the row's own padding when a parent (StackedListItem) already pads. */
+  flush?: boolean;
+}) {
+  const name = personName(person);
+  const showRequestHint = person.is_private && state !== undefined && state !== "accepted";
+
+  return (
+    <div className={cn("flex items-center gap-3", !flush && "px-3 py-2.5")}>
+      <ProfileHoverCard handle={person.handle} className="shrink-0">
+        <ProfileLink handle={person.handle}>
+          <Avatar url={person.avatar_url} name={name} size={36} />
+        </ProfileLink>
+      </ProfileHoverCard>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ProfileHoverCard handle={person.handle} className="min-w-0 truncate">
+            <ProfileLink
+              handle={person.handle}
+              className="text-sm font-medium text-zinc-100 hover:underline"
+            >
+              {name}
+            </ProfileLink>
+          </ProfileHoverCard>
+          {person.is_private ? (
+            <Badge>
+              <Lock className="size-3" aria-hidden />
+              Private
+            </Badge>
+          ) : null}
+        </div>
+        <div className="truncate text-xs text-zinc-500">
+          {person.handle ? `@${person.handle}` : null}
+          {person.handle && meta ? " · " : null}
+          {meta}
+        </div>
+        {showRequestHint ? (
+          <p className="mt-1 text-xs text-zinc-500">
+            {state === "pending"
+              ? "Request sent — they still have to approve it."
+              : "Request to follow before you can see their sessions."}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {action ??
+          (state !== undefined ? (
+            <FollowButton
+              targetId={person.id}
+              handle={person.handle}
+              state={state}
+              isPrivate={person.is_private}
+            />
+          ) : null)}
+      </div>
+    </div>
+  );
+}
+
+function ProfileLink({
+  handle,
+  className,
+  children,
+}: {
+  handle: string | null;
+  className?: string;
+  children: ReactNode;
+}) {
+  if (!handle) return <span className={className}>{children}</span>;
+  return (
+    <Link to={`/u/${handle}`} className={className}>
+      {children}
+    </Link>
+  );
+}

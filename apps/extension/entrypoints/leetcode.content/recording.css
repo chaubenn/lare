@@ -1,0 +1,49 @@
+/*
+ * The only styles the content script ships now. No fonts and no text: the whole
+ * on-page UI is one dot, so there is nothing to typeset.
+ */
+
+.lare-rec {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 45%);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  /* Purely informational — never eat a click meant for the page. */
+  pointer-events: none;
+}
+
+.lare-rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff4d4f;
+  box-shadow: 0 0 0 0 rgb(255 77 79 / 70%);
+  animation: lare-rec-pulse 2s ease-out infinite;
+}
+
+@keyframes lare-rec-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(255 77 79 / 70%);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgb(255 77 79 / 0%);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 77 79 / 0%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lare-rec-dot {
+    animation: none;
+  }
+}

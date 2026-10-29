@@ -1,0 +1,42 @@
+/* Optical type scale. Tracking tightens as size grows; leading loosens as it shrinks. */
+
+.lare-display {
+  font-size: clamp(2.25rem, 4.6vw, 3.75rem);
+  letter-spacing: -0.022em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+.lare-title {
+  font-size: clamp(1.375rem, 2.2vw, 1.875rem);
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  font-weight: 600;
+}
+
+.lare-heading {
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.lare-body {
+  font-size: 0.9375rem;
+  letter-spacing: 0;
+  line-height: 1.55;
+}
+
+.lare-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.lare-micro {
+  font-size: 0.6875rem;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}

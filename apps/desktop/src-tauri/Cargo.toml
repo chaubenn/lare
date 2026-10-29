@@ -1,0 +1,58 @@
+[package]
+name = "lare-desktop"
+version = "1.0.0"
+description = "Lare desktop app: review drafts, publish posts, and (later) record demo videos and mock interviews."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "lare_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# No `protocol-asset`: nothing in the webview uses `asset://` (recordings are previewed over the
+# loopback server, see `preview.rs`), so the scheme stays off rather than exposing app data to it.
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-store = "2"
+tauri-plugin-process = "2"
+tauri-plugin-notification = "~2.3"
+# Desktop-only (no mobile build for Lare); pulls updates from the GitHub release `latest.json`.
+tauri-plugin-updater = "2"
+# Hides and shows the recorder pill from the keyboard while a recording is running.
+tauri-plugin-global-shortcut = "2"
+
+axum = { version = "0.8", features = ["ws"] }
+# `signal`: SIGINT/SIGTERM/SIGHUP have to release the capture devices (see `src/shutdown.rs`).
+tokio = { workspace = true, features = ["signal"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+futures-util = "0.3"
+futures = { workspace = true }
+anyhow = { workspace = true }
+uuid = { workspace = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream", "json", "query"] }
+
+lare-core = { path = "../../../crates/lare-core" }
+lare-recording = { path = "../../../crates/lare-recording" }
+lare-transcribe = { path = "../../../crates/lare-transcribe" }
+lare-bunny = { path = "../../../crates/lare-bunny" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+# `catch-all` turns Objective-C exceptions raised inside tao/wry/tauri calls into Rust panics
+# with the exception message, instead of an opaque "cannot catch foreign exceptions" abort.
+objc2 = { version = "0.6", features = ["catch-all"] }
+
+[dev-dependencies]
+tokio-tungstenite = "0.30"

@@ -1,0 +1,391 @@
+//! Lare desktop (Tauri 2). Hosts the local server the Chrome extension talks to, the OAuth
+//! loopback redirect, deep links, and a handful of commands the React frontend calls.
+
+pub mod commands;
+pub mod deeplink;
+pub mod preview;
+pub mod recorder;
+pub mod recording;
+pub mod shutdown;
+pub mod windows;
+pub mod ws_server;
+
+use std::sync::{Arc, Mutex};
+
+use lare_core::WS_PORT;
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_deep_link::DeepLinkExt;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tracing::{error, info, warn};
+use tracing_subscriber::EnvFilter;
+
+use crate::ws_server::{ServerContext, ServerEvent, WsHub};
+
+/// State shared between commands and the local server.
+pub struct AppState {
+    /// Supabase user id of the signed-in user (mirrored into `hello.ack.userId`).
+    pub current_user: Arc<Mutex<Option<String>>>,
+    pub ws: WsHub,
+    /// Route from a `lare://` link the app was launched with, consumed once by the frontend.
+    pub initial_deeplink: Mutex<Option<String>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WsStatus {
+    pub connected: bool,
+    pub port: u16,
+}
+
+#[tauri::command]
+fn set_current_user(state: State<'_, AppState>, user_id: Option<String>) {
+    if let Ok(mut current) = state.current_user.lock() {
+        *current = user_id;
+    }
+}
+
+#[tauri::command]
+fn ws_status(state: State<'_, AppState>) -> WsStatus {
+    WsStatus {
+        connected: state.ws.connected(),
+        port: WS_PORT,
+    }
+}
+
+#[tauri::command]
+fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+/// Route from the deep link the app was started with (if any). Cleared after the first call.
+#[tauri::command]
+fn take_initial_deeplink(state: State<'_, AppState>) -> Option<String> {
+    state.initial_deeplink.lock().ok().and_then(|mut slot| slot.take())
+}
+
+fn init_tracing() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,lare_desktop_lib=debug,lare_desktop=debug"));
+    let registry = tracing_subscriber::registry().with(filter);
+    // Also mirror logs to a file: when the app is launched via Launch Services its stderr goes
+    // to the unified log, which is awkward to read. The file lives in the user's own log
+    // directory rather than the shared /tmp, where any other local account could pre-create or
+    // symlink `lare-app.log` and read (or redirect) what the app writes.
+    let file = log_dir().and_then(|dir| open_private_log(&dir).ok());
+    match file {
+        Some(f) => registry
+            .with(tracing_subscriber::fmt::layer())
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_ansi(false)
+                    .with_writer(std::sync::Mutex::new(f)),
+            )
+            .init(),
+        None => registry.with(tracing_subscriber::fmt::layer()).init(),
+    }
+}
+
+/// Per-user log directory: `~/Library/Logs/Lare` on macOS, `%LOCALAPPDATA%\Lare\logs` on
+/// Windows, `$XDG_STATE_HOME/lare` (or `~/.local/state/lare`) elsewhere. `None` when the
+/// environment does not say where home is; logging then stays on stderr only.
+fn log_dir() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    if cfg!(target_os = "macos") {
+        return std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library/Logs/Lare"));
+    }
+    if cfg!(windows) {
+        return std::env::var_os("LOCALAPPDATA")
+            .map(|data| PathBuf::from(data).join("Lare").join("logs"));
+    }
+    if let Some(state) = std::env::var_os("XDG_STATE_HOME") {
+        return Some(PathBuf::from(state).join("lare"));
+    }
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state/lare"))
+}
+
+/// Open (creating if needed) `lare-app.log` in `dir`, readable by the current user only.
+///
+/// On Unix the directory is `0700` and the file `0600`. Both are tightened again when they
+/// already exist, because a mode passed at creation does nothing for a file an earlier build
+/// made with the default umask. Windows needs nothing: `%LOCALAPPDATA%` is already private.
+fn open_private_log(dir: &std::path::Path) -> std::io::Result<std::fs::File> {
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(dir)?;
+
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = options.open(dir.join("lare-app.log"))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(file)
+}
+
+pub fn focus_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn emit_deeplink(app: &AppHandle, path: &str) {
+    info!(path, "deep link");
+    if let Err(err) = app.emit("deeplink:navigate", path) {
+        error!(%err, "failed to emit deeplink:navigate");
+    }
+    focus_main_window(app);
+}
+
+/// Turn server events into Tauri events for the webview.
+async fn forward_server_events(app: AppHandle, mut events: UnboundedReceiver<ServerEvent>) {
+    while let Some(event) = events.recv().await {
+        let result = match event {
+            ServerEvent::AuthCallback { code, next } => {
+                focus_main_window(&app);
+                app.emit_to("main", "auth:callback", serde_json::json!({ "code": code, "next": next }))
+            }
+            ServerEvent::AuthError { error, description } => {
+                focus_main_window(&app);
+                app.emit_to(
+                    "main",
+                    "auth:error",
+                    serde_json::json!({ "error": error, "description": description }),
+                )
+            }
+            ServerEvent::ExtMessage(value) => app.emit("ext:message", value),
+            ServerEvent::ExtConnected(connected) => app.emit("ext:connected", connected),
+        };
+        if let Err(err) = result {
+            warn!(%err, "failed to emit event to the webview");
+        }
+    }
+}
+
+/// Set once the app has been told to quit, so the window teardown does not ask twice.
+static QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    init_tracing();
+
+    let (hub, events) = WsHub::new();
+    let current_user = Arc::new(Mutex::new(None));
+    let previews = preview::PreviewFiles::new();
+    let server_ctx = ServerContext::new(
+        hub.clone(),
+        current_user.clone(),
+        env!("CARGO_PKG_VERSION"),
+        previews.clone(),
+    );
+    let backend_ctx = server_ctx.clone();
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // With the `deep-link` feature the plugin forwards `lare://` argv URLs to
+            // `on_open_url`; we only need to surface the existing window.
+            info!(?argv, "second instance launched; focusing the main window");
+            focus_main_window(app);
+        }))
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // The pill is the only thing Lare registers a global shortcut for (see
+        // `windows::sync_pill_shortcut`), so every press is a request to hide or show it.
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        crate::windows::toggle_recorder(app);
+                    }
+                })
+                .build(),
+        )
+        .manage(AppState {
+            current_user,
+            ws: hub,
+            initial_deeplink: Mutex::new(None),
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::prepare_bunny_upload,
+            set_current_user,
+            ws_status,
+            app_version,
+            take_initial_deeplink,
+            commands::list_devices,
+            commands::check_permissions,
+            commands::request_permission,
+            commands::permission_settings_url,
+            commands::open_permission_settings,
+            commands::reset_screen_recording_permission,
+            commands::preview_url,
+            commands::recorder_settings,
+            commands::set_recorder_settings,
+            commands::recorder_status,
+            commands::recording_start,
+            commands::recording_pause,
+            commands::recording_resume,
+            commands::recording_stop,
+            commands::recording_cancel,
+            commands::recordings_list,
+            commands::recording_delete,
+            commands::clear_screen_sharing,
+            commands::open_recorder_window,
+            commands::hide_recorder_window,
+            commands::open_camera_window,
+            commands::hide_camera_window,
+            commands::resize_camera_window,
+            commands::focus_main,
+            commands::media_info,
+            commands::make_thumbnail,
+            commands::upload_to_bunny,
+            commands::remember_upload,
+            commands::whisper_models,
+            commands::ensure_whisper_model,
+            commands::transcribe_recording,
+            commands::read_file_bytes,
+            commands::delete_file,
+            commands::path_exists,
+        ])
+        .setup(move |app| {
+            // Track the UI thread so overlay helpers can run AppKit work safely from Tokio.
+            crate::windows::mark_main_thread();
+
+            // Recorder (Cap capture stack) shared by commands and the extension bridge.
+            let recorder = recorder::Recorder::new(app.handle().clone());
+            backend_ctx.set_recording_backend(Some(Arc::new(recorder::CapRecordingBackend::new(
+                recorder.clone(),
+            ))));
+            // Anything a killed process left half-written is finished before the frontend asks
+            // for the list, so an interrupted take shows up in Recordings like any other.
+            let recovering = recorder.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let recovered = recovering.recover_incomplete();
+                if recovered > 0 {
+                    info!(recovered, "recovered recordings from a previous run");
+                }
+            });
+            app.manage(recorder);
+            app.manage(previews.clone());
+
+            // Deep links. macOS registers the scheme via the bundle's Info.plist; Windows/Linux
+            // need a runtime registration for unpackaged (dev) builds.
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                if let Err(err) = app.deep_link().register_all() {
+                    warn!(%err, "could not register deep link schemes");
+                }
+            }
+            if let Ok(Some(urls)) = app.deep_link().get_current() {
+                if let Some(path) = urls.iter().find_map(deeplink::route_for) {
+                    if let Ok(mut slot) = app.state::<AppState>().initial_deeplink.lock() {
+                        *slot = Some(path);
+                    }
+                }
+            }
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    match deeplink::route_for(&url) {
+                        Some(path) => emit_deeplink(&handle, &path),
+                        None => warn!(%url, "ignoring deep link with unexpected scheme"),
+                    }
+                }
+            });
+
+            // Local server + event bridge.
+            tauri::async_runtime::spawn(forward_server_events(app.handle().clone(), events));
+            tauri::async_runtime::spawn(ws_server::run_forever(server_ctx));
+
+            // Ctrl-C under `pnpm dev:desktop`, `killall Lare`, logout: none of these reach the
+            // event loop, and a process that dies with a capture open leaves macOS showing Lare
+            // as sharing the screen forever (see `shutdown`).
+            shutdown::install_signal_handlers(app.handle());
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            match event {
+                tauri::WindowEvent::Focused(_) => {
+                    crate::windows::repromote_overlays(window.app_handle());
+                }
+                // The overlays are only ever hidden while the app runs (closing one mid-recording
+                // crashes it), so the main window is no longer the last window standing: without
+                // this the app would linger after its window went away.
+                tauri::WindowEvent::Destroyed if window.label() == "main" => {
+                    // Guarded: the main window is also destroyed on the way out of an exit we
+                    // asked for, and asking again from inside that teardown is not welcome.
+                    if !QUITTING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                        let app = window.app_handle();
+                        crate::windows::destroy_overlays(app);
+                        app.exit(0);
+                    }
+                }
+                _ => {}
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building Lare")
+        .run(|app, event| match event {
+            // The NSApp delegate exists by now, so the quit hook can be attached to it.
+            tauri::RunEvent::Ready => shutdown::install_terminate_handler(app),
+            // Closing the main window and `AppHandle::exit`; `NSApp terminate:` arrives at the
+            // delegate hook instead. Both funnel into the same teardown.
+            tauri::RunEvent::ExitRequested { ref api, code, .. } => {
+                shutdown::on_exit_requested(app, api, code)
+            }
+            _ => {}
+        });
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::open_private_log;
+
+    fn mode(path: &std::path::Path) -> u32 {
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn log_file_and_directory_are_private_even_when_they_already_existed() {
+        let root = std::env::temp_dir().join(format!("lare-log-{}", uuid::Uuid::new_v4()));
+        let dir = root.join("logs");
+
+        open_private_log(&dir).unwrap();
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(mode(&dir.join("lare-app.log")), 0o600);
+
+        // An earlier build left both world-readable.
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(dir.join("lare-app.log"), std::fs::Permissions::from_mode(0o644))
+            .unwrap();
+        open_private_log(&dir).unwrap();
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(mode(&dir.join("lare-app.log")), 0o600);
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+}

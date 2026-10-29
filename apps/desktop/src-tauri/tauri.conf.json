@@ -1,0 +1,102 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Lare",
+  "version": "1.0.0",
+  "identifier": "com.lare.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lare",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "windowEffects": { "effects": ["sidebar", "mica"] }
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https:",
+        "media-src": "'self' blob: https: http://127.0.0.1:47831",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost https://*.supabase.co wss://*.supabase.co http://127.0.0.1:47831 ws://127.0.0.1:47831",
+        "frame-src": "https://player.mediadelivery.net https://iframe.mediadelivery.net",
+        "worker-src": "'self' blob:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'"
+      },
+      "devCsp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https: http://localhost:* http://127.0.0.1:*",
+        "media-src": "'self' blob: https: http://localhost:* http://127.0.0.1:*",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost https://*.supabase.co wss://*.supabase.co http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*",
+        "frame-src": "https://player.mediadelivery.net https://iframe.mediadelivery.net",
+        "worker-src": "'self' blob:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'"
+      },
+      "assetProtocol": {
+        "enable": false,
+        "scope": []
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["lare"]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJFM0Q1NDQ3N0FCQzNFOUIKUldTYlByeDZSMVE5TGpaRklicWY2Tm9jRFZvTTV2ZGpvVzV3UWdndFRuTjVNV2xITkVveXYvY0IK",
+      "endpoints": ["https://github.com/chaubenn/lare/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "category": "DeveloperTool",
+    "shortDescription": "Social progress tracking for LeetCode",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "entitlements": "entitlements.plist",
+      "frameworks": ["../../../target/native-deps/Spacedrive.framework"]
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  }
+}

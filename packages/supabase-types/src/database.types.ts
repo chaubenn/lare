@@ -1,0 +1,1096 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
+  public: {
+    Tables: {
+      follows: {
+        Row: {
+          created_at: string
+          followee_id: string
+          follower_id: string
+          status: Database["public"]["Enums"]["follow_status"]
+        }
+        Insert: {
+          created_at?: string
+          followee_id: string
+          follower_id: string
+          status?: Database["public"]["Enums"]["follow_status"]
+        }
+        Update: {
+          created_at?: string
+          followee_id?: string
+          follower_id?: string
+          status?: Database["public"]["Enums"]["follow_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "follows_followee_id_fkey"
+            columns: ["followee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "follows_follower_id_fkey"
+            columns: ["follower_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interview_reviews: {
+        Row: {
+          code_iterations: Json
+          created_at: string
+          id: string
+          model: string
+          moments: Json
+          next_steps: Json
+          overall: number | null
+          scores: Json
+          session_id: string
+          summary: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          code_iterations?: Json
+          created_at?: string
+          id?: string
+          model: string
+          moments?: Json
+          next_steps?: Json
+          overall?: number | null
+          scores?: Json
+          session_id: string
+          summary?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          code_iterations?: Json
+          created_at?: string
+          id?: string
+          model?: string
+          moments?: Json
+          next_steps?: Json
+          overall?: number | null
+          scores?: Json
+          session_id?: string
+          summary?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_reviews_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          actor_id: string
+          comment_id: string | null
+          created_at: string
+          id: string
+          post_id: string | null
+          read_at: string | null
+          recipient_id: string
+          type: Database["public"]["Enums"]["notification_type"]
+        }
+        Insert: {
+          actor_id: string
+          comment_id?: string | null
+          created_at?: string
+          id?: string
+          post_id?: string | null
+          read_at?: string | null
+          recipient_id: string
+          type: Database["public"]["Enums"]["notification_type"]
+        }
+        Update: {
+          actor_id?: string
+          comment_id?: string | null
+          created_at?: string
+          id?: string
+          post_id?: string | null
+          read_at?: string | null
+          recipient_id?: string
+          type?: Database["public"]["Enums"]["notification_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_comments: {
+        Row: {
+          body: string
+          created_at: string
+          edited_at: string | null
+          id: string
+          parent_id: string | null
+          post_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          parent_id?: string | null
+          post_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          parent_id?: string | null
+          post_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_likes: {
+        Row: {
+          created_at: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_media: {
+        Row: {
+          caption: string | null
+          created_at: string
+          height: number | null
+          id: string
+          kind: "og" | "photo"
+          position: number
+          post_id: string
+          storage_path: string
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          kind?: "og" | "photo"
+          position?: number
+          post_id: string
+          storage_path: string
+          user_id: string
+          width?: number | null
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          kind?: "og" | "photo"
+          position?: number
+          post_id?: string
+          storage_path?: string
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_media_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_media_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      posts: {
+        Row: {
+          body: string | null
+          comment_count: number
+          cover_media_id: string | null
+          created_at: string
+          demo_video_id: string | null
+          id: string
+          include_ai_insights: boolean
+          include_og_card: boolean
+          like_count: number
+          og_show_ai_scores: boolean
+          published_at: string | null
+          show_demo_video: boolean
+          show_video: boolean
+          session_id: string | null
+          slug: string
+          status: Database["public"]["Enums"]["post_status"]
+          title: string | null
+          updated_at: string
+          user_id: string
+          video_id: string | null
+          video_kind: Database["public"]["Enums"]["video_kind"]
+          visibility: Database["public"]["Enums"]["post_visibility"]
+        }
+        Insert: {
+          body?: string | null
+          comment_count?: number
+          cover_media_id?: string | null
+          created_at?: string
+          demo_video_id?: string | null
+          id?: string
+          include_ai_insights?: boolean
+          include_og_card?: boolean
+          like_count?: number
+          og_show_ai_scores?: boolean
+          published_at?: string | null
+          show_demo_video?: boolean
+          show_video?: boolean
+          session_id?: string | null
+          slug?: string
+          status?: Database["public"]["Enums"]["post_status"]
+          title?: string | null
+          updated_at?: string
+          user_id: string
+          video_id?: string | null
+          video_kind?: Database["public"]["Enums"]["video_kind"]
+          visibility?: Database["public"]["Enums"]["post_visibility"]
+        }
+        Update: {
+          body?: string | null
+          comment_count?: number
+          cover_media_id?: string | null
+          created_at?: string
+          demo_video_id?: string | null
+          id?: string
+          include_ai_insights?: boolean
+          include_og_card?: boolean
+          like_count?: number
+          og_show_ai_scores?: boolean
+          published_at?: string | null
+          show_demo_video?: boolean
+          show_video?: boolean
+          session_id?: string | null
+          slug?: string
+          status?: Database["public"]["Enums"]["post_status"]
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+          video_id?: string | null
+          video_kind?: Database["public"]["Enums"]["video_kind"]
+          visibility?: Database["public"]["Enums"]["post_visibility"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_cover_media_id_fkey"
+            columns: ["cover_media_id"]
+            isOneToOne: false
+            referencedRelation: "post_media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_demo_video_id_fkey"
+            columns: ["demo_video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      practice_goals: {
+        Row: {
+          created_at: string
+          min_difficulty: Database["public"]["Enums"]["problem_difficulty"] | null
+          period: "day" | "week"
+          target: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          min_difficulty?: Database["public"]["Enums"]["problem_difficulty"] | null
+          period: "day" | "week"
+          target: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          min_difficulty?: Database["public"]["Enums"]["problem_difficulty"] | null
+          period?: "day" | "week"
+          target?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "practice_goals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          display_name: string | null
+          handle: string | null
+          id: string
+          is_private: boolean
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name?: string | null
+          handle?: string | null
+          id: string
+          is_private?: boolean
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name?: string | null
+          handle?: string | null
+          id?: string
+          is_private?: boolean
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      session_events: {
+        Row: {
+          id: number
+          payload: Json
+          session_id: string
+          t: string
+          type: Database["public"]["Enums"]["session_event_type"]
+        }
+        Insert: {
+          id?: never
+          payload?: Json
+          session_id: string
+          t?: string
+          type: Database["public"]["Enums"]["session_event_type"]
+        }
+        Update: {
+          id?: never
+          payload?: Json
+          session_id?: string
+          t?: string
+          type?: Database["public"]["Enums"]["session_event_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_events_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_problems: {
+        Row: {
+          active_ms: number
+          closed_at: string | null
+          created_at: string
+          description_html: string | null
+          difficulty: Database["public"]["Enums"]["problem_difficulty"] | null
+          edits_path: string | null
+          frontend_id: string | null
+          id: string
+          opened_at: string
+          session_id: string
+          slug: string
+          title: string
+          topic_tags: Json
+          url: string
+        }
+        Insert: {
+          active_ms?: number
+          closed_at?: string | null
+          created_at?: string
+          description_html?: string | null
+          difficulty?: Database["public"]["Enums"]["problem_difficulty"] | null
+          edits_path?: string | null
+          frontend_id?: string | null
+          id?: string
+          opened_at?: string
+          session_id: string
+          slug: string
+          title: string
+          topic_tags?: Json
+          url: string
+        }
+        Update: {
+          active_ms?: number
+          closed_at?: string | null
+          created_at?: string
+          description_html?: string | null
+          difficulty?: Database["public"]["Enums"]["problem_difficulty"] | null
+          edits_path?: string | null
+          frontend_id?: string | null
+          id?: string
+          opened_at?: string
+          session_id?: string
+          slug?: string
+          title?: string
+          topic_tags?: Json
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_problems_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sessions: {
+        Row: {
+          graded: boolean
+          active_ms: number
+          client: string | null
+          created_at: string
+          ended_at: string | null
+          id: string
+          is_practice_inbox: boolean
+          kind: Database["public"]["Enums"]["session_kind"]
+          recording_id: string | null
+          recording_started_at: string | null
+          scope: Database["public"]["Enums"]["session_scope"]
+          started_at: string
+          status: Database["public"]["Enums"]["session_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_ms?: number
+          client?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          is_practice_inbox?: boolean
+          graded?: boolean
+          kind?: Database["public"]["Enums"]["session_kind"]
+          recording_id?: string | null
+          recording_started_at?: string | null
+          scope?: Database["public"]["Enums"]["session_scope"]
+          started_at?: string
+          status?: Database["public"]["Enums"]["session_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_ms?: number
+          client?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          is_practice_inbox?: boolean
+          graded?: boolean
+          kind?: Database["public"]["Enums"]["session_kind"]
+          recording_id?: string | null
+          recording_started_at?: string | null
+          scope?: Database["public"]["Enums"]["session_scope"]
+          started_at?: string
+          status?: Database["public"]["Enums"]["session_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      submissions: {
+        Row: {
+          accepted: boolean
+          code: string | null
+          created_at: string
+          id: string
+          lang: string | null
+          lang_verbose: string | null
+          leetcode_submission_id: number | null
+          memory_display: string | null
+          memory_distribution: Json | null
+          memory_mb: number | null
+          memory_percentile: number | null
+          runtime_display: string | null
+          runtime_distribution: Json | null
+          runtime_ms: number | null
+          runtime_percentile: number | null
+          session_problem_id: string
+          status_code: number | null
+          status_display: string | null
+          submitted_at: string
+          total_correct: number | null
+          total_testcases: number | null
+        }
+        Insert: {
+          accepted?: boolean
+          code?: string | null
+          created_at?: string
+          id?: string
+          lang?: string | null
+          lang_verbose?: string | null
+          leetcode_submission_id?: number | null
+          memory_display?: string | null
+          memory_distribution?: Json | null
+          memory_mb?: number | null
+          memory_percentile?: number | null
+          runtime_display?: string | null
+          runtime_distribution?: Json | null
+          runtime_ms?: number | null
+          runtime_percentile?: number | null
+          session_problem_id: string
+          status_code?: number | null
+          status_display?: string | null
+          submitted_at?: string
+          total_correct?: number | null
+          total_testcases?: number | null
+        }
+        Update: {
+          accepted?: boolean
+          code?: string | null
+          created_at?: string
+          id?: string
+          lang?: string | null
+          lang_verbose?: string | null
+          leetcode_submission_id?: number | null
+          memory_display?: string | null
+          memory_distribution?: Json | null
+          memory_mb?: number | null
+          memory_percentile?: number | null
+          runtime_display?: string | null
+          runtime_distribution?: Json | null
+          runtime_ms?: number | null
+          runtime_percentile?: number | null
+          session_problem_id?: string
+          status_code?: number | null
+          status_display?: string | null
+          submitted_at?: string
+          total_correct?: number | null
+          total_testcases?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submissions_session_problem_id_fkey"
+            columns: ["session_problem_id"]
+            isOneToOne: false
+            referencedRelation: "session_problems"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transcripts: {
+        Row: {
+          created_at: string
+          id: string
+          language: string
+          model: string
+          segments: Json
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          language?: string
+          model: string
+          segments?: Json
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          language?: string
+          model?: string
+          segments?: Json
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transcripts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      videos: {
+        Row: {
+          capture_source: Database["public"]["Enums"]["capture_source"]
+          bunny_video_id: string | null
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          height: number | null
+          id: string
+          library_id: number
+          mode: Database["public"]["Enums"]["video_mode"]
+          ready_at: string | null
+          session_id: string | null
+          size_bytes: number | null
+          status: Database["public"]["Enums"]["video_status"]
+          thumbnail_path: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          bunny_video_id?: string | null
+          capture_source?: Database["public"]["Enums"]["capture_source"]
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          height?: number | null
+          id?: string
+          library_id: number
+          mode?: Database["public"]["Enums"]["video_mode"]
+          ready_at?: string | null
+          session_id?: string | null
+          size_bytes?: number | null
+          status?: Database["public"]["Enums"]["video_status"]
+          thumbnail_path?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+          width?: number | null
+        }
+        Update: {
+          bunny_video_id?: string | null
+          capture_source?: Database["public"]["Enums"]["capture_source"]
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          height?: number | null
+          id?: string
+          library_id?: number
+          mode?: Database["public"]["Enums"]["video_mode"]
+          ready_at?: string | null
+          session_id?: string | null
+          size_bytes?: number | null
+          status?: Database["public"]["Enums"]["video_status"]
+          thumbnail_path?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "videos_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "videos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      upsert_transcript_segments: {
+        Args: { p_session_id: string; p_model: string; p_language: string; p_segments: Json }
+        Returns: Database["public"]["Tables"]["transcripts"]["Row"]
+      }
+      accept_follow: { Args: { follower: string }; Returns: undefined }
+      decline_follow: { Args: { follower: string }; Returns: undefined }
+      feed: {
+        Args: { before?: string; page_size?: number; scope?: string }
+        Returns: {
+          body: string | null
+          comment_count: number
+          cover_media_id: string | null
+          created_at: string
+          id: string
+          include_ai_insights: boolean
+          like_count: number
+          published_at: string | null
+          session_id: string | null
+          show_video: boolean
+          status: Database["public"]["Enums"]["post_status"]
+          title: string | null
+          updated_at: string
+          user_id: string
+          video_id: string | null
+          video_kind: Database["public"]["Enums"]["video_kind"]
+          visibility: Database["public"]["Enums"]["post_visibility"]
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "posts"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      follow_list: {
+        Args: { target_handle: string; list_kind: string; max_rows?: number }
+        Returns: Json
+      }
+      profile_stats: { Args: { target_handle: string }; Returns: Json }
+      solved_activity: { Args: { target_handle: string; days?: number }; Returns: Json }
+      solved_skills: { Args: { target_handle: string }; Returns: Json }
+      request_follow: {
+        Args: { target_handle: string }
+        Returns: Database["public"]["Enums"]["follow_status"]
+      }
+      practice_inbox: { Args: Record<PropertyKey, never>; Returns: string }
+      publish_practice_problems: {
+        Args: { problem_ids: string[]; post_title?: string | null }
+        Returns: string
+      }
+      toggle_post_like: { Args: { post: string }; Returns: Json }
+      global_leaderboard: { Args: { week_offset?: number; max_rows?: number }; Returns: Json }
+      goal_progress: { Args: Record<PropertyKey, never>; Returns: Json }
+      mark_notifications_read: { Args: { ids?: string[] | null }; Returns: number }
+      weekly_leaderboard: { Args: { week_offset?: number }; Returns: Json }
+    }
+    Enums: {
+      capture_source: "desktop" | "extension" | "web"
+      follow_status: "pending" | "accepted"
+      notification_type:
+        | "post_like"
+        | "post_comment"
+        | "follow"
+        | "follow_request"
+        | "follow_accepted"
+        | "comment_reply"
+        | "comment_mention"
+      post_status: "draft" | "published"
+      post_visibility: "public" | "private"
+      problem_difficulty: "Easy" | "Medium" | "Hard"
+      session_event_type:
+        | "start"
+        | "pause"
+        | "resume"
+        | "end"
+        | "problem_open"
+        | "problem_close"
+      session_kind: "practice" | "interview"
+      session_scope: "session" | "problem"
+      session_status: "active" | "paused" | "ended" | "abandoned"
+      video_kind: "none" | "full" | "highlights"
+      video_mode: "instant" | "studio"
+      video_status:
+        | "created"
+        | "uploading"
+        | "uploaded"
+        | "processing"
+        | "ready"
+        | "failed"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never) = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      follow_status: ["pending", "accepted"],
+      capture_source: ["desktop", "extension", "web"],
+      notification_type: [
+        "post_like",
+        "post_comment",
+        "follow",
+        "follow_request",
+        "follow_accepted",
+        "comment_reply",
+        "comment_mention",
+      ],
+      post_status: ["draft", "published"],
+      post_visibility: ["public", "private"],
+      problem_difficulty: ["Easy", "Medium", "Hard"],
+      session_event_type: [
+        "start",
+        "pause",
+        "resume",
+        "end",
+        "problem_open",
+        "problem_close",
+      ],
+      session_kind: ["practice", "interview"],
+      session_scope: ["session", "problem"],
+      session_status: ["active", "paused", "ended", "abandoned"],
+      video_kind: ["none", "full", "highlights"],
+      video_mode: ["instant", "studio"],
+      video_status: [
+        "created",
+        "uploading",
+        "uploaded",
+        "processing",
+        "ready",
+        "failed",
+      ],
+    },
+  },
+} as const

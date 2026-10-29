@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["deno.window", "deno.ns"]
+  },
+  "lint": {
+    "rules": { "exclude": ["no-explicit-any"] }
+  },
+  "fmt": {
+    "lineWidth": 110
+  }
+}

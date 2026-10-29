@@ -1,0 +1,339 @@
+name: Release
+
+# Push a tag `vX.Y.Z` (matching apps/desktop/src-tauri/tauri.conf.json `version`) to publish the
+# signed updater bundles + installers for macOS (Apple Silicon + Intel) and Windows x64, plus the
+# Chrome extension zip, as the GitHub "latest" release. The desktop app polls
+# `releases/latest/download/latest.json` on launch and self-updates from it.
+#
+# This workflow does not normally compile anything. `prebuild.yml` already built the desktop
+# bundles when the commit landed on `main`; the job below finds that run and uploads its
+# artifacts, which turns a release from a ~25 minute wait into a ~2 minute publish. The bytes
+# users download are the same fully optimised release build as before — they were simply built
+# earlier. If a tag points at a commit that was never prebuilt (or whose artifacts have since
+# expired), the `desktop` job compiles them here instead, exactly as this workflow used to.
+#
+# `workflow_dispatch` builds everything into a draft release (never becomes "latest").
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  # Reading another workflow run's artifacts.
+  actions: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Not every job here checks the repo out — `assemble` only downloads artifacts — and
+  # without this `gh` tries to infer the repo from a git remote that is not there, failing
+  # with "not a git repository" no matter how many times it is retried.
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  create-release:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve tag + version
+        id: meta
+        run: |
+          VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+            if [ "$TAG" != "v$VERSION" ]; then
+              echo "::error::Tag $TAG does not match tauri.conf.json version $VERSION. Bump the version (apps/desktop/package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml) and re-tag."
+              exit 1
+            fi
+          else
+            TAG="manual-${{ github.run_number }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Create draft release
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --title "Lare $TAG" --target "$GITHUB_SHA" --notes-file - <<'EOF'
+          ## Download
+
+          | Platform | File |
+          | --- | --- |
+          | macOS (Apple Silicon) | `Lare-macOS-AppleSilicon.dmg` |
+          | macOS (Intel) | `Lare-macOS-Intel.dmg` |
+          | Windows 10/11 (x64) | `Lare-Windows-x64-Setup.exe` |
+          | Chrome extension | `Lare-Chrome-Extension.zip` |
+
+          Builds are not notarised yet. macOS: right-click the app > Open the first time (or
+          `xattr -dr com.apple.quarantine /Applications/Lare.app`). Windows: choose "More info"
+          > "Run anyway" on the SmartScreen prompt.
+
+          Installed apps update themselves from this release on launch. Setup guide:
+          https://github.com/chaubenn/lare#install
+          EOF
+          fi
+          # Drafts are not resolvable via /releases/tags/{tag}; look the id up in the list.
+          # GitHub briefly reports a temporary `untagged-*` tag_name right after creation,
+          # so retry until the real tag shows up (or time out).
+          ID=""
+          for attempt in 1 2 3 4 5 6; do
+            ID=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+            [ -n "$ID" ] && break
+            sleep 5
+          done
+          [ -n "$ID" ] || { echo "::error::could not resolve release id for $TAG"; exit 1; }
+          echo "release_id=$ID" >> "$GITHUB_OUTPUT"
+
+  prebuilt:
+    name: Find prebuilt bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      # The Prebuild run holding this commit's desktop artifacts, or "" to build them here.
+      run_id: ${{ steps.find.outputs.run_id }}
+    steps:
+      - name: Locate the Prebuild run for this commit
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Every artifact a release needs; a partial run is no use to us.
+          WANTED: desktop-aarch64-apple-darwin desktop-x86_64-apple-darwin desktop-x86_64-pc-windows-msvc
+        run: |
+          set -uo pipefail
+          run_id=""
+          # Tagging straight after a merge is normal, so the prebuild is often still running.
+          # Waiting for it beats duplicating the same 25 minutes of compilation here.
+          deadline=$(( SECONDS + 45 * 60 ))
+          while :; do
+            info=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/prebuild.yml/runs?head_sha=${GITHUB_SHA}&per_page=1" \
+              --jq '(.workflow_runs[0] // {}) | "\(.id // "")|\(.status // "")|\(.conclusion // "")"' 2>/dev/null) || info="||"
+            id=${info%%|*}; rest=${info#*|}; status=${rest%%|*}; conclusion=${rest##*|}
+
+            if [ -z "$id" ]; then
+              echo "::notice::No Prebuild run for ${GITHUB_SHA} — the desktop bundles will be built in this run."
+              break
+            fi
+            if [ "$status" != "completed" ]; then
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "::warning::Prebuild run $id still $status after 45 min — building here instead."
+                break
+              fi
+              echo "Prebuild run $id is $status; waiting 30s"
+              sleep 30
+              continue
+            fi
+            if [ "$conclusion" != "success" ]; then
+              echo "::warning::Prebuild run $id concluded $conclusion — building here instead."
+              break
+            fi
+
+            # Artifacts expire (90 days by default), which matters when re-tagging an old commit.
+            have=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired | not) | .name')
+            missing=""
+            for want in $WANTED; do
+              grep -qx "$want" <<<"$have" || missing="$missing $want"
+            done
+            if [ -n "$missing" ]; then
+              echo "::warning::Prebuild run $id is missing artifacts:$missing — building here instead."
+              break
+            fi
+
+            echo "::notice::Reusing desktop bundles from Prebuild run $id."
+            run_id="$id"
+            break
+          done
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: Desktop
+    needs: prebuilt
+    # Only when the commit has no usable prebuild. The reusable workflow is the same one
+    # prebuild.yml calls, so the fallback cannot drift from the fast path.
+    if: needs.prebuilt.outputs.run_id == ''
+    uses: ./.github/workflows/desktop-build.yml
+    secrets: inherit
+
+  extension:
+    name: Chrome extension
+    needs: create-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build and zip
+        working-directory: apps/extension
+        env:
+          WXT_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
+          WXT_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
+          WXT_SITE_URL: https://lare-one.vercel.app
+        run: pnpm build && pnpm zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-chrome-mv3
+          path: apps/extension/.output/*.zip
+          # wxt writes to `.output`, and upload-artifact skips dotted paths by default —
+          # without this the step finds nothing and only warns.
+          include-hidden-files: true
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          zip=$(ls apps/extension/.output/*-chrome.zip | head -n1)
+          cp "$zip" Lare-Chrome-Extension.zip
+          # Same retry as the desktop assets: GitHub's asset endpoint does 500 sometimes.
+          for attempt in 1 2 3 4 5; do
+            if gh release upload "$TAG" Lare-Chrome-Extension.zip --clobber; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::failed to upload Lare-Chrome-Extension.zip after 5 attempts"
+              exit 1
+            fi
+            echo "::warning::upload failed (attempt $attempt); retrying in $((attempt * 15))s"
+            sleep $((attempt * 15))
+          done
+
+  assemble:
+    name: Attach desktop assets
+    needs: [create-release, prebuilt, desktop]
+    # `desktop` is skipped on the fast path, which `always()` lets us treat as success.
+    if: >-
+      always() && needs.create-release.result == 'success' && needs.prebuilt.result == 'success'
+      && (needs.desktop.result == 'success' || needs.desktop.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download desktop bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: dist
+          # The prebuild run on `main`, or this run when the fallback build ran.
+          run-id: ${{ needs.prebuilt.outputs.run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Write latest.json
+        env:
+          VERSION: ${{ needs.create-release.outputs.version }}
+        # tauri-action writes this manifest itself when it owns the upload. It no longer does,
+        # because the bundles are built before a release exists — so assemble it here from the
+        # .sig files that shipped beside each updater bundle. The URLs point at
+        # `releases/latest/download/...` rather than the tag, which is what the app's configured
+        # updater endpoint resolves.
+        run: |
+          set -euo pipefail
+          ls -l dist
+          python3 - <<'PY'
+          import datetime, glob, json, os, pathlib
+
+          dist = pathlib.Path("dist")
+          base = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/releases/latest/download"
+
+          setup = sorted(glob.glob("dist/Lare_*_x64-setup.exe"))
+          if not setup:
+              raise SystemExit("::error::no Windows updater bundle in dist")
+          windows = os.path.basename(setup[0])
+
+          def entry(name):
+              sig = dist / f"{name}.sig"
+              if not (dist / name).is_file() or not sig.is_file():
+                  raise SystemExit(f"::error::missing {name} or its .sig in dist")
+              return {"signature": sig.read_text().strip(), "url": f"{base}/{name}"}
+
+          arm, intel = entry("Lare_aarch64.app.tar.gz"), entry("Lare_x64.app.tar.gz")
+          win = entry(windows)
+          now = datetime.datetime.now(datetime.timezone.utc)
+
+          doc = {
+              "version": os.environ["VERSION"],
+              "notes": "",
+              "pub_date": now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+              # The bare `darwin-*`/`windows-x86_64` keys are what the updater reads; the
+              # suffixed aliases mirror what tauri-action used to emit. The old `-msi` entry is
+              # gone: it pointed at an installer the previous publish step deleted anyway.
+              "platforms": {
+                  "darwin-aarch64": arm,
+                  "darwin-aarch64-app": arm,
+                  "darwin-x86_64": intel,
+                  "darwin-x86_64-app": intel,
+                  "windows-x86_64": win,
+                  "windows-x86_64-nsis": win,
+              },
+          }
+          (dist / "latest.json").write_text(json.dumps(doc, indent=2) + "\n")
+          print(json.dumps({k: v["url"] for k, v in doc["platforms"].items()}, indent=2))
+          PY
+      - name: Upload to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        # Every file here is one the release is meant to carry, so there is nothing to trim
+        # afterwards the way there was when the bundler uploaded its whole output directory.
+        #
+        # Retried per file. v0.5.1 died here twice: GitHub's asset endpoint answered one
+        # upload with a 500 page and tauri-action, which has no retry, threw away a finished
+        # 25 minute build over it. A flake should cost seconds.
+        run: |
+          set -euo pipefail
+          for file in dist/*; do
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "$TAG" "$file" --clobber; then
+                break
+              fi
+              if [ "$attempt" -eq 5 ]; then
+                echo "::error::failed to upload $(basename "$file") after 5 attempts"
+                exit 1
+              fi
+              echo "::warning::upload of $(basename "$file") failed (attempt $attempt); retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            done
+          done
+
+  publish:
+    name: Publish release
+    needs: [create-release, assemble, extension]
+    # Tag pushes become the public "latest" release (what the in-app updater reads).
+    # Manual runs stay as drafts for inspection.
+    #
+    # `!cancelled()` is load-bearing, not decoration. On the fast path `desktop` is skipped,
+    # and Actions propagates that skip down the needs graph: `assemble` overrides it with
+    # `always()` and succeeds, but a plain `if:` here still leaves this job skipped. v0.5.2
+    # uploaded all eleven assets correctly and then sat as a draft because of it. Opting out
+    # of the implicit gate means spelling the real one out, hence the explicit results.
+    if: >-
+      !cancelled() && github.ref_type == 'tag'
+      && needs.create-release.result == 'success'
+      && needs.assemble.result == 'success'
+      && needs.extension.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify assets and undraft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | tee assets.txt
+          for required in latest.json Lare-macOS-AppleSilicon.dmg Lare-macOS-Intel.dmg Lare-Windows-x64-Setup.exe Lare-Chrome-Extension.zip; do
+            grep -qx "$required" assets.txt || { echo "::error::missing asset $required"; exit 1; }
+          done
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

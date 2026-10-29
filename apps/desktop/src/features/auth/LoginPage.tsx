@@ -1,0 +1,200 @@
+import { Wordmark } from "@lare/ui/brand";
+import { Globe, KeyRound, Mail } from "lucide-react";
+import { type FormEvent, useState } from "react";
+import { Navigate } from "react-router";
+import { Button } from "@/components/ui/Button";
+import { FieldError, Input, Label } from "@/components/ui/Field";
+import { PageSpinner } from "@/components/ui/States";
+import { WindowScreen } from "@/components/ui/WindowScreen";
+import { useNotify } from "@/features/notifications/notices";
+import { errorMessage } from "@/lib/supabase";
+import { inTauri } from "@/lib/tauri";
+import { useAuth } from "./AuthProvider";
+import { type OAuthProvider, sendEmailOtp, signInWithProvider, verifyEmailOtp } from "./oauth";
+
+/** Sign-in screen. Waits out the session check, then bounces anyone already signed in. */
+export function LoginPage() {
+  const { session } = useAuth();
+  if (session === undefined) return <PageSpinner />;
+  if (session) return <Navigate to="/" replace />;
+  return (
+    <WindowScreen className="max-w-sm">
+      <div className="mb-8 text-center">
+        <Wordmark className="justify-center text-xl text-zinc-50" markClassName="size-8" />
+        <h1 className="mt-6 text-xl font-medium">Sign in to Lare</h1>
+        <p className="mt-1 text-sm text-zinc-400">
+          Social progress tracking for LeetCode. Log sessions, share what you learned.
+        </p>
+      </div>
+      <LoginForm />
+      {!inTauri ? (
+        <p className="mt-6 text-center text-xs text-zinc-600">
+          Running in a browser: OAuth needs the desktop app to receive the callback. Use the email
+          code instead.
+        </p>
+      ) : null}
+    </WindowScreen>
+  );
+}
+
+/** The provider buttons. OAuth needs the desktop app to catch the callback, so the browser gets the email code instead. */
+function LoginForm() {
+  const { notify } = useNotify();
+  const [pending, setPending] = useState<OAuthProvider | null>(null);
+  const [waiting, setWaiting] = useState<OAuthProvider | null>(null);
+
+  const startOAuth = async (provider: OAuthProvider) => {
+    setPending(provider);
+    try {
+      await signInWithProvider(provider);
+      setWaiting(provider);
+    } catch (err) {
+      notify({ title: "Couldn't start sign-in", description: errorMessage(err), variant: "error" });
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <Button
+        className="w-full"
+        loading={pending === "github"}
+        disabled={pending !== null}
+        icon={<KeyRound className="size-4" aria-hidden />}
+        onClick={() => void startOAuth("github")}
+      >
+        Continue with GitHub
+      </Button>
+      <Button
+        className="w-full"
+        loading={pending === "google"}
+        disabled={pending !== null}
+        icon={<Globe className="size-4" aria-hidden />}
+        onClick={() => void startOAuth("google")}
+      >
+        Continue with Google
+      </Button>
+      {waiting ? (
+        <output className="block rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 text-center text-xs text-zinc-300">
+          Finish signing in with {waiting === "github" ? "GitHub" : "Google"} in your browser. This
+          window updates automatically.
+        </output>
+      ) : null}
+
+      <div className="flex items-center gap-3 py-2 text-xs text-zinc-600">
+        <span className="h-px flex-1 bg-zinc-800" />
+        or
+        <span className="h-px flex-1 bg-zinc-800" />
+      </div>
+
+      <EmailOtpForm />
+    </div>
+  );
+}
+
+/** Two stages in one form: ask for the address, then for the six-digit code sent to it. */
+function EmailOtpForm() {
+  const { notify } = useNotify();
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [stage, setStage] = useState<"email" | "code">("email");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submitEmail = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const trimmed = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await sendEmailOtp(trimmed);
+      setStage("code");
+      notify({ title: "Code sent", description: `Check ${trimmed} for a 6-digit code.` });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitCode = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const token = code.replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(token)) {
+      setError("The code is 6 digits.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await verifyEmailOtp(email.trim(), token);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (stage === "code") {
+    return (
+      <form onSubmit={(e) => void submitCode(e)} className="space-y-2">
+        <Label htmlFor="otp-code" hint={`sent to ${email.trim()}`}>
+          6-digit code
+        </Label>
+        <div className="flex gap-2">
+          <Input
+            id="otp-code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]*"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="123456"
+            className="font-mono tracking-widest"
+          />
+          <Button type="submit" variant="primary" loading={busy}>
+            Verify
+          </Button>
+        </div>
+        <FieldError>{error}</FieldError>
+        <button
+          type="button"
+          className="text-xs text-zinc-500 hover:text-zinc-300"
+          onClick={() => {
+            setStage("email");
+            setCode("");
+            setError(null);
+          }}
+        >
+          Use a different email
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <form onSubmit={(e) => void submitEmail(e)} className="space-y-2">
+      <Label htmlFor="otp-email">Email</Label>
+      <div className="flex gap-2">
+        <Input
+          id="otp-email"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+        />
+        <Button type="submit" loading={busy} icon={<Mail className="size-4" aria-hidden />}>
+          Send code
+        </Button>
+      </div>
+      <FieldError>{error}</FieldError>
+    </form>
+  );
+}
