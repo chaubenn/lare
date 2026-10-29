@@ -53,9 +53,10 @@ jobs:
             target: x86_64-pc-windows-msvc
             installer_glob: "target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"
             installer_name: Lare-Windows-x64-Setup.exe
-            # Same file as the installer, under the versioned name the updater reads.
+            # The updater installs the same NSIS setup the download link serves, so it is one
+            # file under one name, not a versioned copy beside the installer.
             updater_glob: "target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"
-            updater_name: ""
+            updater_name: Lare-Windows-x64-Setup.exe
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -92,7 +93,7 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         # macOS keys camera/mic/screen permissions to the code signature. Unsigned builds get a new
         # one every time, so each update revokes them. Only exported when set: an empty
-        # APPLE_CERTIFICATE makes the bundler fail at "security import". See docs/releasing.md.
+        # APPLE_CERTIFICATE makes the bundler fail at "security import".
         run: |
           if [ -z "$APPLE_CERTIFICATE" ]; then
             echo "::warning::APPLE_CERTIFICATE unset: macOS permissions reset on every update"
@@ -132,9 +133,7 @@ jobs:
 
           updater=( ${{ matrix.updater_glob }} )
           [ ${#updater[@]} -gt 0 ] || { echo "::error::no updater bundle matched ${{ matrix.updater_glob }}"; exit 1; }
-          # Windows keeps the bundler's versioned name; macOS gets the arch-qualified one.
           name="$UPDATER_NAME"
-          [ -n "$name" ] || name="$(basename "${updater[0]}")"
           cp "${updater[0]}" "dist/$name"
           [ -f "${updater[0]}.sig" ] || { echo "::error::no signature beside ${updater[0]} — is TAURI_SIGNING_PRIVATE_KEY set?"; exit 1; }
           cp "${updater[0]}.sig" "dist/$name.sig"

@@ -20,6 +20,7 @@ permissions:
 
 jobs:
   publish:
+    if: vars.PUBLIC_BUILDS == 'true'
     runs-on: ubuntu-latest
     env:
       TAG: whisper-models

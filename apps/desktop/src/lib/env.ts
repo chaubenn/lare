@@ -17,7 +17,7 @@ export const envError: string | null = parsed.success
   ? null
   : `Missing or invalid environment: ${parsed.error.issues
       .map((i) => `${i.path.join(".")} (${i.message})`)
-      .join(", ")}. Copy apps/desktop/.env.example to apps/desktop/.env.`;
+      .join(", ")}. This build was not configured for the Lare service.`;
 
 export const env: Env = parsed.success
   ? parsed.data

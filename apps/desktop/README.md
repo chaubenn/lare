@@ -45,4 +45,4 @@ in the repository's setup instructions.
 Receipt is not playback: Bunny's encode wait is configuration (Early Play or
 Premium/JIT), not code. Native device capture, AV sync, Whisper inference with a
 downloaded model and a live Bunny round trip are not covered by any of the tests
-above and need the manual passes in `docs/qa.md`.
+above and need a manual pass on a real machine.

@@ -43,6 +43,9 @@ env:
 
 jobs:
   create-release:
+    # Opt-in: private-repo macOS minutes are billed at a multiple, so set the repository
+    # variable DEV_BUILDS=true only when you want a QA build from this repo.
+    if: vars.DEV_BUILDS == 'true'
     name: Create draft
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   fast:
-    name: Lint, typecheck, unit tests, web build
+    name: Lint, typecheck, unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

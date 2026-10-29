@@ -20,7 +20,6 @@ target/native-deps/
 # env / secrets: never commit
 .env
 .env.*
-!.env.example
 # e2e fixture configuration (local fixture server only, no secrets)
 !apps/extension/.env.e2e
 *.pem

@@ -18,7 +18,11 @@ env:
 
 jobs:
   js:
-    name: TypeScript (lint, typecheck, unit, extension e2e, web build)
+    # Builds run in the public repo only, where Actions minutes are free and the signing
+    # secrets live. The private dev repo carries these files too (so both repos hold the same
+    # tree) but leaves the repository variable PUBLIC_BUILDS unset, which skips the job.
+    if: vars.PUBLIC_BUILDS == 'true'
+    name: TypeScript (lint, typecheck, unit, extension e2e)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -57,6 +61,7 @@ jobs:
           include-hidden-files: true
 
   rust:
+    if: vars.PUBLIC_BUILDS == 'true'
     name: Rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90

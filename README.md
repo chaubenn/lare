@@ -1,22 +1,29 @@
 <div align="center">
 
-<img src="brand/wordmark.png" alt="Lare" width="260">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/wordmark-dark.gif">
+  <img src="brand/wordmark-light.gif" alt="Lare" width="260">
+</picture>
 
 **Social progress tracking for LeetCode.**
 Your practice logs itself — every problem opened, every submission judged, with code,
 runtime and memory percentiles and the runtime distribution graph.
 
-[![CI](https://github.com/chaubenn/lare/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/chaubenn/lare/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/chaubenn/lare?color=%2310b981&label=release)](https://github.com/chaubenn/lare/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/chaubenn/lare/total?color=%2310b981)](https://github.com/chaubenn/lare/releases)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Chrome-lightgrey)
 
-[Install](#install) · [Architecture](docs/architecture.md) · [Releasing](docs/releasing.md) · [QA](docs/qa.md) · [Privacy](docs/privacy.md)
+[Install](#install) · [Architecture](docs/architecture.md) · [Privacy](docs/privacy.md)
 
 </div>
 
 ---
+
+> **This repository is published so the source can be read, not so it can be built or run.**
+> Lare is a hosted service, and building or self-hosting it is not supported: there are no setup,
+> build or deployment instructions here, and issues and pull requests are not monitored. To use
+> Lare, install a release from the section below.
 
 Share posts with followers, attach demo videos, and run AI-graded mock interviews.
 
@@ -65,34 +72,6 @@ The extension works on its own for sign-in, passive capture and drafts. It talks
 app over `127.0.0.1` to start, pause and end a mock interview, so the app has to be open for one
 and the desktop footer shows **Extension: connected**. Chrome 116+. Chrome Web Store listing is coming;
 until then the unpacked install is the supported path.
-
-## Development
-
-```bash
-pnpm install
-pnpm dev:extension    # wxt, then load apps/extension/.output as unpacked
-pnpm dev:desktop      # Tauri
-```
-
-To try this checkout like an installed build, build both into `out/`:
-
-```bash
-pnpm bundle           # out/Lare.app (macOS) or out/Lare/Lare.exe (Windows), plus out/extension
-pnpm bundle --open    # ...and launch the app
-pnpm bundle ext       # just the extension; `app` for just the app, --release for an optimised build
-```
-
-Load `out/extension` at `chrome://extensions` (Developer mode → Load unpacked).
-
-```bash
-pnpm lint             # biome
-pnpm typecheck
-pnpm test
-```
-
-Rust needs prebuilt ffmpeg — `pnpm setup:native` writes the cargo env for your target.
-
-Branching, CI lanes and how to cut a release: **[docs/releasing.md](docs/releasing.md)**.
 
 ## License
 

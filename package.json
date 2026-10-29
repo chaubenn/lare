@@ -9,17 +9,12 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev:extension": "pnpm --filter @lare/extension dev",
-    "dev:desktop": "pnpm --filter @lare/desktop tauri dev",
-    "bundle": "node scripts/bundle.mjs",
-    "open:main": "node scripts/bundle.mjs --open",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "format": "biome format --write .",
-    "setup:native": "node scripts/setup-native-deps.mjs"
+    "format": "biome format --write ."
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",

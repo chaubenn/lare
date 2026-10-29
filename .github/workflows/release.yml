@@ -32,6 +32,7 @@ env:
 
 jobs:
   create-release:
+    if: vars.PUBLIC_BUILDS == 'true'
     name: Create draft release
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -94,6 +95,7 @@ jobs:
           echo "release_id=$ID" >> "$GITHUB_OUTPUT"
 
   prebuilt:
+    if: vars.PUBLIC_BUILDS == 'true'
     name: Find prebuilt bundles
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -243,15 +245,10 @@ jobs:
           set -euo pipefail
           ls -l dist
           python3 - <<'PY'
-          import datetime, glob, json, os, pathlib
+          import datetime, json, os, pathlib
 
           dist = pathlib.Path("dist")
           base = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/releases/latest/download"
-
-          setup = sorted(glob.glob("dist/Lare_*_x64-setup.exe"))
-          if not setup:
-              raise SystemExit("::error::no Windows updater bundle in dist")
-          windows = os.path.basename(setup[0])
 
           def entry(name):
               sig = dist / f"{name}.sig"
@@ -260,7 +257,7 @@ jobs:
               return {"signature": sig.read_text().strip(), "url": f"{base}/{name}"}
 
           arm, intel = entry("Lare_aarch64.app.tar.gz"), entry("Lare_x64.app.tar.gz")
-          win = entry(windows)
+          win = entry("Lare-Windows-x64-Setup.exe")
           now = datetime.datetime.now(datetime.timezone.utc)
 
           doc = {
@@ -286,8 +283,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.create-release.outputs.tag }}
-        # Every file here is one the release is meant to carry, so there is nothing to trim
-        # afterwards the way there was when the bundler uploaded its whole output directory.
+        # The .sig files are not uploaded: latest.json already inlines each signature, and the
+        # updater never fetches them. Everything else here is meant to be on the release.
         #
         # Retried per file. v0.5.1 died here twice: GitHub's asset endpoint answered one
         # upload with a 500 page and tauri-action, which has no retry, threw away a finished
@@ -295,6 +292,7 @@ jobs:
         run: |
           set -euo pipefail
           for file in dist/*; do
+            case "$file" in *.sig) continue ;; esac
             for attempt in 1 2 3 4 5; do
               if gh release upload "$TAG" "$file" --clobber; then
                 break

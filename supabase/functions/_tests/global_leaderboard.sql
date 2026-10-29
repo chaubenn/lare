@@ -1,5 +1,5 @@
 -- Isolated PostgreSQL fixture for 0022_global_leaderboard.sql, NOT a migration. Run only against
--- an empty disposable database; mount the migration at /migration.sql (see docs/qa.md).
+-- an empty disposable database; mount the migration at /migration.sql.
 \set ON_ERROR_STOP on
 create role anon;
 create role authenticated;
