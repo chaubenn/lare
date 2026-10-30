@@ -1,7 +1,7 @@
-import { formatDurationHuman } from "@lare/shared";
+import { formatDurationHuman, showsActiveTime } from "@lare/shared";
 import type { Post } from "@lare/supabase-types";
+import { ArrowLeft, ArrowRight, Check, Eye, Send, Trash2 } from "@lare/ui/icons";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { ArrowLeft, ArrowRight, Check, Eye, Send, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -233,8 +233,6 @@ function DraftEditor({ draft }: { draft: Draft }) {
     showVideo,
     demoVideoId: draft.demo_video_id,
     showDemoVideo,
-    includeOgCard: draft.include_og_card,
-    session,
   });
 
   const doPublish = async () => {
@@ -296,15 +294,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
 
   return (
     <div className="w-full">
-      <Link
-        to="/drafts"
-        className="inline-flex items-center gap-1 rounded-[var(--lare-r-1)] text-sm text-[var(--text-secondary)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
-      >
-        <ArrowLeft className="size-4" aria-hidden />
-        Drafts
-      </Link>
-
-      <div className="mt-4 grid gap-8 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <div className="grid gap-8 lg:grid-cols-[15rem_minmax(0,1fr)]">
         {/* ---- Step rail: where you are, what's left, and what this draft is ---- */}
         <aside className="lg:sticky lg:top-0 lg:self-start">
           <p className="truncate text-sm font-semibold text-[var(--text)]" title={title}>
@@ -313,7 +303,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-secondary)]">
             {session ? <KindBadge kind={session.kind} /> : null}
             <span>{plural(problems.length, "problem")}</span>
-            {session && session.active_ms > 0 ? (
+            {session && showsActiveTime(session.kind, session.active_ms) ? (
               <span>· {formatDurationHuman(session.active_ms)}</span>
             ) : null}
           </p>

@@ -1,5 +1,5 @@
+import { RefreshCw } from "@lare/ui/icons";
 import { useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
 import { Spinner } from "@/components/ui/States";

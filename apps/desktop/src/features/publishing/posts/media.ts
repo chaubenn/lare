@@ -15,6 +15,9 @@ export interface FeedImage {
   id: string;
   url: string;
   caption: string | null;
+  /** Pixel size, so the slide takes the picture's shape before it has loaded. */
+  width: number | null;
+  height: number | null;
 }
 
 /** Signed media URLs the feed card needs on top of the raw row. */
@@ -23,14 +26,10 @@ export interface PostDecoration {
   /** Poster for the summary video (`demo_video_id`), when there is one. */
   demo_thumbnail_url: string | null;
   images: FeedImage[];
-  /** Author-supplied cover, or null when the generated session card is used instead. */
-  cover_url: string | null;
-  /** Signed URL of the stored, pre-generated session card (post_media kind 'og'), if any. */
 }
 
 interface DecoratableRow {
   id: string;
-  cover_media_id: string | null;
   videos: { thumbnail_path: string | null } | null;
   demo_videos?: { thumbnail_path: string | null } | null;
   post_media:
@@ -38,6 +37,8 @@ interface DecoratableRow {
         id: string;
         storage_path: string;
         kind: "og" | "photo" | null;
+        width: number | null;
+        height: number | null;
         caption: string | null;
         position: number;
         created_at: string;
@@ -85,13 +86,13 @@ export async function decoratePosts<T extends DecoratableRow>(
   ]);
   return rows.map((row) => {
     const mediaRows = orderMedia(row.post_media ?? []);
-    // Author photos only: the pre-generated session card (kind 'og') is the cover fallback,
-    // never a carousel photo.
+    // Author images only. Old posts can carry a stored session-card row (kind 'og'); it is
+    // never shown.
     const images: FeedImage[] = mediaRows
       .filter((m) => m.kind !== "og")
       .flatMap((m) => {
         const url = media.get(m.storage_path);
-        return url ? [{ id: m.id, url, caption: m.caption }] : [];
+        return url ? [{ id: m.id, url, caption: m.caption, width: m.width, height: m.height }] : [];
       });
     return {
       ...row,
@@ -102,7 +103,6 @@ export async function decoratePosts<T extends DecoratableRow>(
         ? (thumbs.get(row.demo_videos.thumbnail_path) ?? null)
         : null,
       images,
-      cover_url: images.find((i) => i.id === row.cover_media_id)?.url ?? null,
     };
   });
 }

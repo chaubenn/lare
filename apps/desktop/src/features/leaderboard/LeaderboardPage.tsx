@@ -1,7 +1,7 @@
 import { leaderboardWeekLabel } from "@lare/shared";
 import { useNavigate, useSearchParams } from "react-router";
-import { PageHeader } from "@/components/ui/Card";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { PageBlurb } from "@/features/shell/PageBlurb";
 import { FriendsLeaderboard } from "./FriendsLeaderboard";
 import { GlobalLeaderboard } from "./GlobalLeaderboard";
 import { useGlobalLeaderboard, useWeeklyLeaderboard, type WeekOffset } from "./queries";
@@ -38,7 +38,7 @@ export function LeaderboardPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl">
-      <PageHeader title="Leaderboard" subtitle={SUBTITLES[scope]} />
+      <PageBlurb>{SUBTITLES[scope]}</PageBlurb>
       <div className="mb-4 space-y-3">
         <SegmentedTabs
           label="Leaderboard scope"

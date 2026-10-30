@@ -1,5 +1,5 @@
 import { cn } from "@lare/ui";
-import { Lock } from "lucide-react";
+import { Lock } from "@lare/ui/icons";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";

@@ -1,11 +1,12 @@
 import { formatDurationHuman } from "@lare/shared";
 import type { Video } from "@lare/supabase-types";
 import { cn } from "@lare/ui";
-import { CircleAlert, LoaderCircle, Play, Video as VideoIcon } from "lucide-react";
+import { CircleAlert, LoaderCircle, Play, Video as VideoIcon } from "@lare/ui/icons";
 import { useState } from "react";
 import { LocalPreview } from "@/components/LocalPreview";
 import { useLocalVideoSrc } from "@/features/media/localCopies";
 import { invokeFunction } from "@/lib/supabase";
+import { mediaAspect } from "./aspect";
 
 const STATUS_LABEL: Record<Video["status"], string> = {
   created: "Uploading…",
@@ -33,6 +34,8 @@ export function VideoSlide({
   bunnyVideoId,
   posterUrl,
   durationMs,
+  width,
+  height,
   title = "Session recording",
   className,
 }: {
@@ -41,6 +44,9 @@ export function VideoSlide({
   bunnyVideoId: string | null;
   posterUrl?: string | null;
   durationMs?: number | null;
+  /** The video's pixel size. The frame takes its shape so the player has no bars. */
+  width?: number | null;
+  height?: number | null;
   title?: string;
   className?: string;
 }) {
@@ -65,10 +71,19 @@ export function VideoSlide({
   }
 
   const ready = status === "ready" && Boolean(bunnyVideoId);
+  const aspect = mediaAspect(width, height);
   const localSrc = useLocalVideoSrc(videoId, status);
 
   if (!ready && localSrc) {
-    return <LocalPreview src={localSrc} status={status} title={title} className={className} />;
+    return (
+      <LocalPreview
+        src={localSrc}
+        status={status}
+        title={title}
+        className={className}
+        aspectRatio={aspect}
+      />
+    );
   }
 
   if (!ready) {
@@ -97,6 +112,7 @@ export function VideoSlide({
 
   return (
     <div
+      style={aspect ? { aspectRatio: aspect } : undefined}
       className={cn(
         "relative aspect-video overflow-hidden rounded-xl border border-zinc-800 bg-black",
         className,

@@ -1,4 +1,4 @@
-import { Pencil, Rss } from "lucide-react";
+import { Pencil, Rss } from "@lare/ui/icons";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/States";

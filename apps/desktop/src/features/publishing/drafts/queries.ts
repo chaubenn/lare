@@ -154,14 +154,11 @@ export function useDraftsRealtime() {
 }
 
 /**
- * The optional extras an author switches on for a post: the AI insights, the generated session
- * card, and the AI percentages drawn on that card. They are saved as they are toggled (not with
- * the form), because the card has to be regenerated or removed to match.
+ * The optional extras an author switches on for a post: the AI insights. They are saved as
+ * they are toggled, not with the form.
  */
 export interface PostExtras {
   include_ai_insights: boolean;
-  /** Lead the post with the session card slide. */
-  include_og_card: boolean;
 }
 
 export function useSetPostExtras(postId: string) {
@@ -199,7 +196,7 @@ function postPatch(edit: PublishInput) {
     visibility: edit.visibility,
     show_video: edit.showVideo,
     show_demo_video: edit.showDemoVideo,
-    // The session card always leads a post: null is what makes the post fall back to it.
+    // Posts have no cover image any more: the first image, if any, simply comes first.
     cover_media_id: null,
   };
 }

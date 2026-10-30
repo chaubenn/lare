@@ -1,5 +1,5 @@
 import { difficultySplit, topicStats } from "@lare/shared";
-import { Lock } from "lucide-react";
+import { Lock } from "@lare/ui/icons";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";

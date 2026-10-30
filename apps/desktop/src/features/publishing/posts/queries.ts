@@ -83,7 +83,7 @@ export function useUpdatePost() {
           visibility,
           show_video: showVideo,
           show_demo_video: showDemoVideo,
-          // The session card always leads a post, so nothing here picks a cover.
+          // Posts have no cover image any more: the first image, if any, simply comes first.
           cover_media_id: null,
         })
         .eq("id", id);

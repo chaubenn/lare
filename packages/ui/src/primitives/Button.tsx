@@ -1,8 +1,8 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "../cn";
+import { LoaderCircle } from "../icons";
 import {
   BUTTON_BASE,
   BUTTON_SIZES,

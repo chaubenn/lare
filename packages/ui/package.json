@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./brand": "./src/brand/Logo.tsx",
     "./tokens.css": "./src/tokens.css",
+    "./theme.css": "./src/theme.css",
     "./tokens": "./src/tokens.ts",
     "./motion.css": "./src/motion.css",
     "./type.css": "./src/type.css",
@@ -18,6 +19,7 @@
     "./gesture": "./src/gesture.ts",
     "./primitives": "./src/primitives/index.ts",
     "./cn": "./src/cn.ts",
+    "./icons": "./src/icons.tsx",
     "./ActivityChart": "./src/ActivityChart.tsx",
     "./GoalSummary": "./src/GoalSummary.tsx",
     "./RuntimeChart": "./src/RuntimeChart.tsx",
@@ -29,9 +31,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@hugeicons/core-free-icons": "^4.4.0",
+    "@hugeicons/react": "^1.1.10",
     "@lare/shared": "workspace:*",
     "@shikijs/langs": "^4.4.3",
-    "lucide-react": "^1.40.0",
     "motion": "^12.23.12",
     "shiki": "^4.4.3"
   },

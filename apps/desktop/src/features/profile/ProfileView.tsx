@@ -5,7 +5,7 @@ import {
   websiteHref,
   websiteLabel,
 } from "@lare/shared";
-import { ExternalLink, Lock } from "lucide-react";
+import { ExternalLink, Lock } from "@lare/ui/icons";
 import { type ReactNode, useState } from "react";
 import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";

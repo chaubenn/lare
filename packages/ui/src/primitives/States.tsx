@@ -1,8 +1,8 @@
 "use client";
 
-import { CircleAlert, LoaderCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../cn";
+import { CircleAlert, LoaderCircle } from "../icons";
 import { Button } from "./Button";
 import { StackedList, StackedListItem } from "./Card";
 

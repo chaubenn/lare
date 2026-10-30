@@ -1,4 +1,4 @@
-import { Check, Clock, UserPlus } from "lucide-react";
+import { Check, Clock, UserPlus } from "@lare/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";

@@ -1,6 +1,6 @@
+import { Camera, Mic, Trash2, Video } from "@lare/ui/icons";
 import { Progress } from "@lare/ui/primitives";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Camera, Mic, Trash2, Video } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
@@ -223,8 +223,8 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
 
 /**
  * `demo_video_id`: the short clip an interview author records about the session itself — how it
- * went, what they would do differently. It sits between the session breakdown and the full take
- * in the post's carousel, so viewers get the overview before the forty-minute recording.
+ * went, what they would do differently. It sits ahead of the full take in the post's carousel,
+ * so viewers get the overview before the forty-minute recording.
  */
 function SummaryVideoPanel({ draft }: { draft: Draft }) {
   const slot = useSlotRecording(draft);

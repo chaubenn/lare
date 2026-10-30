@@ -1,6 +1,6 @@
 import { isActiveGoal } from "@lare/shared";
 import { GoalSummary } from "@lare/ui";
-import { Pencil, Target } from "lucide-react";
+import { Pencil, Target } from "@lare/ui/icons";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { GoalDialog } from "./GoalDialog";

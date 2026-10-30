@@ -1,11 +1,11 @@
-import { Rss } from "lucide-react";
+import { Rss } from "@lare/ui/icons";
 import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { PageHeader } from "@/components/ui/Card";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useViewerLikes } from "@/features/publishing/posts/social";
+import { PageBlurb } from "@/features/shell/PageBlurb";
 import { FeedSidebar } from "./FeedSidebar";
 import { PostCard } from "./PostCard";
 import { type FeedScope, useFeed } from "./queries";
@@ -30,18 +30,14 @@ export function FeedPage() {
 
   return (
     // Full page width like every other tab: posts fill the main column and the side column starts
-    // level with the first post rather than with the page title.
+    // level with the first post rather than with the filter above it.
     <div className="grid w-full gap-x-8 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <PageBlurb>
+        {scope === "following"
+          ? "Posts from the people you follow."
+          : "Public sessions from everyone on Lare, plus your own posts."}
+      </PageBlurb>
       <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-        <PageHeader
-          title="Feed"
-          subtitle={
-            scope === "following"
-              ? "Posts from the people you follow."
-              : "Public sessions from everyone on Lare, plus your own posts."
-          }
-        />
-
         <div className="mb-4">
           <SegmentedTabs
             label="Feed filter"

@@ -1,6 +1,5 @@
 "use client";
 
-import { CircleAlert, CircleCheck, Info, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   createContext,
@@ -12,6 +11,7 @@ import {
   useState,
 } from "react";
 import { cn } from "../cn";
+import { CircleAlert, CircleCheck, Info, X } from "../icons";
 import { SPRING } from "../motion";
 import { Button } from "./Button";
 

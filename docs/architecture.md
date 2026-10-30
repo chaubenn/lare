@@ -59,10 +59,11 @@ flowchart LR
   `thumbnail_path` in bucket `thumbnails`), `posts` (draft|published, visibility public|private,
   two video slots — `video_id` + `video_kind` none|full|highlights for the demo/full take and
   `demo_video_id` for an interview's summary clip, each with a `show_*` switch — plus the three
-  optional extras the draft editor groups together: `include_ai_insights`, `include_og_card`.
+  optional extra the draft editor offers: `include_ai_insights`. (`include_og_card` and `cover_media_id`
+  are unused now that posts have no session card or cover; the columns remain.)
   `og_show_ai_scores` is unused — the AI review is a section of the post, not a strip on the card).
-- `post_media` (carousel photos; rows with `kind = 'og'` are leftovers from when the session card
-  was a stored PNG and are ignored), `post_likes`, `post_comments`.
+- `post_media` (the images an author adds; rows with `kind = 'og'` are leftovers from when the
+  session card was a stored PNG and are ignored), `post_likes`, `post_comments`.
 - `transcripts` (segments `[{s,e,text}]` in media ms), `interview_reviews` (OpenAI structured output).
 - Visibility: `can_view_post` - published and (owner, or public post and (author not private or
   accepted follower)). Child rows inherit through their post; AI insights additionally require
@@ -132,30 +133,31 @@ slides into it.
 
 The feed's deck, `apps/desktop/src/features/feed/PostSlides.tsx`:
 
-    session card -> session breakdown -> summary video -> photos -> demo/full video
+    summary video -> images -> demo/full video
+
+Every slide is something the author chose to add. Images are optional: paste a screenshot, drop
+files on the Images panel, or pick them from the machine (the main window sets
+`dragDropEnabled: false` so file drops reach the page instead of Tauri). A post with no images and
+no video has no deck at all (`postHasSlides`) and the card is just its text. One clip and no images
+is a deck of one slide, the video.
 
 The post page builds its own in `PostPage.tsx`, deliberately narrower:
 
-    summary video -> demo/highlights video -> problems -> AI review
+    summary video -> images -> demo/highlights video -> problems -> AI review
 
-No photos and no session card or breakdown, because the Session panel beside the post already
-carries the session; photos are a feed thing. The problems and the review are slides rather than
-sections down the page, which is what keeps the comments a fixed distance from the title however
-much a session holds.
+The problems and the review are slides rather than sections down the page, which is what keeps the
+comments a fixed distance from the title however much a session holds.
 
-The two differ in shape as well as contents. The feed holds one aspect ratio so every card is the
-same size; the post deck passes `fitActiveSlide`, which measures the current slide and sizes the
-frame to it (a `ResizeObserver`, because "Show code" and the problem description collapsible change
-height on their own). That is why the post deck's videos keep their natural `aspect-video` instead
-of filling the frame. When a post carries both clips, `LabelledSlide` names them in the corner —
+Both decks size their frame to the slide in view (`PostCarousel` measures the current slide with a
+`ResizeObserver`, because "Show code" and the problem description collapsible change height on
+their own). Videos and images take their own shape from the stored `width`/`height` (`mediaAspect`,
+clamped to 4:5 .. 12:5), so a 16:10 screen recording has no bars around it; a clip with no stored
+size falls back to 16:9. When a post carries both clips, `LabelledSlide` names them in the corner —
 the player's `title` only ever reached screen readers.
 
-The session card (`SessionCardSlide`) is drawn from the session, not stored. It was a PNG once —
-rendered by a Next route with `next/og` and saved to a bucket by an `og-snapshot` function — because
-it was also the Open Graph image a shared link unfurled to. With the website reduced to a landing
-page there is nothing to unfurl, and what was left was a slide the app can draw itself from data it
-already has. It therefore cannot go stale, which is why nothing regenerates it. Opt out per post
-with `include_og_card`.
+There is no generated session card or session-overview slide any more. They were drawn from the
+session (and, before that, rendered to a PNG for link unfurls); a post now carries only what its
+author attaches.
 
 ## Licensing
 

@@ -1,7 +1,7 @@
 import type { AiReview } from "@lare/shared";
 import { formatDuration, AI_SCORE_LABELS as SCORE_LABELS } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@lare/ui/icons";
 
 /**
  * Renders a parsed `AiReview`. Face value is the overall score, per-skill percents, and

@@ -1,6 +1,6 @@
+import { Check, Download } from "@lare/ui/icons";
 import { Progress } from "@lare/ui/primitives";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Download } from "lucide-react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";

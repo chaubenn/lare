@@ -1,7 +1,7 @@
 import { MAX_POST_IMAGES, POST_IMAGE_MIME_TYPES } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { ChevronLeft, ChevronRight, ImagePlus, Trash2 } from "lucide-react";
-import { useRef } from "react";
+import { ChevronLeft, ChevronRight, ImagePlus, Trash2 } from "@lare/ui/icons";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { useNotify } from "@/features/notifications/notices";
@@ -16,11 +16,11 @@ import {
 } from "./media";
 
 /**
- * The photo half of a post: add pictures, order them and caption them.
+ * The images on a post, all of them optional: paste a screenshot, drop files on the panel, or
+ * choose them from the machine. Order them and caption them here.
  *
- * The session card is not here. It is drawn from the session rather than stored, so there is
- * nothing to upload, star, regenerate or wait for — it is simply the first slide, and Preview is
- * where you look at it.
+ * With none the post is just its text (plus its video, if the author adds one). Preview is where
+ * you see the post as it will publish.
  */
 export function PostMediaPanel({
   postId,
@@ -66,16 +66,106 @@ export function PostMediaPanel({
   };
 
   const drop = (image: PostImage) => {
-    remove.mutate(image, { onError: fail("Couldn't remove the photo") });
+    remove.mutate(image, { onError: fail("Couldn't remove the image") });
   };
 
+  const full = images.length >= MAX_POST_IMAGES;
+  const add = (files: File[]) => {
+    if (files.length === 0 || busy) return;
+    if (full) {
+      notify({ title: `A post can hold ${MAX_POST_IMAGES} images`, variant: "error" });
+      return;
+    }
+    upload.mutate(files, { onError: fail("Couldn't add the image") });
+  };
+
+  // Paste a screenshot (or an image copied from anywhere) while this panel is on screen. Plain
+  // text pastes are left alone, so the title and body fields behave as usual.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const files = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+        f.type.startsWith("image/"),
+      );
+      if (files.length === 0) return;
+      e.preventDefault();
+      add(files);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  });
+
+  // Drag-and-drop. `dragenter`/`dragleave` also fire for every child, so count depth rather than
+  // toggling a flag, or the highlight flickers as the pointer crosses the panel's contents.
+  const [dragging, setDragging] = useState(false);
+  const depth = useRef(0);
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+
   return (
-    <Card>
-      <SectionTitle>Photos</SectionTitle>
-      <p className="text-xs text-zinc-500">
-        {images.length}/{MAX_POST_IMAGES} used. The session card leads the post; photos follow it in
-        this order. Preview shows the deck as it will publish.
+    <Card
+      onDragEnter={(e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        depth.current += 1;
+        setDragging(true);
+      }}
+      onDragOver={(e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={(e) => {
+        if (!hasFiles(e)) return;
+        depth.current = Math.max(0, depth.current - 1);
+        if (depth.current === 0) setDragging(false);
+      }}
+      onDrop={(e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        depth.current = 0;
+        setDragging(false);
+        add(Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/")));
+      }}
+      className={cn(dragging && "border-[var(--border-strong)] bg-[var(--surface-sunken)]")}
+    >
+      <SectionTitle>Images</SectionTitle>
+      <p className="text-xs text-[var(--text-tertiary)]">
+        Optional. {images.length}/{MAX_POST_IMAGES} used. With no images the post is just your text,
+        plus your video if you add one.
       </p>
+
+      <input
+        ref={fileInput}
+        type="file"
+        accept={POST_IMAGE_MIME_TYPES.join(",")}
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          add(files);
+        }}
+      />
+      <div
+        className={cn(
+          "mt-3 flex flex-col items-center gap-2 rounded-[var(--lare-r-3)] border border-dashed px-4 py-5 text-center transition-colors",
+          dragging
+            ? "border-[var(--text-secondary)] text-[var(--text)]"
+            : "border-[var(--border-strong)] text-[var(--text-tertiary)]",
+        )}
+      >
+        <ImagePlus className="size-5" aria-hidden />
+        <p className="text-sm">
+          {dragging ? "Drop to add" : "Drop images here, or paste a screenshot"}
+        </p>
+        <Button
+          size="sm"
+          loading={upload.isPending}
+          disabled={busy || full}
+          onClick={() => fileInput.current?.click()}
+        >
+          Choose files
+        </Button>
+      </div>
 
       {images.length > 0 ? (
         <ul className="mt-3 grid grid-cols-2 gap-2">
@@ -110,7 +200,7 @@ export function PostMediaPanel({
                 >
                   <ChevronRight className="size-3.5" />
                 </IconButton>
-                <IconButton label="Remove photo" danger disabled={busy} onClick={() => drop(image)}>
+                <IconButton label="Remove image" danger disabled={busy} onClick={() => drop(image)}>
                   <Trash2 className="size-3.5" />
                 </IconButton>
               </div>
@@ -118,7 +208,7 @@ export function PostMediaPanel({
                 defaultValue={image.caption ?? ""}
                 maxLength={280}
                 placeholder="Caption"
-                aria-label="Photo caption"
+                aria-label="Image caption"
                 disabled={busy}
                 onBlur={(e) => {
                   if (e.target.value === (image.caption ?? "")) return;
@@ -133,30 +223,6 @@ export function PostMediaPanel({
           ))}
         </ul>
       ) : null}
-
-      <input
-        ref={fileInput}
-        type="file"
-        accept={POST_IMAGE_MIME_TYPES.join(",")}
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          const files = Array.from(e.target.files ?? []);
-          e.target.value = "";
-          if (files.length === 0) return;
-          upload.mutate(files, { onError: fail("Couldn't add the photo") });
-        }}
-      />
-      <Button
-        className="mt-3"
-        size="sm"
-        icon={<ImagePlus className="size-3.5" aria-hidden />}
-        loading={upload.isPending}
-        disabled={busy || images.length >= MAX_POST_IMAGES}
-        onClick={() => fileInput.current?.click()}
-      >
-        Add photos
-      </Button>
     </Card>
   );
 }

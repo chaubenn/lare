@@ -1,5 +1,5 @@
 import { cn } from "@lare/ui";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "@lare/ui/icons";
 import { Children, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
 /**
@@ -11,17 +11,10 @@ export function PostCarousel({
   children,
   label = "Post media",
   className,
-  fitActiveSlide = false,
 }: {
   children: ReactNode;
   label?: string;
   className?: string;
-  /**
-   * Size the frame to whatever the current slide needs instead of holding one
-   * aspect ratio. The feed wants the fixed frame — every card the same shape —
-   * but a deck carrying text wants the text to simply fit.
-   */
-  fitActiveSlide?: boolean;
 }) {
   const slides = Children.toArray(children);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -30,7 +23,6 @@ export function PostCarousel({
   const [height, setHeight] = useState<number | null>(null);
 
   useLayoutEffect(() => {
-    if (!fitActiveSlide) return;
     const el = slideRefs.current[index];
     if (!el) return;
     // Content inside a slide changes height on its own — "Show code", the problem
@@ -40,7 +32,7 @@ export function PostCarousel({
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [fitActiveSlide, index]);
+  }, [index]);
 
   function goTo(next: number) {
     const track = trackRef.current;
@@ -69,14 +61,8 @@ export function PostCarousel({
         <div
           ref={trackRef}
           onScroll={onScroll}
-          style={fitActiveSlide && height ? { height } : undefined}
-          className={cn(
-            "flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-            // 4:3 on phones so the breakdown slide has room; the 1200x630 cover letterboxes into it.
-            fitActiveSlide
-              ? "items-start transition-[height] duration-[var(--duration-fast)]"
-              : "aspect-[4/3] sm:aspect-[1200/630]",
-          )}
+          style={height ? { height } : undefined}
+          className="flex snap-x snap-mandatory items-start overflow-x-auto overflow-y-hidden scroll-smooth transition-[height] duration-[var(--duration-fast)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {slides.map((slide, i) => (
             // biome-ignore lint/a11y/useSemanticElements: the ARIA carousel pattern wants role="group" on a slide, not a fieldset.
@@ -138,7 +124,7 @@ export function PostCarousel({
 
 /**
  * Arrows sit outside the media frame (in the card's padding) so they never cover the slide
- * content — the generated session card fills the frame edge to edge.
+ * content — a video fills the frame edge to edge.
  */
 function NavButton({
   side,

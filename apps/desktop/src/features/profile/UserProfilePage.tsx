@@ -1,4 +1,4 @@
-import { Rss } from "lucide-react";
+import { Rss } from "@lare/ui/icons";
 import { useParams } from "react-router";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";

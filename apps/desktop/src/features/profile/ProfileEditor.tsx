@@ -7,9 +7,8 @@ import {
   withCacheBust,
 } from "@lare/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft } from "lucide-react";
 import { type FormEvent, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/Card";
@@ -82,13 +81,6 @@ export function ProfileEditor() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link
-        to="/profile"
-        className="mb-3 inline-flex items-center gap-1 rounded-[var(--lare-r-1)] text-sm text-[var(--text-secondary)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
-      >
-        <ChevronLeft className="size-4" aria-hidden />
-        Profile
-      </Link>
       <PageHeader title="Edit profile" subtitle={session.user.email} />
 
       <form onSubmit={onSubmit} className="space-y-4">

@@ -1,5 +1,5 @@
 import { buildActivityDays, difficultySplit, summarizeActivity, topicStats } from "@lare/shared";
-import { ArrowRight, Flame } from "lucide-react";
+import { ArrowRight, Flame } from "@lare/ui/icons";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";

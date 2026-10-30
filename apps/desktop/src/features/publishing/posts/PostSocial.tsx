@@ -1,6 +1,6 @@
 import { formatLocalTimestamp } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { Heart, MessageCircle, Pencil, Reply, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Pencil, Reply, Trash2 } from "@lare/ui/icons";
 import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";

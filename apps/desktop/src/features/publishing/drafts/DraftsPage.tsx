@@ -1,9 +1,10 @@
-import { formatDurationHuman } from "@lare/shared";
-import { SquarePen } from "lucide-react";
+import { formatDurationHuman, showsActiveTime } from "@lare/shared";
+import { SquarePen } from "@lare/ui/icons";
 import { Link } from "react-router";
 import { KindBadge } from "@/components/ui/Badge";
-import { PageHeader, StackedList, StackedListItem } from "@/components/ui/Card";
+import { StackedList, StackedListItem } from "@/components/ui/Card";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
+import { PageBlurb } from "@/features/shell/PageBlurb";
 import { formatListWhen, plural } from "@/lib/format";
 import { type Draft, useDrafts } from "./queries";
 import { TrackedProblems } from "./TrackedProblems";
@@ -12,11 +13,7 @@ export function DraftsPage() {
   const drafts = useDrafts();
   return (
     <>
-      <PageHeader
-        title="Drafts"
-        subtitle="Problems the extension tracked, and the posts you have started."
-        count={drafts.data ? plural(drafts.data.length, "draft") : undefined}
-      />
+      <PageBlurb>Problems the extension tracked, and the posts you have started.</PageBlurb>
 
       <TrackedProblems />
       {drafts.isPending ? (
@@ -70,7 +67,7 @@ function DraftRow({ draft }: { draft: Draft }) {
           {session ? (session.kind === "interview" ? "Interview" : "Practice") : "Draft"}
           <span aria-hidden> · </span>
           {when.label}
-          {session && session.active_ms > 0 ? (
+          {session && showsActiveTime(session.kind, session.active_ms) ? (
             <>
               <span aria-hidden> · </span>
               {formatDurationHuman(session.active_ms)}
@@ -92,7 +89,9 @@ function DraftRow({ draft }: { draft: Draft }) {
         {when.label}
       </p>
       <p className="hidden tabular-nums text-xs text-zinc-400 sm:block">
-        {session && session.active_ms > 0 ? formatDurationHuman(session.active_ms) : "—"}
+        {session && showsActiveTime(session.kind, session.active_ms)
+          ? formatDurationHuman(session.active_ms)
+          : "—"}
       </p>
       <p className="hidden text-xs text-zinc-400 sm:block">{plural(problems.length, "problem")}</p>
       <Link

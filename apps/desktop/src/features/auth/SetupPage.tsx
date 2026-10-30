@@ -1,6 +1,6 @@
+import { RotateCcw } from "@lare/ui/icons";
 import { useQuery } from "@tanstack/react-query";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { RotateCcw } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";

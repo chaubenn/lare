@@ -1,12 +1,12 @@
 import { type AppNotification, describeNotification, notificationActorName } from "@lare/shared";
+import { Bell, LoaderCircle } from "@lare/ui/icons";
 import { Progress } from "@lare/ui/primitives";
-import { Bell, LoaderCircle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
-import { PageHeader } from "@/components/ui/Card";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { isActive, type Job, STAGE_LABEL, useJobs } from "@/features/media/jobs";
+import { PageBlurb } from "@/features/shell/PageBlurb";
 import { timeAgo } from "@/lib/format";
 import { DESKTOP_NOTIFICATION_LINKS } from "./links";
 import { useMarkNotificationsRead, useNotifications } from "./queries";
@@ -34,10 +34,7 @@ export function NotificationsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Notifications"
-        subtitle="What people did on your account, and what the app is working on."
-      />
+      <PageBlurb>What people did on your account, and what the app is working on.</PageBlurb>
 
       {running.length > 0 ? (
         <section className="mb-4">

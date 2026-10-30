@@ -1,10 +1,10 @@
 "use client";
 
-import { X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../cn";
+import { X } from "../icons";
 import { SPRING } from "../motion";
 
 const FOCUSABLE =

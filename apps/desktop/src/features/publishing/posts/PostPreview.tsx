@@ -1,18 +1,22 @@
 import { formatLocalTimestamp } from "@lare/shared";
 import type { Post, Video } from "@lare/supabase-types";
-import { Lock, X } from "lucide-react";
+import { Lock, X } from "@lare/ui/icons";
 import { useEffect } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { useUser } from "@/features/auth/AuthProvider";
-import { PostSlides, type SlidePost, type SlideVideo } from "@/features/feed/PostSlides";
+import {
+  PostSlides,
+  postHasSlides,
+  type SlidePost,
+  type SlideVideo,
+} from "@/features/feed/PostSlides";
 import { useVideo } from "@/features/media/hooks";
 import { usePostMedia } from "@/features/publishing/posts/media";
 
 /**
  * How the post will look once it is published, drawn from what is in the editor right now
  * rather than what has been saved: the same header, caption and swipe deck the feed renders.
- * The first slide is the session card — the image link unfurls and the feed cover use — so
- * this is also where an author checks their OG image before publishing.
+ * A post with no images and no video is just its text, and previews as exactly that.
  */
 export function PostPreview({
   title,
@@ -112,9 +116,13 @@ export function PostPreview({
             )}
           </div>
 
-          <div className="p-4 pt-3 sm:px-5">
-            <PostSlides post={slides} title={shown} />
-          </div>
+          {postHasSlides(slides) ? (
+            <div className="p-4 pt-3 sm:px-5">
+              <PostSlides post={slides} title={shown} />
+            </div>
+          ) : (
+            <div className="pb-4 sm:pb-5" />
+          )}
         </article>
       </div>
     </div>
@@ -122,8 +130,8 @@ export function PostPreview({
 }
 
 /**
- * The slide deck for a post being edited: the photos and session card as they are stored right
- * now, combined with the cover and show-video choices sitting unsaved in the editor. Both
+ * The slide deck for a post being edited: the images as they are stored right now, combined
+ * with the show-video choices sitting unsaved in the editor. Both
  * editors build their preview from this, so what you see is what publishing produces.
  */
 export function usePreviewSlides({
@@ -133,8 +141,6 @@ export function usePreviewSlides({
   showVideo,
   demoVideoId,
   showDemoVideo,
-  includeOgCard,
-  session,
 }: {
   postId: string;
   videoId: string | null;
@@ -142,8 +148,6 @@ export function usePreviewSlides({
   showVideo: boolean;
   demoVideoId: string | null;
   showDemoVideo: boolean;
-  includeOgCard: boolean;
-  session: SlidePost["sessions"];
 }): SlidePost {
   const media = usePostMedia(postId);
   const video = useVideo(videoId);
@@ -151,7 +155,17 @@ export function usePreviewSlides({
 
   const rows = media.data ?? [];
   const images = rows.flatMap((row) =>
-    row.kind !== "og" && row.url ? [{ id: row.id, url: row.url, caption: row.caption }] : [],
+    row.kind !== "og" && row.url
+      ? [
+          {
+            id: row.id,
+            url: row.url,
+            caption: row.caption,
+            width: row.width,
+            height: row.height,
+          },
+        ]
+      : [],
   );
 
   return {
@@ -159,13 +173,11 @@ export function usePreviewSlides({
     video_kind: videoKind,
     show_video: showVideo,
     show_demo_video: showDemoVideo,
-    include_og_card: includeOgCard,
     thumbnail_url: null,
     demo_thumbnail_url: null,
     images,
     videos: toSlideVideo(video.data),
     demo_videos: toSlideVideo(demo.data),
-    sessions: session,
   };
 }
 
@@ -177,6 +189,8 @@ export function toSlideVideo(clip: Video | null | undefined): SlideVideo | null 
         status: clip.status,
         bunny_video_id: clip.bunny_video_id,
         duration_ms: clip.duration_ms,
+        width: clip.width,
+        height: clip.height,
       }
     : null;
 }

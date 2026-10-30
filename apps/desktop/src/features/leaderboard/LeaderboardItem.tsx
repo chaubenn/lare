@@ -1,6 +1,6 @@
 import type { LeaderboardRow } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { Lock } from "lucide-react";
+import { Lock } from "@lare/ui/icons";
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";

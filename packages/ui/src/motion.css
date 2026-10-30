@@ -309,7 +309,6 @@
   color: var(--tt-fg);
   border: 1px solid var(--border);
   white-space: nowrap;
-  box-shadow: var(--lare-shadow-1);
   opacity: 0;
   pointer-events: none;
   z-index: 50;
@@ -360,7 +359,7 @@
   background: linear-gradient(
     90deg,
     transparent,
-    color-mix(in oklab, var(--lare-bone) 8%, transparent),
+    color-mix(in oklab, var(--text) 8%, transparent),
     transparent
   );
   animation: lare-skel-shimmer 1.2s var(--ease-linear) infinite;

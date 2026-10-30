@@ -1,6 +1,6 @@
 import type { Video } from "@lare/supabase-types";
 import { cn } from "@lare/ui";
-import { AlertTriangle, HardDrive, RotateCw } from "lucide-react";
+import { AlertTriangle, HardDrive, RotateCw } from "@lare/ui/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { mediaErrorText, type StallWatch, watchPlayback } from "@/features/media/previewStallRules";
@@ -22,11 +22,14 @@ export function LocalPreview({
   status,
   title,
   className,
+  aspectRatio,
 }: {
   src: string;
   status: Video["status"];
   title: string;
   className?: string;
+  /** The clip's own width / height, so the frame has no bars; 16:9 when unknown. */
+  aspectRatio?: number;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -76,6 +79,7 @@ export function LocalPreview({
         preload="metadata"
         title={title}
         onPlaying={() => setProblem(null)}
+        style={aspectRatio ? { aspectRatio } : undefined}
         className="aspect-video w-full rounded-xl border border-zinc-800 bg-black"
       />
       {problem ? (

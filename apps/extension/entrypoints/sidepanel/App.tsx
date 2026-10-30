@@ -349,9 +349,7 @@ export function App() {
                     </label>
                   </li>
                 ))}
-                {tracked.length === 0 && (
-                  <li className="problems-empty">Nothing tracked yet — open a LeetCode problem.</li>
-                )}
+                {tracked.length === 0 && <li className="problems-empty">Nothing tracked yet</li>}
               </ul>
               <button
                 type="button"

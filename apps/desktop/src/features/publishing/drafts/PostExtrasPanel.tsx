@@ -6,13 +6,14 @@ import { type Draft, type PostExtras, useSetPostExtras } from "./queries";
 
 /**
  * The optional extras, in one place: everything an author can choose to send along with the
- * post rather than something they have to fill in. Each switch saves on the spot — the session
- * card is regenerated (or removed) to match, so the Photos panel and the preview stay honest.
+ * post rather than something they have to fill in. Each switch saves on the spot.
  */
 export function PostExtrasPanel({ draft }: { draft: Draft }) {
   const { notify } = useNotify();
   const extras = useSetPostExtras(draft.id);
   const isInterview = draft.sessions?.kind === "interview" && draft.sessions.graded;
+  // AI insights are the only extra, and only a graded mock interview has any.
+  if (!isInterview) return null;
 
   const set = (patch: Partial<PostExtras>) =>
     extras.mutate(patch, {
@@ -24,23 +25,13 @@ export function PostExtrasPanel({ draft }: { draft: Draft }) {
     <Card>
       <SectionTitle>Include with the post</SectionTitle>
       <div className="mt-3 grid gap-3">
-        {isInterview ? (
-          <Toggle
-            id="extras-insights"
-            checked={draft.include_ai_insights}
-            disabled={extras.isPending}
-            onChange={(v) => set({ include_ai_insights: v })}
-            label="AI insights"
-            description="Viewers of the post can see the interview grade, timestamped moments and suggestions."
-          />
-        ) : null}
         <Toggle
-          id="extras-og-card"
-          checked={draft.include_og_card}
+          id="extras-insights"
+          checked={draft.include_ai_insights}
           disabled={extras.isPending}
-          onChange={(v) => set({ include_og_card: v })}
-          label="Session card"
-          description="Leads the post with a summary of the session. Off: the post opens on the session breakdown."
+          onChange={(v) => set({ include_ai_insights: v })}
+          label="AI insights"
+          description="Viewers of the post can see the interview grade, timestamped moments and suggestions."
         />
       </div>
     </Card>

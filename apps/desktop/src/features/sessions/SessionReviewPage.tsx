@@ -1,6 +1,6 @@
-import { formatDurationHuman } from "@lare/shared";
+import { formatDurationHuman, showsActiveTime } from "@lare/shared";
+import { RefreshCw, Sparkles, Video as VideoIcon } from "@lare/ui/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, RefreshCw, Sparkles, Video as VideoIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
@@ -179,23 +179,16 @@ function SessionReview({ session }: { session: SessionDetail }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <Link
-          to="/sessions"
-          className="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
-        >
-          <ArrowLeft className="size-4" aria-hidden />
-          Sessions
-        </Link>
-        {postLink ? (
+      {postLink ? (
+        <div className="flex justify-end">
           <Link
             to={postLink.to}
             className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 hover:bg-zinc-800"
           >
             {postLink.label}
           </Link>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <header>
         <h1 className="select-text text-2xl font-semibold text-zinc-50">{title}</h1>
@@ -207,8 +200,12 @@ function SessionReview({ session }: { session: SessionDetail }) {
               {session.graded ? "Local transcript & AI review" : "No transcript: video only"}
             </span>
           )}
-          <span>{formatDurationHuman(session.active_ms)} active</span>
-          <span aria-hidden>·</span>
+          {showsActiveTime(session.kind, session.active_ms) ? (
+            <>
+              <span>{formatDurationHuman(session.active_ms)} active</span>
+              <span aria-hidden>·</span>
+            </>
+          ) : null}
           <span>started {formatDateTime(session.started_at)}</span>
           <span aria-hidden>·</span>
           <span>{plural(problems.length, "problem")}</span>

@@ -1,0 +1,146 @@
+/* The app theme: Medesk's light and dark palette on top of the shared semantic tokens.
+ *
+ * Only the semantic layer is remapped (the same seam the landing page uses), so the locked
+ * --lare-* brand values stay as they are. The dark base is the landing page's #1c1c1c grey
+ * instead of near-black.
+ *
+ * Which palette applies:
+ *   html.light / html.dark   the app chose (the desktop app's theme switch sets one of these)
+ *   neither                  follow the system, which is what the extension does
+ *
+ * Layout colours, as in Medesk: --frame is the outer chrome (sidebar, window edge) and --surface
+ * is the inset panel the page sits on.
+ *
+ * The dark palette appears twice, once for the class and once for the system fallback. Keep the
+ * two blocks identical.
+ */
+
+:root,
+:root.light {
+  color-scheme: light;
+
+  --frame: oklch(0.975 0 0);
+  --surface: oklch(1 0 0);
+  --surface-raised: oklch(0.98 0 0);
+  --surface-sunken: oklch(0.955 0 0);
+  --border: oklch(0.922 0 0);
+  --border-strong: oklch(0.85 0 0);
+  --text: oklch(0.145 0 0);
+  --text-secondary: oklch(0.4 0 0);
+  --text-tertiary: oklch(0.556 0 0);
+  --accent: oklch(0.205 0 0);
+  --accent-fg: oklch(0.985 0 0);
+  --accent-hover: oklch(0.32 0 0);
+  --focus: oklch(0.708 0 0);
+  --input-addon: oklch(0.708 0 0);
+
+  /* Status colours need more weight on white than on grey. */
+  --lare-status-run: #3f7a47;
+  --lare-status-pause: #9a6d12;
+  --lare-status-stop: #c0392b;
+  --lare-info: #3b6f8f;
+
+  --lare-shadow-1: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --lare-shadow-2: 0 12px 32px rgba(0, 0, 0, 0.12);
+  --lare-shadow-3: 0 20px 48px rgba(0, 0, 0, 0.16);
+
+  --lare-material-thin: color-mix(in oklab, var(--surface) 78%, transparent);
+  --lare-material-regular: color-mix(in oklab, var(--surface) 88%, transparent);
+  --lare-material-thick: color-mix(in oklab, var(--frame) 92%, transparent);
+
+  /* motion.css tooltip + segmented tabs read the brand ink/bone directly. */
+  --tt-bg: var(--text);
+  --tt-fg: var(--surface);
+  --tabs-text-muted: var(--text-tertiary);
+  --tabs-text-active: var(--text);
+  --tabs-bar-bg: var(--surface-sunken);
+  --tabs-pill-bg: var(--surface);
+}
+
+:root.dark {
+  color-scheme: dark;
+
+  --frame: #242424;
+  --surface: #1c1c1c;
+  --surface-raised: #252525;
+  --surface-sunken: #303030;
+  --border: #363636;
+  --border-strong: #4a4a4a;
+  --text: #ececec;
+  --text-secondary: #a8a8a8;
+  --text-tertiary: #8f8f8f;
+  --accent: #ececec;
+  --accent-fg: #1c1c1c;
+  --accent-hover: #ffffff;
+  --focus: #c8c2b6;
+  --input-addon: #8f8f8f;
+
+  --lare-status-run: #6f8f6a;
+  --lare-status-pause: #c4a15a;
+  --lare-status-stop: #c45c5c;
+  --lare-info: #7a9eb0;
+
+  --lare-shadow-1: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --lare-shadow-2: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --lare-shadow-3: 0 20px 48px rgba(0, 0, 0, 0.55);
+
+  --lare-material-thin: color-mix(in oklab, var(--surface-raised) 52%, transparent);
+  --lare-material-regular: color-mix(in oklab, var(--surface-raised) 72%, transparent);
+  --lare-material-thick: color-mix(in oklab, var(--frame) 92%, transparent);
+
+  --tt-bg: var(--surface-sunken);
+  --tt-fg: var(--text);
+  --tabs-text-muted: var(--text-tertiary);
+  --tabs-text-active: var(--text);
+  --tabs-bar-bg: var(--surface-raised);
+  --tabs-pill-bg: var(--surface-sunken);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    color-scheme: dark;
+
+    --frame: #242424;
+    --surface: #1c1c1c;
+    --surface-raised: #252525;
+    --surface-sunken: #303030;
+    --border: #363636;
+    --border-strong: #4a4a4a;
+    --text: #ececec;
+    --text-secondary: #a8a8a8;
+    --text-tertiary: #8f8f8f;
+    --accent: #ececec;
+    --accent-fg: #1c1c1c;
+    --accent-hover: #ffffff;
+    --focus: #c8c2b6;
+    --input-addon: #8f8f8f;
+
+    --lare-status-run: #6f8f6a;
+    --lare-status-pause: #c4a15a;
+    --lare-status-stop: #c45c5c;
+    --lare-info: #7a9eb0;
+
+    --lare-shadow-1: 0 8px 24px rgba(0, 0, 0, 0.35);
+    --lare-shadow-2: 0 12px 32px rgba(0, 0, 0, 0.45);
+    --lare-shadow-3: 0 20px 48px rgba(0, 0, 0, 0.55);
+
+    --lare-material-thin: color-mix(in oklab, var(--surface-raised) 52%, transparent);
+    --lare-material-regular: color-mix(in oklab, var(--surface-raised) 72%, transparent);
+    --lare-material-thick: color-mix(in oklab, var(--frame) 92%, transparent);
+
+    --tt-bg: var(--surface-sunken);
+    --tt-fg: var(--text);
+    --tabs-text-muted: var(--text-tertiary);
+    --tabs-text-active: var(--text);
+    --tabs-bar-bg: var(--surface-raised);
+    --tabs-pill-bg: var(--surface-sunken);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --lare-material-thin: var(--surface);
+    --lare-material-regular: var(--surface);
+    --lare-material-thick: var(--frame);
+  }
+}

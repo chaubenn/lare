@@ -1,6 +1,6 @@
 import { DifficultyBadge } from "@lare/ui";
+import { Radio } from "@lare/ui/icons";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { Radio } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";

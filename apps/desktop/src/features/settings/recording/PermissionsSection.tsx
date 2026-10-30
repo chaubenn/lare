@@ -1,5 +1,5 @@
+import { Camera, ExternalLink, type IconComponent, Mic, Monitor, RotateCcw } from "@lare/ui/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, ExternalLink, type LucideIcon, Mic, Monitor, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
@@ -17,7 +17,7 @@ interface PermissionRowDef {
   which: PermissionKind;
   label: string;
   description: string;
-  icon: LucideIcon;
+  icon: IconComponent;
 }
 
 const PERMISSION_ROWS: PermissionRowDef[] = [

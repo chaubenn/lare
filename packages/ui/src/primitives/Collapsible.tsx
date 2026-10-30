@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useId, useState } from "react";
 import { cn } from "../cn";
+import { ChevronRight } from "../icons";
 import { SPRING } from "../motion";
 
 export function Collapsible({

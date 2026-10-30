@@ -1,4 +1,4 @@
-import { Lock, Users } from "lucide-react";
+import { Lock, Users } from "@lare/ui/icons";
 import { Modal } from "@/components/ui/Modal";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, Spinner } from "@/components/ui/States";

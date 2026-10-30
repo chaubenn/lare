@@ -6,9 +6,14 @@
  * tone: utilitarian · anchor hue: neutral (bone on ink; --lare-danger is the only chromatic note)
  * enrichment: none (the post's own video is the media)
  */
-import { formatDurationHuman, formatLocalTimestamp, postStateOf } from "@lare/shared";
+import {
+  formatDurationHuman,
+  formatLocalTimestamp,
+  postStateOf,
+  showsActiveTime,
+} from "@lare/shared";
+import { Lock, MoreHorizontal, Pencil, Trash2 } from "@lare/ui/icons";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
@@ -22,10 +27,11 @@ import { ExpandableText } from "@/components/ui/ExpandableText";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { PostCarousel } from "@/features/feed/PostCarousel";
-import { LabelledSlide, TextSlide } from "@/features/feed/PostSlides";
+import { LabelledSlide, PhotoSlide, TextSlide } from "@/features/feed/PostSlides";
 import { VideoSlide } from "@/features/feed/VideoSlide";
 import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
+import { usePostMedia } from "@/features/publishing/posts/media";
 import { formatDateTime, plural } from "@/lib/format";
 import { CommentsSection, PostActions } from "./PostSocial";
 import { type PostDetail, useInterviewReview, usePost } from "./queries";
@@ -71,16 +77,6 @@ function PostView({ post }: { post: PostDetail }) {
 
   return (
     <div className="grid w-full gap-x-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <div className="lg:col-span-2">
-        <Link
-          to="/"
-          className="mb-4 inline-flex items-center gap-1 rounded-[var(--lare-r-1)] text-sm text-[var(--text-secondary)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
-        >
-          <ChevronLeft className="size-4" aria-hidden />
-          Feed
-        </Link>
-      </div>
-
       {/* Deliberate rhythm rather than one uniform gap: the media block gets room,
           then a hairline turns the meta, the note and the thread into one quiet
           run — a notebook entry, not five evenly spaced cards. */}
@@ -185,9 +181,8 @@ function PostView({ post }: { post: PostDetail }) {
 type ReviewData = NonNullable<ReturnType<typeof useInterviewReview>["data"]>;
 
 /**
- * The post's body as one swipe deck: the summary clip, the recording, the problems and
- * the review. Deliberately narrower than the feed's deck — no photos, and no session
- * card or breakdown slide, because the Session panel beside it already carries those.
+ * The post's body as one swipe deck: the summary clip, the author's images, the recording, the
+ * problems and the review. The Session panel beside it carries the session itself.
  */
 function PostContent({
   post,
@@ -201,6 +196,20 @@ function PostContent({
   const problems = post.sessions?.session_problems ?? [];
   const summary = post.demo_videos;
   const video = post.videos;
+  const media = usePostMedia(post.id);
+  const photos = (media.data ?? []).flatMap((row) =>
+    row.kind !== "og" && row.url
+      ? [
+          {
+            id: row.id,
+            url: row.url,
+            caption: row.caption,
+            width: row.width,
+            height: row.height,
+          },
+        ]
+      : [],
+  );
 
   // The owner keeps sight of a clip they have hidden; the note under the deck is
   // what tells them it is hidden from everyone else.
@@ -210,12 +219,14 @@ function PostContent({
     isMine && ((video && !post.show_video) || (summary && !post.show_demo_video));
   const bothClips = showSummary && showVideo;
 
-  if (!showSummary && !showVideo && problems.length === 0 && !review) return null;
+  if (!showSummary && photos.length === 0 && !showVideo && problems.length === 0 && !review) {
+    return null;
+  }
 
   const title = post.title ?? "Post";
   return (
     <section>
-      <PostCarousel label={`${title} — contents`} fitActiveSlide>
+      <PostCarousel label={`${title} — contents`}>
         {showSummary && summary ? (
           <LabelledSlide label={bothClips ? "Summary" : null} className="relative w-full">
             <VideoSlide
@@ -223,11 +234,16 @@ function PostContent({
               status={summary.status}
               bunnyVideoId={summary.bunny_video_id}
               durationMs={summary.duration_ms}
+              width={summary.width}
+              height={summary.height}
               title={`${title} — summary`}
               className="rounded-none border-0"
             />
           </LabelledSlide>
         ) : null}
+        {photos.map((image) => (
+          <PhotoSlide key={image.id} image={image} />
+        ))}
         {showVideo && video ? (
           <LabelledSlide
             label={bothClips ? (post.video_kind === "highlights" ? "Highlights" : "Demo") : null}
@@ -238,6 +254,8 @@ function PostContent({
               status={video.status}
               bunnyVideoId={video.bunny_video_id}
               durationMs={video.duration_ms}
+              width={video.width}
+              height={video.height}
               title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "demo"}`}
               className="rounded-none border-0"
             />
@@ -270,7 +288,9 @@ function SessionPanel({ session }: { session: NonNullable<PostDetail["sessions"]
   const acceptedCount = problems.filter((p) => p.submissions.some((s) => s.accepted)).length;
   const rows = [
     { label: "Kind", value: <KindBadge kind={session.kind} /> },
-    { label: "Active time", value: formatDurationHuman(session.active_ms) },
+    ...(showsActiveTime(session.kind, session.active_ms)
+      ? [{ label: "Active time", value: formatDurationHuman(session.active_ms) }]
+      : []),
     { label: "Started", value: formatDateTime(session.started_at) },
     {
       label: "Solved",
@@ -317,7 +337,7 @@ function HiddenNote({ postId }: { postId: string }) {
   );
 }
 
-/** Secondary actions in one place: sharing for everyone, deletion for the owner. */
+/** Secondary actions. Deleting is the only one, and it is the owner's, so nobody else gets a menu. */
 function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
   const { notify } = useNotify();
   const remove = useDeletePostFlow(post.id);
@@ -349,6 +369,8 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
   const item =
     "flex w-full items-center gap-2 rounded-[var(--lare-r-2)] px-2.5 py-2 text-left text-sm outline-none hover:bg-[color-mix(in_oklab,var(--border)_70%,transparent)] focus-visible:bg-[color-mix(in_oklab,var(--border)_70%,transparent)] disabled:opacity-50";
 
+  if (!isMine) return null;
+
   return (
     <div ref={root} className="relative">
       <Button
@@ -365,7 +387,7 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
           role="menu"
           aria-label="Post actions"
           tabIndex={-1}
-          className="lare-material-regular lare-dropdown absolute right-0 top-full z-20 mt-1 w-48 rounded-[var(--lare-r-3)] border border-[var(--border)] p-1 shadow-[var(--lare-shadow-2)]"
+          className="lare-material-regular lare-dropdown absolute right-0 top-full z-20 mt-1 w-48 rounded-[var(--lare-r-3)] border border-[var(--border)] p-1"
           onKeyDown={(e) => {
             if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
             e.preventDefault();
@@ -377,18 +399,16 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
             items[next]?.focus();
           }}
         >
-          {isMine ? (
-            <button
-              type="button"
-              role="menuitem"
-              disabled={remove.isPending}
-              className={`${item} text-[var(--lare-danger)]`}
-              onClick={choose(() => void remove.deletePost())}
-            >
-              <Trash2 className="size-4" aria-hidden />
-              Delete post
-            </button>
-          ) : null}
+          <button
+            type="button"
+            role="menuitem"
+            disabled={remove.isPending}
+            className={`${item} text-[var(--lare-danger)]`}
+            onClick={choose(() => void remove.deletePost())}
+          >
+            <Trash2 className="size-4" aria-hidden />
+            Delete post
+          </button>
         </div>
       ) : null}
     </div>

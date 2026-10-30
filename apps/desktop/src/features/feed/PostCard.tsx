@@ -1,12 +1,12 @@
 import { postStateOf } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { Heart, Lock, MessageCircle, Sparkles } from "lucide-react";
+import { Heart, Lock, MessageCircle, Sparkles } from "@lare/ui/icons";
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { PostStateBadge } from "@/components/ui/Badge";
 import { ExpandableText } from "@/components/ui/ExpandableText";
 import { CommentsPreview } from "@/features/feed/CommentsPreview";
-import { PostSlides } from "@/features/feed/PostSlides";
+import { PostSlides, postHasSlides } from "@/features/feed/PostSlides";
 import type { FeedPost } from "@/features/feed/queries";
 import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
@@ -18,8 +18,7 @@ const cardClass = "rounded-2xl border border-zinc-800/80 bg-zinc-900/40";
 
 /**
  * A post in the feed, mirroring the web feed card exactly: author header with the post link
- * action, the caption above the swipe deck (cover card → session breakdown → photos → demo
- * video), then the like/comment row with the "View post" link inline and an inline preview
+ * action, the caption above the swipe deck (images → demo video; absent when the post has no media), then the like/comment row with the "View post" link inline and an inline preview
  * of the first comments.
  */
 export function PostCard({
@@ -106,9 +105,11 @@ export function PostCard({
         )}
       </div>
 
-      <div className="px-4 pt-3 sm:px-5">
-        <PostSlides post={post} title={title} />
-      </div>
+      {postHasSlides(post) ? (
+        <div className="px-4 pt-3 sm:px-5">
+          <PostSlides post={post} title={title} />
+        </div>
+      ) : null}
 
       <div className="p-4 pt-3 sm:px-5">
         <div className="flex flex-wrap items-center gap-1 text-sm text-zinc-400">

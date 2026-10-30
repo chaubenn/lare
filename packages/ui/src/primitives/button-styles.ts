@@ -8,7 +8,7 @@ export const BUTTON_BASE =
 
 export const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "bg-[var(--accent)] text-[var(--accent-fg)] hover:bg-[var(--lare-paper)] disabled:hover:bg-[var(--accent)] font-medium",
+    "bg-[var(--accent)] text-[var(--accent-fg)] hover:bg-[var(--accent-hover,var(--lare-paper))] disabled:hover:bg-[var(--accent)] font-medium",
   secondary:
     "border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text)] hover:bg-[var(--surface-sunken)]",
   ghost: "text-[var(--text-secondary)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]",

@@ -1,6 +1,6 @@
 import { formatDuration, type TranscriptSegment } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { Copy, MicOff } from "lucide-react";
+import { Copy, MicOff } from "@lare/ui/icons";
 import { useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";

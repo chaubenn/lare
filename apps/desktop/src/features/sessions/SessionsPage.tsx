@@ -1,11 +1,11 @@
-import { formatDurationHuman } from "@lare/shared";
-import { ArrowRight, ChevronRight, Inbox } from "lucide-react";
+import { formatDurationHuman, showsActiveTime } from "@lare/shared";
+import { ArrowRight, ChevronRight, Inbox } from "@lare/ui/icons";
 import { useState } from "react";
 import { Link } from "react-router";
 import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
-import { PageHeader } from "@/components/ui/Card";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
+import { PageBlurb } from "@/features/shell/PageBlurb";
 import { plural } from "@/lib/format";
 import { groupSittings, SITTING_GAP_MS, type Sitting } from "./grouping";
 import { type SessionRow, useSessions } from "./queries";
@@ -21,7 +21,7 @@ export function SessionsPage() {
 
   return (
     <div>
-      <PageHeader title="Sessions" subtitle="Your practice and mock interviews, by sitting." />
+      <PageBlurb>Your practice and mock interviews, by sitting.</PageBlurb>
       {sessions.isPending ? (
         <ListSkeleton />
       ) : sessions.isError ? (
@@ -151,7 +151,9 @@ function SittingStats({ sitting }: { sitting: Sitting<SessionRow> }) {
   const items = [
     sitting.interviews ? plural(sitting.interviews, "interview") : null,
     sitting.practices ? plural(sitting.practices, "practice set") : null,
-    sitting.activeMs > 0 ? `${formatDurationHuman(sitting.activeMs)} active` : null,
+    showsActiveTime(sitting.interviews ? "interview" : "practice", sitting.activeMs)
+      ? `${formatDurationHuman(sitting.activeMs)} active`
+      : null,
   ].filter(Boolean);
   return <p className="text-sm tabular-nums text-[var(--text-secondary)]">{items.join(" · ")}</p>;
 }
@@ -196,7 +198,7 @@ function SessionRows({ sessions, className }: { sessions: SessionRow[]; classNam
             ) : null}
           </Link>
           <span className="hidden text-right text-xs tabular-nums text-[var(--text-secondary)] sm:block">
-            {s.active_ms > 0 ? formatDurationHuman(s.active_ms) : "—"}
+            {showsActiveTime(s.kind, s.active_ms) ? formatDurationHuman(s.active_ms) : "—"}
           </span>
           <span className="flex justify-end">
             <SessionAction session={s} />

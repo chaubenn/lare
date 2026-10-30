@@ -1,5 +1,5 @@
 import type { Post } from "@lare/supabase-types";
-import { ChevronLeft, Eye, Trash2 } from "lucide-react";
+import { Eye, Trash2 } from "@lare/ui/icons";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useNotify } from "@/features/notifications/notices";
 import { errorMessage } from "@/lib/supabase";
+import { useGoBack } from "@/lib/useGoBack";
 import { PostMediaPanel } from "./PostMediaPanel";
 import { PostPreview, usePreviewSlides } from "./PostPreview";
 import { type PostDetail, usePost, useUpdatePost } from "./queries";
@@ -44,11 +45,12 @@ export function PostEditPage() {
  */
 function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
   const { notify } = useNotify();
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
   const update = useUpdatePost();
   const remove = useDeletePostFlow(post.id);
   const busy = update.isPending || remove.isPending;
   const postHref = `/posts/${post.id}`;
+  const goBack = useGoBack(postHref);
 
   const [title, setTitle] = useState(post.title ?? "");
   const [body, setBody] = useState(post.body ?? "");
@@ -66,8 +68,6 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
     showVideo,
     demoVideoId: post.demo_video_id,
     showDemoVideo,
-    includeOgCard: post.include_og_card,
-    session: post.sessions,
   });
 
   const save = () => {
@@ -76,7 +76,7 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
       {
         onSuccess: () => {
           notify({ title: "Post updated", variant: "success" });
-          void navigate(postHref);
+          goBack();
         },
         onError: (e) =>
           notify({ title: "Couldn't save", description: errorMessage(e), variant: "error" }),
@@ -87,13 +87,6 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
   return (
     <div className="grid w-full gap-x-8 gap-y-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <div className="min-w-0 lg:col-span-2">
-        <Link
-          to={postHref}
-          className="mb-3 inline-flex items-center gap-1 rounded-[var(--lare-r-1)] text-sm text-[var(--text-secondary)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
-        >
-          <ChevronLeft className="size-4" aria-hidden />
-          Post
-        </Link>
         <PageHeader
           title="Edit post"
           subtitle={post.title?.trim() || "Untitled session"}
@@ -106,7 +99,7 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
               >
                 Preview
               </Button>
-              <Button variant="ghost" disabled={busy} onClick={() => void navigate(postHref)}>
+              <Button variant="ghost" disabled={busy} onClick={goBack}>
                 Cancel
               </Button>
               <Button variant="primary" loading={update.isPending} disabled={busy} onClick={save}>

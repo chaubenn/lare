@@ -1,13 +1,13 @@
 import { postStateOf } from "@lare/shared";
-import { Heart, MessageCircle, Play } from "lucide-react";
+import { Heart, MessageCircle, Play } from "@lare/ui/icons";
 import { Link } from "react-router";
 import { KindBadge, PostStateBadge } from "@/components/ui/Badge";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import type { UserPost } from "./queries";
 
 /**
- * A profile's posts as tiles rather than full feed cards. One post used to fill the screen with
- * its session card; here the card is a thumbnail and the tile says what the post is at a glance.
+ * A profile's posts as tiles rather than full feed cards. A tile shows the post's first image when
+ * it has one, and its title when it is text alone, so it says what the post is at a glance.
  */
 export function ProfilePostGrid({ posts }: { posts: UserPost[] }) {
   return (
@@ -27,6 +27,7 @@ function PostTile({ post }: { post: UserPost }) {
   const title = post.title?.trim() || problems[0]?.title || "Untitled session";
   const when = post.published_at ?? post.created_at;
   const hasVideo = Boolean(post.videos) || Boolean(post.demo_videos);
+  const cover = post.images[0];
 
   return (
     <Link
@@ -34,11 +35,13 @@ function PostTile({ post }: { post: UserPost }) {
       className="group flex h-full flex-col overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] transition-colors hover:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
     >
       <div className="relative aspect-[1200/630] overflow-hidden border-b border-[var(--border)] bg-[var(--surface)]">
-        {/* The session card is a component now, not a stored image, so a tile is drawn rather than
-            fetched: the title is what a grid needs at this size anyway. */}
-        <div className="flex size-full items-end p-4">
-          <span className="line-clamp-2 text-lg font-semibold text-[var(--text)]">{title}</span>
-        </div>
+        {cover ? (
+          <img src={cover.url} alt="" className="size-full object-cover" loading="lazy" />
+        ) : (
+          <div className="flex size-full items-end p-4">
+            <span className="line-clamp-2 text-lg font-semibold text-[var(--text)]">{title}</span>
+          </div>
+        )}
         {hasVideo ? (
           <span className="absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-[color-mix(in_oklab,var(--surface)_80%,transparent)] px-2 py-0.5 text-[11px] text-[var(--text)] backdrop-blur">
             <Play className="size-3" aria-hidden />

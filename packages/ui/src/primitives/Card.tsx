@@ -111,6 +111,11 @@ export function LogColumns({ columns }: { columns: string[] }) {
   );
 }
 
+/**
+ * The block under a page's topbar. The topbar already names the page, so `title` is only for a
+ * heading that says something the topbar does not (a post's title, "Edit post"); leave it off and
+ * the header is just the subtitle, the count and the actions, or nothing at all.
+ */
 export function PageHeader({
   title,
   subtitle,
@@ -118,12 +123,14 @@ export function PageHeader({
   count,
   sticky = false,
 }: {
-  title: ReactNode;
+  title?: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
   count?: ReactNode;
   sticky?: boolean;
 }) {
+  const hasText = title !== undefined || subtitle !== undefined || count !== undefined;
+  if (!hasText && !actions) return null;
   return (
     <header
       className={cn(
@@ -132,13 +139,22 @@ export function PageHeader({
       )}
     >
       <div className="min-w-0">
-        <div className="flex items-baseline gap-2">
-          <h1 className="lare-heading truncate text-[var(--text)]">{title}</h1>
-          {count !== undefined ? (
-            <span className="lare-micro tabular-nums text-[var(--text-tertiary)]">{count}</span>
-          ) : null}
-        </div>
-        {subtitle ? <p className="mt-0.5 text-sm text-[var(--text-tertiary)]">{subtitle}</p> : null}
+        {title !== undefined ? (
+          <div className="flex items-baseline gap-2">
+            <h2 className="lare-heading truncate text-[var(--text)]">{title}</h2>
+            {count !== undefined ? (
+              <span className="lare-micro tabular-nums text-[var(--text-tertiary)]">{count}</span>
+            ) : null}
+          </div>
+        ) : null}
+        {subtitle || (title === undefined && count !== undefined) ? (
+          <p className={cn("text-sm text-[var(--text-tertiary)]", title !== undefined && "mt-0.5")}>
+            {title === undefined && count !== undefined ? (
+              <span className="mr-2 tabular-nums text-[var(--text-secondary)]">{count}</span>
+            ) : null}
+            {subtitle}
+          </p>
+        ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
     </header>

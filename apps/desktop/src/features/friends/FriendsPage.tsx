@@ -1,10 +1,9 @@
-import { Check, Lock, Search, UserPlus, Users, X } from "lucide-react";
+import { Check, Lock, Search, UserPlus, Users, X } from "@lare/ui/icons";
 import { type ReactNode, useDeferredValue, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { CountBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { PageHeader } from "@/components/ui/Card";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, ListSkeleton, PageSpinner } from "@/components/ui/States";
 import { useNotify } from "@/features/notifications/notices";
@@ -15,6 +14,7 @@ import {
   useFollowRequests,
   useRespondToRequest,
 } from "@/features/requests/queries";
+import { PageBlurb } from "@/features/shell/PageBlurb";
 import { errorMessage } from "@/lib/supabase";
 import { FollowButton } from "./FollowButton";
 import { FriendsSidebar, useSuggestedPeople } from "./FriendsSidebar";
@@ -52,10 +52,7 @@ export function FriendsPage() {
     // Same shape as the feed: the side column starts level with the lists, not the title.
     <div className="grid w-full gap-x-8 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]">
       <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-        <PageHeader
-          title="Friends"
-          subtitle="The people you follow, who follows you, and who to follow next."
-        />
+        <PageBlurb>The people you follow, who follows you, and who to follow next.</PageBlurb>
         <div className="mb-4">
           <SegmentedTabs
             label="Friends sections"

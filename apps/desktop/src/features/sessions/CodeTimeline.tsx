@@ -1,8 +1,8 @@
 import { checkpoints, codeAt, type EditLog, LANGUAGE_LABELS } from "@lare/shared";
 import type { SessionProblem } from "@lare/supabase-types";
 import { CodeBlock, cn, DifficultyBadge } from "@lare/ui";
+import { ChevronLeft, ChevronRight, FileCode2 } from "@lare/ui/icons";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, FileCode2 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";

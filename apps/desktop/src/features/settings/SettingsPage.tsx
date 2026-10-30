@@ -1,9 +1,9 @@
 import { WS_PORT } from "@lare/shared";
-import { LogOut, RefreshCw } from "lucide-react";
+import { LogOut, RefreshCw } from "@lare/ui/icons";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, PageHeader, SectionTitle } from "@/components/ui/Card";
+import { Card, SectionTitle } from "@/components/ui/Card";
 import { useAuth, useUser } from "@/features/auth/AuthProvider";
 import { useNotify } from "@/features/notifications/notices";
 import { useExtensionStatus } from "@/features/shell/useExtensionStatus";
@@ -18,15 +18,12 @@ const EXTENSION_ID = "koplffaeeahehnfikinmldhhmmldghhl";
 
 export function SettingsPage() {
   return (
-    <>
-      <PageHeader title="Settings" />
-      <div className="space-y-4">
-        <ExtensionPanel />
-        <RecordingPanel />
-        <NotificationsPanel />
-        <AccountPanel />
-      </div>
-    </>
+    <div className="space-y-4">
+      <ExtensionPanel />
+      <RecordingPanel />
+      <NotificationsPanel />
+      <AccountPanel />
+    </div>
   );
 }
 

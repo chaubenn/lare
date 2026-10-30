@@ -1,5 +1,5 @@
 import { Wordmark } from "@lare/ui/brand";
-import { Globe, KeyRound, Mail } from "lucide-react";
+import { Globe, KeyRound, Mail } from "@lare/ui/icons";
 import { type FormEvent, useState } from "react";
 import { Navigate } from "react-router";
 import { Button } from "@/components/ui/Button";

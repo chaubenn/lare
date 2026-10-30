@@ -13,10 +13,10 @@ import {
   type SolvedActivity,
   summarizeActivity,
 } from "@lare/shared";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "./cn";
 import { useDragToPage } from "./gesture";
+import { ChevronLeft, ChevronRight } from "./icons";
 import { Button } from "./primitives/Button";
 
 type Mode = "day" | "week";

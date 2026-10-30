@@ -1,5 +1,5 @@
 import { SPRING } from "@lare/ui";
-import { CircleDot, RefreshCw, Settings, SquarePen } from "lucide-react";
+import { CircleDot, RefreshCw, Settings, SquarePen } from "@lare/ui/icons";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";

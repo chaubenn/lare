@@ -1,6 +1,6 @@
+import { MonitorX } from "@lare/ui/icons";
 import { useMutation } from "@tanstack/react-query";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { MonitorX } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/features/media/hooks";
 import { useNotify } from "@/features/notifications/notices";

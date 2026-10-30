@@ -3,6 +3,7 @@ import { RouterProvider } from "react-router";
 import { AuthProvider } from "@/features/auth/AuthProvider";
 import { envError } from "@/lib/env";
 import { queryClient } from "@/lib/queryClient";
+import { ThemeProvider } from "@/lib/theme";
 import { router } from "@/router";
 
 function ConfigError({ message }: { message: string }) {
@@ -19,10 +20,12 @@ function ConfigError({ message }: { message: string }) {
 export function App() {
   if (envError) return <ConfigError message={envError} />;
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

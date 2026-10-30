@@ -20,6 +20,17 @@ export function formatDurationHuman(ms: number): string {
   return `${s}s`;
 }
 
+/**
+ * Whether a session's active time is worth showing. Practice is not timed any more, so only a mock
+ * interview carries a duration, and a zero is never shown.
+ */
+export function showsActiveTime(
+  kind: "practice" | "interview" | null | undefined,
+  activeMs: number,
+): boolean {
+  return kind === "interview" && activeMs > 0;
+}
+
 /** "17.99" style percent labels for "Beats X%" */
 export function formatBeats(percentile: number | null | undefined): string | null {
   if (percentile === null || percentile === undefined || Number.isNaN(percentile)) return null;

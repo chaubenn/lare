@@ -5,9 +5,9 @@ import {
   goalRatio,
   goalStatus,
 } from "@lare/shared";
-import { Flame } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "./cn";
+import { Flame } from "./icons";
 
 /** Circular progress; turns the "easy" green once the goal is met. */
 export function GoalRing({

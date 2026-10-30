@@ -10,7 +10,6 @@ export * from "./session/activity";
 export * from "./session/ai-review";
 export * from "./session/constants";
 export * from "./session/edits";
-export * from "./session/overview";
 export * from "./session/protocol";
 export * from "./session/session";
 export * from "./session/skills";

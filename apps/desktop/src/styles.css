@@ -4,6 +4,8 @@
 @import "@lare/ui/type.css";
 @import "@lare/ui/motion.css";
 @import "@lare/ui/prose.css";
+@import "@lare/ui/theme.css";
+@import "./theme.css";
 @source "../../../packages/ui/src";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -12,10 +14,6 @@
   /* @fontsource-variable/outfit registers "Outfit Variable"; plain "Outfit" never matched. */
   --font-sans: "Outfit Variable", "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-:root {
-  color-scheme: dark;
 }
 
 html,
@@ -41,7 +39,6 @@ body {
 }
 
 body {
-  @apply text-zinc-100;
   background: var(--surface);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;

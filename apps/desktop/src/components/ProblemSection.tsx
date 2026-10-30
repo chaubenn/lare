@@ -1,7 +1,7 @@
 import { formatDurationHuman, problemUrl } from "@lare/shared";
 import type { SessionProblem, Submission } from "@lare/supabase-types";
 import { cn, DifficultyBadge } from "@lare/ui";
-import { Check, ExternalLink } from "lucide-react";
+import { Check, ExternalLink } from "@lare/ui/icons";
 import { useMemo, useState } from "react";
 import { ProblemDescription } from "@/components/ProblemDescription";
 import { SubmissionCard } from "@/components/SubmissionCard";

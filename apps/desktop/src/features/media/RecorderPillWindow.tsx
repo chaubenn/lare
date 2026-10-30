@@ -6,9 +6,10 @@
 
 import { formatDuration } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { Pause, Play, Square, X } from "lucide-react";
+import { Pause, Play, Square, X } from "@lare/ui/icons";
 import { useCallback, useEffect, useState } from "react";
 import { type RecorderStatus, recorder } from "@/lib/recorder";
+import { DEFAULT_PILL_SHORTCUT, describeAccelerator } from "@/lib/shortcuts";
 import { useTauriEvent } from "@/lib/tauri";
 
 /**
@@ -30,6 +31,32 @@ function useElapsed(status: RecorderStatus | null, since: number): number {
   }, [running]);
   const base = status?.recordedMs ?? 0;
   return running ? base + Math.max(0, now - since) : base;
+}
+
+const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+
+/**
+ * The keys that hide this pill, as the user has set them (null when they turned the shortcut off).
+ * Read again at the start of each take: the window is reused, and the setting can change between.
+ */
+function useHideShortcut(state: RecorderStatus["state"]): string | null {
+  const [accelerator, setAccelerator] = useState<string | null>(DEFAULT_PILL_SHORTCUT);
+  useEffect(() => {
+    if (state !== "starting") return;
+    let active = true;
+    recorder
+      .settings()
+      .then((s) => {
+        if (!active) return;
+        const saved = s.pillShortcut;
+        setAccelerator(saved === "" ? null : (saved ?? DEFAULT_PILL_SHORTCUT));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [state]);
+  return accelerator;
 }
 
 /**
@@ -78,6 +105,8 @@ export function RecorderPillWindow() {
   const state = status?.state ?? "starting";
   const paused = state === "paused";
   const isInterview = status?.purpose === "interview";
+  const hideShortcut = useHideShortcut(state);
+  const caps = hideShortcut ? describeAccelerator(hideShortcut, isMac) : [];
 
   return (
     <div className="flex h-full w-full items-center justify-center p-1.5">
@@ -100,18 +129,25 @@ export function RecorderPillWindow() {
         />
         <div data-tauri-drag-region className="min-w-0 flex-1 leading-tight">
           <div className="font-mono text-sm tabular-nums">{formatDuration(elapsed)}</div>
-          <div className="truncate text-[10px] uppercase tracking-wider text-zinc-400">
-            {error
-              ? error
-              : state === "starting"
-                ? "Starting…"
-                : state === "stopping"
-                  ? "Finishing…"
-                  : paused
-                    ? "Paused"
-                    : isInterview
-                      ? "Mock interview"
-                      : "Recording"}
+          <div className="flex items-baseline gap-1.5 overflow-hidden text-[10px] text-zinc-400">
+            <span className="truncate uppercase tracking-wider">
+              {error
+                ? error
+                : state === "starting"
+                  ? "Starting…"
+                  : state === "stopping"
+                    ? "Finishing…"
+                    : paused
+                      ? "Paused"
+                      : isInterview
+                        ? "Mock interview"
+                        : "Recording"}
+            </span>
+            {caps.length > 0 && !error && (state === "recording" || paused) ? (
+              <span className="shrink-0 whitespace-nowrap text-zinc-500">
+                <span className="font-mono">{caps.join(isMac ? "" : "+")}</span> hides
+              </span>
+            ) : null}
           </div>
         </div>
         {isInterview ? (

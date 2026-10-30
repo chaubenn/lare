@@ -1,7 +1,7 @@
 import { BUNNY_EMBED_BASE } from "@lare/shared";
 import type { Video } from "@lare/supabase-types";
+import { LoaderCircle, Video as VideoIcon } from "@lare/ui/icons";
 import { useQuery } from "@tanstack/react-query";
-import { LoaderCircle, Video as VideoIcon } from "lucide-react";
 import { LocalPreview } from "@/components/LocalPreview";
 import { useLocalVideoSrc } from "@/features/media/localCopies";
 import { env } from "@/lib/env";

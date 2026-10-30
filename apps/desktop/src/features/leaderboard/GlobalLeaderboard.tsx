@@ -1,5 +1,5 @@
 import { globalViewerInRows } from "@lare/shared";
-import { Globe } from "lucide-react";
+import { Globe } from "@lare/ui/icons";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { LeaderboardItem } from "./LeaderboardItem";
 import type { WeekOffset } from "./queries";
