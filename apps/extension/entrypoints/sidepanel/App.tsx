@@ -3,12 +3,39 @@ import { Emblem } from "@lare/ui/brand";
 import { useCallback, useEffect, useState } from "react";
 import { type RuntimeSnapshot, type StateBroadcast, sendRuntime, toSnapshot } from "@/src/messages";
 import { PAGE_PROBLEM_REQUEST, type PageProblemReply } from "@/src/pageController";
+import { type Theme, useTheme } from "@/src/theme";
 
 type Tab = "tracking" | "interview";
 const TABS: { id: Tab; label: string }[] = [
   { id: "tracking", label: "Tracking" },
   { id: "interview", label: "Mock interview" },
 ];
+
+const THEMES: { id: Theme; label: string }[] = [
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+  { id: "system", label: "System" },
+];
+
+/** Light, dark or follow the system, shown whether or not anyone is signed in. */
+function Appearance() {
+  const [theme, setTheme] = useTheme();
+  return (
+    <fieldset className="appearance" aria-label="Appearance">
+      {THEMES.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          className="tab"
+          aria-pressed={theme === t.id}
+          onClick={() => setTheme(t.id)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
 
 /**
  * The whole side panel: sign-in, the tracking controls and the recording settings.
@@ -608,6 +635,8 @@ export function App() {
           </footer>
         </>
       )}
+
+      <Appearance />
     </div>
   );
 }

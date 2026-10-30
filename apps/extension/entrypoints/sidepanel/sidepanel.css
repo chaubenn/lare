@@ -156,7 +156,8 @@ p {
 .tab:hover {
   color: var(--text);
 }
-.tab[aria-selected="true"] {
+.tab[aria-selected="true"],
+.tab[aria-pressed="true"] {
   background: var(--surface-sunken);
   color: var(--text);
   box-shadow: inset 0 0 0 1px var(--border-strong);
@@ -237,6 +238,21 @@ p {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.appearance {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  min-width: 0;
+  margin: auto 0 0;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--lare-r-3);
+  background: var(--surface-raised);
+}
+.footer + .appearance {
+  margin-top: 0;
 }
 
 /* ---- Sections ---------------------------------------------------------- */
@@ -366,7 +382,7 @@ label.problem:hover {
   height: 16px;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
-  background: var(--surface);
+  background: var(--surface-raised);
 }
 .check::after {
   content: "";
@@ -464,7 +480,7 @@ label.problem:hover {
   padding: 0 var(--space-3);
   border: 1px solid var(--border-strong);
   border-radius: var(--lare-r-2);
-  background: var(--surface);
+  background: var(--surface-raised);
   color: var(--text);
 }
 .row input::placeholder {

@@ -6,7 +6,7 @@ import { Link, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
 import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClass } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner, Spinner } from "@/components/ui/States";
 import { VideoEmbed } from "@/components/VideoEmbed";
@@ -180,19 +180,15 @@ function SessionReview({ session }: { session: SessionDetail }) {
 
   return (
     <div className="space-y-5">
-      {postLink ? (
-        <div className="flex justify-end">
-          <Link
-            to={postLink.to}
-            className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 hover:bg-zinc-800"
-          >
-            {postLink.label}
-          </Link>
-        </div>
-      ) : null}
-
       <header>
-        <h1 className="select-text text-2xl font-semibold text-zinc-50">{title}</h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="select-text text-2xl font-semibold text-zinc-50">{title}</h1>
+          {postLink ? (
+            <Link to={postLink.to} className={buttonClass("secondary", "sm")}>
+              {postLink.label}
+            </Link>
+          ) : null}
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
           <KindBadge kind={session.kind} />
           <SessionStatusBadge status={session.status} />

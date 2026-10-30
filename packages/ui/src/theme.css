@@ -19,12 +19,14 @@
 :root.light {
   color-scheme: light;
 
-  --frame: oklch(0.975 0 0);
-  --surface: oklch(1 0 0);
-  --surface-raised: oklch(0.98 0 0);
-  --surface-sunken: oklch(0.955 0 0);
-  --border: oklch(0.922 0 0);
-  --border-strong: oklch(0.85 0 0);
+  /* Willow's arrangement: a grey frame and page, with white for the containers that sit on them
+   * (cards, inputs, menus, the active tab). */
+  --frame: oklch(0.935 0 0);
+  --surface: oklch(0.962 0 0);
+  --surface-raised: oklch(1 0 0);
+  --surface-sunken: oklch(0.925 0 0);
+  --border: oklch(0.895 0 0);
+  --border-strong: oklch(0.82 0 0);
   --text: oklch(0.145 0 0);
   --text-secondary: oklch(0.4 0 0);
   --text-tertiary: oklch(0.556 0 0);
@@ -44,8 +46,8 @@
   --lare-shadow-2: 0 12px 32px rgba(0, 0, 0, 0.12);
   --lare-shadow-3: 0 20px 48px rgba(0, 0, 0, 0.16);
 
-  --lare-material-thin: color-mix(in oklab, var(--surface) 78%, transparent);
-  --lare-material-regular: color-mix(in oklab, var(--surface) 88%, transparent);
+  --lare-material-thin: color-mix(in oklab, var(--surface-raised) 80%, transparent);
+  --lare-material-regular: color-mix(in oklab, var(--surface-raised) 92%, transparent);
   --lare-material-thick: color-mix(in oklab, var(--frame) 92%, transparent);
 
   /* motion.css tooltip + segmented tabs read the brand ink/bone directly. */
@@ -54,7 +56,7 @@
   --tabs-text-muted: var(--text-tertiary);
   --tabs-text-active: var(--text);
   --tabs-bar-bg: var(--surface-sunken);
-  --tabs-pill-bg: var(--surface);
+  --tabs-pill-bg: var(--surface-raised);
 }
 
 :root.dark {
