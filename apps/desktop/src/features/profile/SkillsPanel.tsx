@@ -9,9 +9,9 @@ import {
 import { useMemo } from "react";
 
 const DIFF = [
-  { key: "easy", label: "Easy", color: "var(--lare-diff-easy)" },
-  { key: "medium", label: "Medium", color: "var(--lare-diff-medium)" },
-  { key: "hard", label: "Hard", color: "var(--lare-diff-hard)" },
+  { key: "easy", label: "Easy", color: "var(--skill-easy)" },
+  { key: "medium", label: "Medium", color: "var(--skill-medium)" },
+  { key: "hard", label: "Hard", color: "var(--skill-hard)" },
 ] as const;
 
 /**

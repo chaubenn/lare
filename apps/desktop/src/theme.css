@@ -50,6 +50,47 @@
   --color-amber-400: oklch(0.828 0.189 84.429);
 }
 
+/* The logo's cobalt as the app's accent: primary buttons, badges, toggles, charts, mentions and
+ * focus rings all read --accent / --focus. The ink stays dark on top of it in both themes. The
+ * extension shares the palette above but keeps its own neutral accent. */
+:root,
+:root.light,
+:root.dark,
+:root:not(.light):not(.dark) {
+  --accent: var(--lare-cobalt);
+  --accent-fg: var(--lare-ink);
+  --accent-hover: color-mix(in oklab, var(--lare-cobalt) 86%, white);
+  --focus: var(--lare-cobalt);
+}
+
+/* Easy, Medium and Hard in the skill splits are three depths of the cobalt, deepest for hard. */
+:root,
+:root.light,
+:root.dark,
+:root:not(.light):not(.dark) {
+  --skill-easy: color-mix(in oklab, var(--lare-cobalt) 40%, white);
+  --skill-medium: var(--lare-cobalt);
+  --skill-hard: oklch(0.52 0.17 258);
+}
+
+/* Light mode in Willow's arrangement: a grey frame and page, with white for the containers that
+ * sit on them (cards, inputs, menus, the active tab). */
+:root,
+:root.light {
+  --frame: oklch(0.935 0 0);
+  --surface: oklch(0.962 0 0);
+  --surface-raised: oklch(1 0 0);
+  --surface-sunken: oklch(0.925 0 0);
+  --border: oklch(0.895 0 0);
+  --border-strong: oklch(0.82 0 0);
+
+  --lare-material-thin: color-mix(in oklab, var(--surface-raised) 80%, transparent);
+  --lare-material-regular: color-mix(in oklab, var(--surface-raised) 92%, transparent);
+  --lare-material-thick: color-mix(in oklab, var(--frame) 92%, transparent);
+
+  --tabs-pill-bg: var(--surface-raised);
+}
+
 body {
   /* styles.css sets text-zinc-100 on body; the theme text colour supersedes it. */
   color: var(--text);
@@ -60,5 +101,5 @@ body {
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--text) 18%, transparent);
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
 }

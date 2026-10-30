@@ -82,7 +82,7 @@ export function PostPreview({
           </button>
         </div>
 
-        <article className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/40">
+        <article className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)]">
           <header className="flex items-center gap-3 p-4 pb-3 sm:px-5">
             <Avatar url={profile?.avatar_url} name={name} size={40} />
             <div className="min-w-0 flex-1">

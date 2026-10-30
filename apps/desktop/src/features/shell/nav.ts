@@ -47,14 +47,14 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Community",
     items: [
-      { to: "/profile", label: "Profile", icon: User, shortcut: "⌘4" },
-      { to: "/friends", label: "Friends", icon: Users, shortcut: "⌘5" },
-      { to: "/leaderboard", label: "Leaderboard", icon: Trophy, shortcut: "⌘6" },
+      { to: "/friends", label: "Friends", icon: Users, shortcut: "⌘4" },
+      { to: "/leaderboard", label: "Leaderboard", icon: Trophy, shortcut: "⌘5" },
     ],
   },
   {
     label: "Account",
     items: [
+      { to: "/profile", label: "Profile", icon: User, shortcut: "⌘6" },
       { to: "/notifications", label: "Notifications", icon: Bell, shortcut: "⌘7" },
       { to: "/settings", label: "Settings", icon: Settings, shortcut: "⌘8" },
     ],

@@ -105,7 +105,7 @@ function PersonCard({
   const name = personName(person);
   const href = person.handle ? `/u/${person.handle}` : undefined;
   return (
-    <li className="flex min-w-0 flex-col rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)] transition-colors hover:border-[var(--border-strong)]">
+    <li className="flex min-w-0 flex-col rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] transition-colors hover:border-[var(--border-strong)]">
       <div className="flex items-start gap-3 p-4 pb-3">
         <ProfileHoverCard handle={person.handle} className="shrink-0">
           {href ? (
@@ -401,7 +401,7 @@ function FindTab() {
           placeholder="Search by @handle or name"
           aria-label="Search people by handle or name"
           autoComplete="off"
-          className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 pl-9 pr-3 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition-[border-color,box-shadow] duration-(--duration-fast) ease-(--ease-smooth-out) focus:border-zinc-600 focus:ring-2 focus:ring-zinc-500/50"
+          className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] pl-9 pr-3 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition-[border-color,box-shadow] duration-(--duration-fast) ease-(--ease-smooth-out) focus:border-zinc-600 focus:ring-2 focus:ring-zinc-500/50"
         />
       </div>
 

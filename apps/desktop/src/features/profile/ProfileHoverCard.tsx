@@ -19,9 +19,9 @@ const CARD_WIDTH = 296;
 const GAP = 8;
 
 const DIFF = [
-  { key: "easy", color: "var(--lare-diff-easy)" },
-  { key: "medium", color: "var(--lare-diff-medium)" },
-  { key: "hard", color: "var(--lare-diff-hard)" },
+  { key: "easy", color: "var(--skill-easy)" },
+  { key: "medium", color: "var(--skill-medium)" },
+  { key: "hard", color: "var(--skill-hard)" },
 ] as const;
 
 /**

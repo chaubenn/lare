@@ -14,7 +14,7 @@ import type { UserPost } from "@/features/profile/queries";
 import { useToggleLike } from "@/features/publishing/posts/social";
 import { errorMessage } from "@/lib/supabase";
 
-const cardClass = "rounded-2xl border border-zinc-800/80 bg-zinc-900/40";
+const cardClass = "rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)]";
 
 /**
  * A post in the feed, mirroring the web feed card exactly: author header with the post link

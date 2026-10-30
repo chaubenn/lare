@@ -6,9 +6,9 @@ import { Avatar } from "@/components/ui/Avatar";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 
 const DIFF = [
-  { key: "easy", title: "Easy", color: "var(--lare-diff-easy)" },
-  { key: "medium", title: "Medium", color: "var(--lare-diff-medium)" },
-  { key: "hard", title: "Hard", color: "var(--lare-diff-hard)" },
+  { key: "easy", title: "Easy", color: "var(--skill-easy)" },
+  { key: "medium", title: "Medium", color: "var(--skill-medium)" },
+  { key: "hard", title: "Hard", color: "var(--skill-hard)" },
 ] as const;
 
 /**

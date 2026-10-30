@@ -56,10 +56,12 @@ function useSidebarScale(): number {
   return scale;
 }
 
-/** Medesk's nav row: no fill, the active page is simply brighter and heavier. */
-const ROW = "relative flex items-center rounded-lg text-base transition-colors";
-const ROW_EXPANDED = "h-11 gap-2.5 py-2.5 pr-2 pl-3";
-const ROW_COLLAPSED = "size-11 justify-center";
+/** Tight, white rows. Hover brightens the row's own background; the active page holds it. */
+const ROW =
+  "relative flex items-center rounded-lg text-base text-[var(--text)] transition-colors hover:bg-[color-mix(in_oklab,var(--text)_8%,transparent)]";
+const ROW_ACTIVE = "bg-[color-mix(in_oklab,var(--text)_12%,transparent)] font-medium";
+const ROW_EXPANDED = "h-9 gap-2.5 py-1.5 pr-2 pl-3";
+const ROW_COLLAPSED = "size-9 justify-center";
 
 function NavRow({
   item,
@@ -77,28 +79,28 @@ function NavRow({
       title={collapsed ? item.label : undefined}
       aria-label={collapsed ? item.label : undefined}
       className={({ isActive }) =>
-        cn(
-          ROW,
-          collapsed ? ROW_COLLAPSED : ROW_EXPANDED,
-          "lare-press",
-          isActive
-            ? "font-medium text-[var(--text)]"
-            : "text-[var(--text-tertiary)] hover:text-[var(--text)]",
-        )
+        cn(ROW, collapsed ? ROW_COLLAPSED : ROW_EXPANDED, "lare-press", isActive && ROW_ACTIVE)
       }
     >
-      <item.icon className="size-5 shrink-0" aria-hidden />
-      {collapsed ? null : <span className="flex-1 truncate">{item.label}</span>}
-      {count !== undefined && count > 0 ? (
-        collapsed ? (
-          <span
+      {({ isActive }) => (
+        <>
+          <item.icon
+            className={cn("size-5 shrink-0", isActive && "text-[var(--accent)]")}
             aria-hidden
-            className="absolute top-1.5 right-1.5 size-2 rounded-full bg-[var(--accent)]"
           />
-        ) : (
-          <CountBadge count={count} />
-        )
-      ) : null}
+          {collapsed ? null : <span className="flex-1 truncate">{item.label}</span>}
+          {count !== undefined && count > 0 ? (
+            collapsed ? (
+              <span
+                aria-hidden
+                className="absolute top-1.5 right-1.5 size-2 rounded-full bg-[var(--accent)]"
+              />
+            ) : (
+              <CountBadge count={count} />
+            )
+          ) : null}
+        </>
+      )}
     </NavLink>
   );
 }
@@ -122,7 +124,7 @@ function NavSection({
     "flex h-7 w-full items-center justify-between text-[1.0625rem] font-normal text-[color-mix(in_oklab,var(--text)_70%,transparent)]";
 
   return (
-    <section aria-label={label} className="space-y-1">
+    <section aria-label={label} className="space-y-0.5">
       {collapsed ? null : collapsible ? (
         <button
           type="button"
@@ -210,8 +212,8 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         onClick={() => setOpen((o) => !o)}
         className={cn(
           ROW,
-          collapsed ? ROW_COLLAPSED : "h-11 w-full gap-2.5 py-2.5 pr-2",
-          "text-[var(--text-tertiary)] hover:text-[var(--text)] data-[open=true]:text-[var(--text)]",
+          collapsed ? ROW_COLLAPSED : "h-9 w-full gap-2.5 py-1.5 pr-2 pl-3",
+          "data-[open=true]:bg-[color-mix(in_oklab,var(--text)_8%,transparent)]",
         )}
         data-open={open}
       >
@@ -360,7 +362,7 @@ export function Sidebar() {
       <nav
         aria-label="Main"
         className={cn(
-          "min-h-0 flex-1 space-y-3 overflow-y-auto py-3",
+          "min-h-0 flex-1 space-y-2 overflow-y-auto py-2",
           collapsed ? "flex flex-col items-center" : "px-4",
         )}
       >

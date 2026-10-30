@@ -10,9 +10,9 @@ import { useDrafts } from "@/features/publishing/drafts/queries";
 import type { FeedPost } from "./queries";
 
 const DIFF = [
-  { key: "easy", color: "var(--lare-diff-easy)" },
-  { key: "medium", color: "var(--lare-diff-medium)" },
-  { key: "hard", color: "var(--lare-diff-hard)" },
+  { key: "easy", color: "var(--skill-easy)" },
+  { key: "medium", color: "var(--skill-medium)" },
+  { key: "hard", color: "var(--skill-hard)" },
 ] as const;
 
 /**

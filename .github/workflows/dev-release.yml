@@ -73,7 +73,7 @@ jobs:
           include="[]"
           assets=""
           add() { include=$(echo "$include" | jq -c --argjson row "$1" '. + [$row]'); assets="$assets $2"; }
-          has mac && add '{"name":"macOS arm64","os":"macos-14","target":"aarch64-apple-darwin","asset":"Lare-macOS-AppleSilicon.dmg","glob":"target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"}' Lare-macOS-AppleSilicon.dmg
+          has mac && add '{"name":"macOS arm64","os":"macos-15","target":"aarch64-apple-darwin","asset":"Lare-macOS-AppleSilicon.dmg","glob":"target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"}' Lare-macOS-AppleSilicon.dmg
           has intel && add '{"name":"macOS x64","os":"macos-15-intel","target":"x86_64-apple-darwin","asset":"Lare-macOS-Intel.dmg","glob":"target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"}' Lare-macOS-Intel.dmg
           has win && add '{"name":"Windows x64","os":"windows-2022","target":"x86_64-pc-windows-msvc","asset":"Lare-Windows-x64-Setup.exe","glob":"target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"}' Lare-Windows-x64-Setup.exe
           if has ext; then echo "extension=true" >> "$GITHUB_OUTPUT"; assets="$assets Lare-Chrome-Extension.zip"; else echo "extension=false" >> "$GITHUB_OUTPUT"; fi
