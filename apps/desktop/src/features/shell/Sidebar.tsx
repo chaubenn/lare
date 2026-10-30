@@ -35,6 +35,27 @@ function readCollapsed(): boolean {
   }
 }
 
+// The sidebar keeps its full-screen proportions from FULL_WIDTH up, then shrinks with the window
+// until it reaches MIN_SCALE at the window's minimum width.
+const FULL_WIDTH = 1440;
+const MIN_WIDTH = 900;
+const MIN_SCALE = 0.8;
+
+function scaleFor(width: number): number {
+  const t = Math.min(1, Math.max(0, (width - MIN_WIDTH) / (FULL_WIDTH - MIN_WIDTH)));
+  return MIN_SCALE + (1 - MIN_SCALE) * t;
+}
+
+function useSidebarScale(): number {
+  const [scale, setScale] = useState(() => scaleFor(window.innerWidth));
+  useEffect(() => {
+    const onResize = () => setScale(scaleFor(window.innerWidth));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return scale;
+}
+
 /** Medesk's nav row: no fill, the active page is simply brighter and heavier. */
 const ROW = "relative flex items-center rounded-lg text-base transition-colors";
 const ROW_EXPANDED = "h-11 gap-2.5 py-2.5 pr-2 pl-3";
@@ -273,6 +294,7 @@ export function Sidebar() {
   const requests = useFollowRequests();
   const unread = useUnreadNotificationCount();
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const scale = useSidebarScale();
   const counts: Partial<Record<string, number>> = {
     "/drafts": drafts.data?.length ?? 0,
     "/friends": requests.data?.length ?? 0,
@@ -296,6 +318,8 @@ export function Sidebar() {
         "flex h-full shrink-0 flex-col bg-[var(--frame)] text-[var(--text)] transition-[width] duration-200 ease-out",
         collapsed ? "w-[5.125rem]" : "w-[17.25rem]",
       )}
+      // `zoom` scales the width along with the text, icons and rows, so the proportions hold.
+      style={{ zoom: scale }}
     >
       {/* Same 8px inset as the content panel, so this row centres on the topbar's. The macOS
           traffic lights sit above the wordmark, not beside it. */}

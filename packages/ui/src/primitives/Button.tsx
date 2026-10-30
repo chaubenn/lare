@@ -26,8 +26,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
   loading?: boolean;
   icon?: ReactNode;
-  /** Visual hover/focus hint. Icon-only buttons also inherit this from `aria-label`. */
-  tooltip?: string;
+  /** Visual hover/focus hint. Icon-only buttons also inherit this from `aria-label`; pass `false` to opt out. */
+  tooltip?: string | false;
   tooltipAlign?: "start" | "center" | "end";
 }
 
@@ -46,7 +46,7 @@ export function Button({
 }: ButtonProps) {
   const hasChildren = children !== undefined && children !== null && children !== false;
   const ariaLabel = typeof rest["aria-label"] === "string" ? rest["aria-label"] : undefined;
-  const tip = tooltip ?? (!hasChildren ? ariaLabel : undefined);
+  const tip = tooltip === false ? undefined : (tooltip ?? (!hasChildren ? ariaLabel : undefined));
 
   const button = (
     <button

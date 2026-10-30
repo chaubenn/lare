@@ -377,6 +377,7 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
         size="sm"
         variant="ghost"
         aria-label="More actions"
+        tooltip={false}
         aria-haspopup="menu"
         aria-expanded={open}
         icon={<MoreHorizontal className="size-4" aria-hidden />}

@@ -1,10 +1,9 @@
 import { SPRING } from "@lare/ui";
-import { CircleDot, RefreshCw, Settings, SquarePen } from "@lare/ui/icons";
+import { Settings } from "@lare/ui/icons";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
-import { checkForUpdate } from "@/lib/updater";
 import { NAV_ITEMS } from "./nav";
 
 interface PaletteAction {
@@ -34,21 +33,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         hint: item.shortcut,
         run: () => go(item.to),
       })),
-      {
-        id: "record",
-        label: "Start recording",
-        hint: "Draft media",
-        run: () => go("/drafts"),
-      },
-      { id: "draft", label: "New draft", hint: "Drafts", run: () => go("/drafts") },
-      {
-        id: "update",
-        label: "Check for updates",
-        run: () => {
-          void checkForUpdate();
-          onClose();
-        },
-      },
       { id: "settings", label: "Open settings", hint: "⌘8", run: () => go("/settings") },
     ];
     const q = query.trim().toLowerCase();
@@ -187,9 +171,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
 function PaletteIcon({ id }: { id: string }) {
   const className = "size-4 shrink-0 text-[var(--text-tertiary)]";
-  if (id === "record") return <CircleDot className={className} aria-hidden />;
-  if (id === "draft") return <SquarePen className={className} aria-hidden />;
-  if (id === "update") return <RefreshCw className={className} aria-hidden />;
   if (id === "settings") return <Settings className={className} aria-hidden />;
   const item = NAV_ITEMS.find((n) => `nav:${n.to}` === id);
   if (!item) return <span className="size-4" />;
