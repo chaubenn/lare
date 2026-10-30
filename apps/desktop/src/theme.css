@@ -61,6 +61,8 @@
   --accent-fg: var(--lare-ink);
   --accent-hover: color-mix(in oklab, var(--lare-cobalt) 86%, white);
   --focus: var(--lare-cobalt);
+  /* A solid pill reads deeper than a thin icon stroke in the same blue, so lift it to match. */
+  --badge-bg: color-mix(in oklab, var(--lare-cobalt) 78%, white);
 }
 
 /* Easy, Medium and Hard in the skill splits are three depths of the cobalt, deepest for hard. */

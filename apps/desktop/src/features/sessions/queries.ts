@@ -1,7 +1,7 @@
 import type { EditLog, TranscriptSegment } from "@lare/shared";
 import type { SessionProblem, Transcript, Video } from "@lare/supabase-types";
 import type { QueryData } from "@supabase/supabase-js";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { fetchEditLog } from "./editLog";
@@ -157,5 +157,49 @@ export function useEditLogs(
       staleTime: Number.POSITIVE_INFINITY,
       queryFn: (): Promise<EditLog> => fetchEditLog(p.edits_path ?? ""),
     })),
+  });
+}
+
+/** The viewer's own AI review criteria, or null when they have not written any (the default applies). */
+export function useReviewCriteria() {
+  const { userId } = useUser();
+  return useQuery({
+    queryKey: ["review-criteria", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("review_criteria")
+        .select("criteria")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.criteria ?? null;
+    },
+  });
+}
+
+export function useSaveReviewCriteria() {
+  const { userId } = useUser();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (criteria: string) => {
+      const { error } = await supabase
+        .from("review_criteria")
+        .upsert({ user_id: userId, criteria });
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["review-criteria"] }),
+  });
+}
+
+/** Drop the viewer's criteria so reviews go back to the built-in default. */
+export function useResetReviewCriteria() {
+  const { userId } = useUser();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("review_criteria").delete().eq("user_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["review-criteria"] }),
   });
 }

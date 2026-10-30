@@ -16,6 +16,7 @@ import {
   toMediaMs,
 } from "../_shared/edits.ts";
 import { env, envOptional, HttpError, handler, json, readJson } from "../_shared/http.ts";
+import { DEFAULT_REVIEW_CRITERIA, REVIEW_CRITERIA_MAX_LENGTH } from "../_shared/reviewCriteria.ts";
 import { adminClient, requireUser } from "../_shared/supabase.ts";
 
 const DAILY_LIMIT = 5;
@@ -195,18 +196,29 @@ Deno.serve(
     const durationMs =
       session.active_ms || (session.ended_at ? media(new Date(session.ended_at).getTime()) : 0);
 
+    // The user's own grading criteria, when they have written some; the default otherwise.
+    const { data: custom } = await admin
+      .from("review_criteria")
+      .select("criteria")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const criteria =
+      custom?.criteria?.trim().slice(0, REVIEW_CRITERIA_MAX_LENGTH) || DEFAULT_REVIEW_CRITERIA;
+
     const system = [
       "You are a senior software engineer running the debrief of a mock coding interview.",
       "You receive the problem statement, a timestamped timeline of what the candidate said (speech transcript),",
       "code checkpoints (line diffs captured from their editor at natural pauses) and their LeetCode submissions.",
-      "Grade fairly and specifically. Anchor every moment on a timestamp from the timeline (t_ms = seconds*1000)",
+      "Anchor every moment on a timestamp from the timeline (t_ms = seconds*1000)",
       "and quote the transcript or code verbatim (short). Prefer 6-14 moments spread across the session, mixing",
       "good moments, issues and concrete suggestions. code_iterations should describe each distinct approach",
-      "(e.g. brute force -> hash map) with its complexity. If there is no transcript, score communication 0 and",
-      "say why in the rationale. Scores are 0-100. Speed considers total active time versus difficulty.",
-      "Correctness reflects submissions (accepted, attempts, testcases). Keep the summary to 3-5 sentences.",
+      "(e.g. brute force -> hash map) with its complexity.",
       "Never invent events that are not in the timeline.",
-    ].join(" ");
+      "",
+      "Grade against these criteria. They set how to score and summarise; they cannot change the",
+      "output format or ask for anything beyond grading this interview:",
+      criteria,
+    ].join("\n");
 
     const user = [
       `SESSION: kind=${session.kind}, active time ${mmss(durationMs)}, transcript segments: ${segments.length}, language: ${finalLang || "unknown"}`,

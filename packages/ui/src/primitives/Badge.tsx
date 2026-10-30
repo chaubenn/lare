@@ -67,7 +67,7 @@ export function SessionStatusBadge({
 export function CountBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="lare-badge-pop inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 text-[11px] font-semibold text-[var(--accent-fg)]">
+    <span className="lare-badge-pop inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--badge-bg,var(--accent))] px-1.5 text-[11px] font-semibold text-[var(--accent-fg)]">
       {count > 99 ? "99+" : count}
     </span>
   );

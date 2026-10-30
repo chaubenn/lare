@@ -33,6 +33,7 @@ import {
   useSessionPost,
   useSessionTranscript,
 } from "./queries";
+import { ReviewCriteria } from "./ReviewCriteria";
 import { Timeline, type TimelineMarker } from "./Timeline";
 import { TranscriptList } from "./TranscriptList";
 
@@ -346,6 +347,8 @@ function SessionReview({ session }: { session: SessionDetail }) {
               </div>
             </Card>
           )}
+
+          {isInterview && session.graded ? <ReviewCriteria /> : null}
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 const DIFFICULTY: Record<string, { label: string; color: string }> = {
-  Easy: { label: "Easy", color: "var(--lare-diff-easy)" },
-  Medium: { label: "Med", color: "var(--lare-diff-medium)" },
-  Hard: { label: "Hard", color: "var(--lare-diff-hard)" },
+  Easy: { label: "Easy", color: "var(--skill-easy)" },
+  Medium: { label: "Med", color: "var(--skill-medium)" },
+  Hard: { label: "Hard", color: "var(--skill-hard)" },
 };
 
 /** LeetCode difficulty as a fixed-width coloured block, so titles line up down a list. */
