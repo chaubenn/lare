@@ -215,7 +215,9 @@ function SessionReview({ session }: { session: SessionDetail }) {
       </header>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <div className="space-y-4">
+        {/* The recording and its scrubber stay in view while the code and transcript scroll past,
+            so the left column is never an empty gap beside a long right one. */}
+        <div className="space-y-4 lg:sticky lg:top-0 lg:self-start">
           <section aria-label="Recording">
             {video.data ? (
               <>
@@ -262,6 +264,16 @@ function SessionReview({ session }: { session: SessionDetail }) {
             onScrub={scrubTo}
             onSeek={seekTo}
           />
+        </div>
+
+        <div className="space-y-4">
+          <CodeTimeline
+            problems={problems}
+            logs={logs}
+            t0={t0}
+            currentTime={currentTime}
+            onJump={scrubTo}
+          />
 
           {session.graded && (
             <TranscriptList
@@ -275,78 +287,71 @@ function SessionReview({ session }: { session: SessionDetail }) {
             />
           )}
         </div>
-
-        <div className="space-y-4">
-          <CodeTimeline
-            problems={problems}
-            logs={logs}
-            t0={t0}
-            currentTime={currentTime}
-            onJump={scrubTo}
-          />
-
-          {!isInterview || !session.graded ? (
-            <Card>
-              <SectionTitle>AI review</SectionTitle>
-              <p className="text-sm text-zinc-400">{generateBlocked}</p>
-            </Card>
-          ) : review.isPending ? (
-            <Card>
-              <SectionTitle>AI review</SectionTitle>
-              <Spinner className="py-8" label="Loading review…" />
-            </Card>
-          ) : review.isError ? (
-            <ErrorState
-              error={review.error}
-              onRetry={() => void review.refetch()}
-              title="Couldn't load the AI review"
-            />
-          ) : review.data ? (
-            <div className="space-y-2">
-              <AiReviewSection review={review.data} onSeek={(tMs) => seekTo(tMs / 1000)} />
-              <div className="flex items-center justify-end">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  icon={<RefreshCw className="size-3.5" aria-hidden />}
-                  loading={generate.isPending}
-                  onClick={() => generate.mutate(true)}
-                  title="Run the review again (counts towards the daily limit)"
-                >
-                  {generate.isPending ? "Regenerating…" : "Regenerate"}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Card>
-              <SectionTitle>AI review</SectionTitle>
-              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-800 px-4 py-8 text-center">
-                <Sparkles className="size-6 text-zinc-600" aria-hidden />
-                <p className="max-w-sm text-sm text-zinc-400">
-                  Get a graded debrief of this interview: scores for communication, problem solving,
-                  code quality, speed and correctness, plus timestamped moments and next steps.
-                </p>
-                <Button
-                  variant="primary"
-                  icon={<Sparkles className="size-4" aria-hidden />}
-                  loading={generate.isPending}
-                  disabled={generateBlocked !== null || transcript.isPending}
-                  onClick={() => generate.mutate(false)}
-                >
-                  {generate.isPending ? "Generating…" : "Generate AI review"}
-                </Button>
-                {generate.isPending ? (
-                  <p className="text-xs text-zinc-500">This usually takes about a minute.</p>
-                ) : generateBlocked ? (
-                  <p className="text-xs text-zinc-500">{generateBlocked}</p>
-                ) : null}
-              </div>
-            </Card>
-          )}
-
-          {isInterview && session.graded ? <ReviewCriteria /> : null}
-        </div>
       </div>
+
+      {/* Full width, below the recording and the code: the review is a dashboard of its own, and
+          beside the video it left the other column empty as it grew. */}
+      <section aria-label="AI review" className="space-y-4">
+        {!isInterview || !session.graded ? (
+          <Card>
+            <SectionTitle>AI review</SectionTitle>
+            <p className="text-sm text-zinc-400">{generateBlocked}</p>
+          </Card>
+        ) : review.isPending ? (
+          <Card>
+            <SectionTitle>AI review</SectionTitle>
+            <Spinner className="py-8" label="Loading review…" />
+          </Card>
+        ) : review.isError ? (
+          <ErrorState
+            error={review.error}
+            onRetry={() => void review.refetch()}
+            title="Couldn't load the AI review"
+          />
+        ) : review.data ? (
+          <div className="space-y-2">
+            <AiReviewSection review={review.data} onSeek={(tMs) => seekTo(tMs / 1000)} />
+            <div className="flex items-center justify-end">
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<RefreshCw className="size-3.5" aria-hidden />}
+                loading={generate.isPending}
+                onClick={() => generate.mutate(true)}
+                title="Run the review again (counts towards the daily limit)"
+              >
+                {generate.isPending ? "Regenerating…" : "Regenerate"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Card>
+            <SectionTitle>AI review</SectionTitle>
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-800 px-4 py-8 text-center">
+              <Sparkles className="size-6 text-zinc-600" aria-hidden />
+              <p className="max-w-sm text-sm text-zinc-400">
+                Get a graded debrief of this interview: scores for communication, problem solving,
+                code quality, speed and correctness, plus timestamped moments and next steps.
+              </p>
+              <Button
+                variant="primary"
+                icon={<Sparkles className="size-4" aria-hidden />}
+                loading={generate.isPending}
+                disabled={generateBlocked !== null || transcript.isPending}
+                onClick={() => generate.mutate(false)}
+              >
+                {generate.isPending ? "Generating…" : "Generate AI review"}
+              </Button>
+              {generate.isPending ? (
+                <p className="text-xs text-zinc-500">This usually takes about a minute.</p>
+              ) : generateBlocked ? (
+                <p className="text-xs text-zinc-500">{generateBlocked}</p>
+              ) : null}
+            </div>
+          </Card>
+        )}
+        {isInterview && session.graded ? <ReviewCriteria /> : null}
+      </section>
 
       <section className="space-y-3">
         <SectionTitle>Problems</SectionTitle>

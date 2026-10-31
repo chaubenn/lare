@@ -1,11 +1,23 @@
 import type { AiReview } from "@lare/shared";
 import { formatDuration, AI_SCORE_LABELS as SCORE_LABELS } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { ChevronDown } from "@lare/ui/icons";
+import { useState } from "react";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+
+type DetailTab = "scores" | "moments" | "code" | "next";
+
+const MOMENT_TONE: Record<string, string> = {
+  good: "bg-emerald-400",
+  issue: "bg-rose-400",
+  suggestion: "bg-sky-400",
+};
 
 /**
- * Renders a parsed `AiReview`. Face value is the overall score, per-skill percents, and
- * summary. Moments, rationales, and next steps sit behind a closed accordion.
+ * Renders a parsed `AiReview` as a dashboard instead of one long scroll: the overall score, the
+ * five skill scores side by side and the summary stay on show, and everything else (the reasoning
+ * behind each score, timestamped moments, code iterations, next steps) sits on tabs, each in a
+ * panel of fixed height that scrolls on its own. It lays itself out from its own width, so it fills
+ * a full-width section and still fits a narrow card.
  * Pass `onSeek` to make timestamped rows clickable.
  */
 export function AiReviewSection({
@@ -19,183 +31,188 @@ export function AiReviewSection({
   nested?: boolean;
 }) {
   const entries = Object.entries(SCORE_LABELS) as Array<[keyof AiReview["scores"], string]>;
-  const hasScoreNotes = entries.some(([key]) => review.scores[key].rationale);
-  const detailBits = [
-    review.moments.length > 0 ? `${review.moments.length} moments` : null,
-    review.code_iterations.length > 0 ? `${review.code_iterations.length} code notes` : null,
-    review.next_steps.length > 0 ? `${review.next_steps.length} next steps` : null,
-    hasScoreNotes ? "score notes" : null,
-  ].filter(Boolean);
-  const hasDetails = detailBits.length > 0;
+  const scoreNotes = entries.filter(([key]) => review.scores[key].rationale);
+
+  const tabs: Array<{ key: DetailTab; label: string; badge?: number }> = [
+    ...(scoreNotes.length > 0 ? [{ key: "scores" as const, label: "Score notes" }] : []),
+    ...(review.moments.length > 0
+      ? [{ key: "moments" as const, label: "Moments", badge: review.moments.length }]
+      : []),
+    ...(review.code_iterations.length > 0
+      ? [{ key: "code" as const, label: "Code", badge: review.code_iterations.length }]
+      : []),
+    ...(review.next_steps.length > 0
+      ? [{ key: "next" as const, label: "Next steps", badge: review.next_steps.length }]
+      : []),
+  ];
+  const [picked, setPicked] = useState<DetailTab | null>(null);
+  const active = tabs.find((t) => t.key === picked)?.key ?? tabs[0]?.key;
 
   return (
     <section
       className={cn(
-        "rounded-xl border border-zinc-800 p-4",
+        "@container rounded-xl border border-zinc-800 p-4 @2xl:p-5",
         nested ? "bg-[var(--surface-sunken)]" : "bg-[var(--surface-raised)]",
       )}
     >
-      <header className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium text-zinc-100">AI interview review</h2>
-        <p className="tabular-nums text-sm text-zinc-300">
-          {review.overall}
-          <span className="text-zinc-500">/100</span>
-        </p>
-      </header>
+      <div className="grid gap-5 @4xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+        <div className="min-w-0">
+          <header className="flex items-end justify-between gap-3">
+            <h2 className="text-sm font-medium text-zinc-100">AI interview review</h2>
+            <p className="tabular-nums leading-none text-zinc-300">
+              <span className="text-3xl font-semibold text-zinc-50">{review.overall}</span>
+              <span className="text-sm text-zinc-500">/100</span>
+            </p>
+          </header>
+          <p className="mt-3 select-text text-sm leading-relaxed text-zinc-300">{review.summary}</p>
+        </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-5">
-        {entries.map(([key, label]) => {
-          const s = review.scores[key];
-          return (
-            <div key={key}>
-              <div className="flex items-baseline justify-between gap-2">
-                <dt className="truncate text-xs text-zinc-500">{label}</dt>
-                <dd className="text-sm tabular-nums text-zinc-200">{s.score}</dd>
+        <dl className="grid min-w-0 grid-cols-2 content-start gap-2 @lg:grid-cols-3 @4xl:grid-cols-2 @6xl:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-full @lg:[&>*:last-child:nth-child(odd)]:col-span-1 @4xl:[&>*:last-child:nth-child(odd)]:col-span-full @6xl:[&>*:last-child:nth-child(odd)]:col-span-1">
+          {entries.map(([key, label]) => {
+            const s = review.scores[key];
+            return (
+              <div
+                key={key}
+                className="rounded-lg border border-[var(--border)] bg-[color-mix(in_oklab,var(--text)_3%,transparent)] px-3 py-2.5"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <dt className="truncate text-xs text-zinc-400">{label}</dt>
+                  <dd className="text-base font-semibold tabular-nums text-zinc-100">{s.score}</dd>
+                </div>
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className="h-full rounded-full bg-[var(--accent)]"
+                    style={{ width: `${Math.max(0, Math.min(100, s.score))}%` }}
+                  />
+                </div>
               </div>
-              <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className="h-full rounded-full bg-zinc-400"
-                  style={{ width: `${Math.max(0, Math.min(100, s.score))}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </dl>
+            );
+          })}
+        </dl>
+      </div>
 
-      <p className="mt-4 select-text text-sm leading-relaxed text-zinc-300">{review.summary}</p>
-
-      {hasDetails ? (
-        <details className="group mt-4 border-t border-zinc-800 pt-3">
-          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
-            <ChevronDown
-              className="size-4 shrink-0 transition-transform duration-[var(--duration-fast)] group-open:rotate-180"
-              aria-hidden
-            />
-            More detail
-            <span className="truncate text-xs text-zinc-600">{detailBits.join(" · ")}</span>
-          </summary>
-
-          <div className="mt-4 space-y-5">
-            {hasScoreNotes ? (
-              <div>
-                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Score notes
-                </h3>
-                <dl className="mt-2 space-y-3">
-                  {entries.map(([key, label]) => {
-                    const s = review.scores[key];
-                    if (!s.rationale) return null;
-                    return (
-                      <div key={key}>
-                        <dt className="text-sm text-zinc-200">
-                          {label} <span className="tabular-nums text-zinc-500">{s.score}</span>
-                        </dt>
-                        <dd className="mt-0.5 text-sm leading-relaxed text-zinc-400">
-                          {s.rationale}
-                        </dd>
-                      </div>
-                    );
-                  })}
-                </dl>
-              </div>
+      {tabs.length > 0 && active ? (
+        <div className="mt-5 border-t border-zinc-800 pt-4">
+          <SegmentedTabs
+            label="Review detail"
+            value={active}
+            onChange={setPicked}
+            items={tabs.map((t) => ({
+              key: t.key,
+              label: t.label,
+              badge:
+                t.badge !== undefined ? (
+                  <span className="tabular-nums text-zinc-500">{t.badge}</span>
+                ) : undefined,
+            }))}
+          />
+          <div
+            role="tabpanel"
+            className="mt-3 max-h-[min(22rem,50vh)] overflow-y-auto overscroll-contain pr-1"
+          >
+            {active === "scores" ? (
+              <dl className="grid gap-x-8 gap-y-4 @2xl:grid-cols-2">
+                {scoreNotes.map(([key, label]) => (
+                  <div key={key}>
+                    <dt className="text-sm text-zinc-200">
+                      {label}{" "}
+                      <span className="tabular-nums text-zinc-500">{review.scores[key].score}</span>
+                    </dt>
+                    <dd className="mt-0.5 select-text text-sm leading-relaxed text-zinc-400">
+                      {review.scores[key].rationale}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             ) : null}
 
-            {review.moments.length > 0 ? (
-              <div>
-                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Moments
-                </h3>
-                <ul className="mt-2 space-y-3">
-                  {review.moments.map((m) => {
-                    const body = (
-                      <>
-                        <span className="flex items-center gap-2 text-xs text-zinc-500">
-                          <span className={cn("font-mono", onSeek && "text-zinc-300 underline")}>
-                            {formatDuration(m.t_ms)}
-                          </span>
-                          <span className="capitalize">{m.kind}</span>
+            {active === "moments" ? (
+              <ul className="grid gap-x-8 gap-y-4 @2xl:grid-cols-2">
+                {review.moments.map((m) => {
+                  const body = (
+                    <>
+                      <span className="flex items-center gap-2 text-xs text-zinc-500">
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "size-1.5 rounded-full",
+                            MOMENT_TONE[m.kind] ?? "bg-zinc-500",
+                          )}
+                        />
+                        <span className={cn("font-mono", onSeek && "text-zinc-300 underline")}>
+                          {formatDuration(m.t_ms)}
                         </span>
-                        {m.quote ? (
-                          <span className="mt-1 block border-l-2 border-zinc-700 pl-2 text-sm text-zinc-400">
-                            {m.quote}
-                          </span>
-                        ) : null}
-                        <span className="mt-1 block text-sm text-zinc-300">{m.comment}</span>
-                      </>
-                    );
-                    return (
-                      <li key={`${m.t_ms}-${m.kind}-${m.quote.slice(0, 24)}`}>
-                        {onSeek ? (
-                          <button
-                            type="button"
-                            onClick={() => onSeek(m.t_ms)}
-                            title={`Jump to ${formatDuration(m.t_ms)}`}
-                            className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
-                          >
-                            {body}
-                          </button>
-                        ) : (
-                          body
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ) : null}
-
-            {review.code_iterations.length > 0 ? (
-              <div>
-                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Code iterations
-                </h3>
-                <ol className="mt-2 space-y-2 text-sm">
-                  {review.code_iterations.map((it) => (
-                    <li key={`${it.t_ms}-${it.label}`} className="flex gap-3">
+                        <span className="capitalize">{m.kind}</span>
+                      </span>
+                      {m.quote ? (
+                        <span className="mt-1 block border-l-2 border-zinc-700 pl-2 text-sm text-zinc-400">
+                          {m.quote}
+                        </span>
+                      ) : null}
+                      <span className="mt-1 block text-sm text-zinc-300">{m.comment}</span>
+                    </>
+                  );
+                  return (
+                    <li key={`${m.t_ms}-${m.kind}-${m.quote.slice(0, 24)}`}>
                       {onSeek ? (
                         <button
                           type="button"
-                          onClick={() => onSeek(it.t_ms)}
-                          title={`Jump to ${formatDuration(it.t_ms)}`}
-                          className="w-14 shrink-0 text-left font-mono text-xs text-zinc-400 underline hover:text-zinc-200"
+                          onClick={() => onSeek(m.t_ms)}
+                          title={`Jump to ${formatDuration(m.t_ms)}`}
+                          className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
                         >
-                          {formatDuration(it.t_ms)}
+                          {body}
                         </button>
                       ) : (
-                        <span className="w-14 shrink-0 font-mono text-xs text-zinc-500">
-                          {formatDuration(it.t_ms)}
-                        </span>
+                        body
                       )}
-                      <div>
-                        <span className="text-zinc-200">{it.label}</span>
-                        {it.complexity ? (
-                          <span className="ml-2 font-mono text-xs text-zinc-500">
-                            {it.complexity}
-                          </span>
-                        ) : null}
-                        <p className="text-sm text-zinc-400">{it.assessment}</p>
-                      </div>
                     </li>
-                  ))}
-                </ol>
-              </div>
+                  );
+                })}
+              </ul>
             ) : null}
 
-            {review.next_steps.length > 0 ? (
-              <div>
-                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Next steps
-                </h3>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-300">
-                  {review.next_steps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ul>
-              </div>
+            {active === "code" ? (
+              <ol className="grid gap-x-8 gap-y-3 text-sm @2xl:grid-cols-2">
+                {review.code_iterations.map((it) => (
+                  <li key={`${it.t_ms}-${it.label}`} className="flex gap-3">
+                    {onSeek ? (
+                      <button
+                        type="button"
+                        onClick={() => onSeek(it.t_ms)}
+                        title={`Jump to ${formatDuration(it.t_ms)}`}
+                        className="w-14 shrink-0 text-left font-mono text-xs text-zinc-400 underline hover:text-zinc-200"
+                      >
+                        {formatDuration(it.t_ms)}
+                      </button>
+                    ) : (
+                      <span className="w-14 shrink-0 font-mono text-xs text-zinc-500">
+                        {formatDuration(it.t_ms)}
+                      </span>
+                    )}
+                    <div>
+                      <span className="text-zinc-200">{it.label}</span>
+                      {it.complexity ? (
+                        <span className="ml-2 font-mono text-xs text-zinc-500">
+                          {it.complexity}
+                        </span>
+                      ) : null}
+                      <p className="text-sm text-zinc-400">{it.assessment}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+
+            {active === "next" ? (
+              <ul className="list-disc space-y-1.5 pl-5 text-sm text-zinc-300">
+                {review.next_steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ul>
             ) : null}
           </div>
-        </details>
+        </div>
       ) : null}
     </section>
   );

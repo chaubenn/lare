@@ -58,6 +58,8 @@ const THEME = {
   ],
 };
 
+const HIGHLIGHTED = "w-max min-w-full [&_pre]:m-0 [&_pre]:min-w-full [&_pre]:p-4";
+
 type Highlighter = {
   codeToHtml: (code: string, opts: { lang: string; theme: string }) => string;
 };
@@ -100,7 +102,11 @@ async function getHighlighter(): Promise<Highlighter> {
   return highlighterPromise;
 }
 
-/** Syntax-highlighted code via shiki/core (explicit langs, warm-ink theme, cached). */
+/**
+ * Syntax-highlighted code via shiki/core (explicit langs, warm-ink theme, cached). The code sits
+ * in a `w-max min-w-full` block so it grows to its longest line: the black background then reaches
+ * the end of the code when you scroll sideways, instead of stopping at the visible edge.
+ */
 export function CodeBlock({
   code,
   lang,
@@ -143,16 +149,16 @@ export function CodeBlock({
   return (
     <div
       className={cn(
-        "lare-code overflow-auto rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface)] text-[13px] leading-relaxed",
+        "lare-code overflow-auto rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--lare-ink)] text-[13px] leading-relaxed",
         className,
       )}
       style={{ maxHeight }}
     >
       {html ? (
         // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki output is generated from escaped source
-        <div className="[&_pre]:m-0 [&_pre]:p-4" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className={HIGHLIGHTED} dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
-        <pre className="m-0 p-4 text-[var(--text)]">
+        <pre className="m-0 w-max min-w-full p-4 text-[var(--text)]">
           <code>{code}</code>
         </pre>
       )}
