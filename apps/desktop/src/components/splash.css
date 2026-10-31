@@ -1,0 +1,107 @@
+/* Launch screen. Sizes hang off --splash-mark so the lockup scales as one, and the mark follows
+   the window's shorter side so it stays in proportion from a small window to a full screen. */
+.lare-splash {
+  --splash-mark: clamp(28px, 4.5vmin, 48px);
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  opacity: 1;
+  transition: opacity var(--splash-exit, 400ms) var(--ease-smooth-out, ease-out);
+}
+.lare-splash-exit {
+  opacity: 0;
+  pointer-events: none;
+}
+.lare-splash-stage {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  /* Sit a little above centre, where the eye expects a logo. */
+  padding-bottom: 6vh;
+}
+
+.lare-splash-lockup {
+  display: grid;
+  grid-template-columns: auto 0fr;
+  align-items: center;
+  /* The name opens up beside the logo, so the logo glides left to make room for it. */
+  transition: grid-template-columns 800ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lare-splash-named {
+  grid-template-columns: auto 1fr;
+}
+
+.lare-splash-spinner {
+  width: var(--splash-mark);
+  height: var(--splash-mark);
+  will-change: transform;
+}
+.lare-splash-emblem {
+  width: 100%;
+  height: 100%;
+}
+
+/* The name is wiped in from the left edge, with a small slide so it feels pulled out. */
+.lare-splash-name {
+  min-width: 0;
+  overflow: hidden;
+}
+.lare-splash-name > span {
+  display: block;
+  padding-left: calc(var(--splash-mark) * 0.22);
+  font-size: calc(var(--splash-mark) * 0.72);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--text);
+  white-space: nowrap;
+  clip-path: inset(0 100% 0 0);
+  transform: translateX(-12%);
+  opacity: 0;
+  transition:
+    clip-path 800ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 800ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 400ms ease-out;
+}
+.lare-splash-named .lare-splash-name > span {
+  clip-path: inset(0 0 0 0);
+  transform: none;
+  opacity: 1;
+}
+
+/* A band of light across the logo. The emblem is a mask over a flat colour, so the highlight is a
+   gradient painted on top of that colour and clipped to the same shape. */
+.lare-splash-shine {
+  background-image: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgb(255 255 255 / 0.95) 50%,
+    transparent 62%
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  background-position: 100% 0;
+  animation: lare-splash-shine 900ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes lare-splash-shine {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lare-splash-lockup,
+  .lare-splash-name > span {
+    transition: none;
+  }
+  .lare-splash-shine {
+    animation: none;
+  }
+}

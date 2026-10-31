@@ -104,7 +104,7 @@ function StaleGrantNotice() {
   });
 
   return (
-    <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+    <div className="mt-2 rounded-lg border border-zinc-800 bg-[var(--surface-raised)] px-3 py-2.5">
       <p className="text-xs text-zinc-400">
         Switched on in System Settings but still denied? An update can invalidate the permission
         while leaving Lare in the list. Clearing it lets macOS grant it to this build.

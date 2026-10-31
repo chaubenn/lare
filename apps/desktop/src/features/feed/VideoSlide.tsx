@@ -38,6 +38,7 @@ export function VideoSlide({
   height,
   title = "Session recording",
   className,
+  fill = false,
 }: {
   videoId: string;
   status: Video["status"];
@@ -49,6 +50,8 @@ export function VideoSlide({
   height?: number | null;
   title?: string;
   className?: string;
+  /** Fill the slot it is given, letterboxing inside the player, instead of taking its own shape. */
+  fill?: boolean;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -71,7 +74,7 @@ export function VideoSlide({
   }
 
   const ready = status === "ready" && Boolean(bunnyVideoId);
-  const aspect = mediaAspect(width, height);
+  const aspect = fill ? undefined : mediaAspect(width, height);
   const localSrc = useLocalVideoSrc(videoId, status);
 
   if (!ready && localSrc) {
@@ -92,7 +95,7 @@ export function VideoSlide({
       <div
         role="status"
         className={cn(
-          "flex aspect-video flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 text-sm text-zinc-400",
+          "flex aspect-video flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-800 bg-[var(--surface-raised)] text-sm text-zinc-400",
           className,
         )}
       >
@@ -114,7 +117,8 @@ export function VideoSlide({
     <div
       style={aspect ? { aspectRatio: aspect } : undefined}
       className={cn(
-        "relative aspect-video overflow-hidden rounded-xl border border-zinc-800 bg-black",
+        "relative overflow-hidden rounded-xl border border-zinc-800 bg-black",
+        fill ? "h-full" : "aspect-video",
         className,
       )}
     >

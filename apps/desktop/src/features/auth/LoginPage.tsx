@@ -76,7 +76,7 @@ function LoginForm() {
         Continue with Google
       </Button>
       {waiting ? (
-        <output className="block rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 text-center text-xs text-zinc-300">
+        <output className="block rounded-lg border border-zinc-800 bg-[var(--surface-raised)] p-3 text-center text-xs text-zinc-300">
           Finish signing in with {waiting === "github" ? "GitHub" : "Google"} in your browser. This
           window updates automatically.
         </output>

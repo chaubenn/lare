@@ -94,15 +94,18 @@ export function ProfileView({
   return (
     <>
       <header className="flex flex-wrap items-start gap-5">
-        <Avatar url={avatarUrl} name={name} size={80} />
+        <Avatar url={avatarUrl} name={name} size={72} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
             <h1 className="lare-heading min-w-0 truncate text-[var(--text)]">{name}</h1>
+            {handle ? <p className="text-sm text-[var(--text-tertiary)]">@{handle}</p> : null}
             {isPrivate ? (
-              <Lock className="size-3.5 text-[var(--text-tertiary)]" aria-label="Private account" />
+              <Lock
+                className="size-3.5 self-center text-[var(--text-tertiary)]"
+                aria-label="Private account"
+              />
             ) : null}
           </div>
-          {handle ? <p className="text-sm text-[var(--text-secondary)]">@{handle}</p> : null}
 
           {statsPending && handle ? (
             <span className="lare-skel mt-3 block h-4 w-64 rounded" />
@@ -114,7 +117,7 @@ export function ProfileView({
               </button>
             </p>
           ) : counts.length > 0 ? (
-            <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--text-secondary)]">
+            <ul className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--text-secondary)]">
               {counts.map((c) => {
                 const content = (
                   <>
@@ -142,7 +145,7 @@ export function ProfileView({
           ) : null}
 
           {bio ? (
-            <p className="mt-3 max-w-prose select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]">
+            <p className="mt-2.5 max-w-prose select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]">
               {bio}
             </p>
           ) : emptyBio ? (
@@ -173,7 +176,7 @@ export function ProfileView({
       ) : (
         <>
           {/* Posts lead; progress is one click away instead of stacked above them. */}
-          <div className="mt-8 mb-4">
+          <div className="mt-6 mb-3">
             {hasProgress ? (
               <SegmentedTabs
                 label="Profile sections"

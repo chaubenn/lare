@@ -11,9 +11,12 @@ import { ChevronDown } from "@lare/ui/icons";
 export function AiReviewSection({
   review,
   onSeek,
+  nested = false,
 }: {
   review: AiReview;
   onSeek?: (tMs: number) => void;
+  /** Sitting inside another raised container, so step one shade lighter to stay distinct. */
+  nested?: boolean;
 }) {
   const entries = Object.entries(SCORE_LABELS) as Array<[keyof AiReview["scores"], string]>;
   const hasScoreNotes = entries.some(([key]) => review.scores[key].rationale);
@@ -26,7 +29,12 @@ export function AiReviewSection({
   const hasDetails = detailBits.length > 0;
 
   return (
-    <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+    <section
+      className={cn(
+        "rounded-xl border border-zinc-800 p-4",
+        nested ? "bg-[var(--surface-sunken)]" : "bg-[var(--surface-raised)]",
+      )}
+    >
       <header className="flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-medium text-zinc-100">AI interview review</h2>
         <p className="tabular-nums text-sm text-zinc-300">

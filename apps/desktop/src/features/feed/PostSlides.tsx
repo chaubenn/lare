@@ -2,7 +2,6 @@ import type { Post, Video } from "@lare/supabase-types";
 import type { ReactNode } from "react";
 import { SectionTitle } from "@/components/ui/Card";
 import type { FeedImage } from "@/features/publishing/posts/media";
-import { mediaAspect } from "./aspect";
 import { PostCarousel } from "./PostCarousel";
 import { VideoSlide } from "./VideoSlide";
 
@@ -81,6 +80,7 @@ export function PostSlides({
             height={summary.height}
             title={`${title} — summary`}
             className="w-full rounded-none border-0"
+            fill
           />
         </LabelledSlide>
       ) : null}
@@ -101,6 +101,7 @@ export function PostSlides({
             height={video.height}
             title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "full recording"}`}
             className="w-full rounded-none border-0"
+            fill
           />
         </LabelledSlide>
       ) : null}
@@ -109,12 +110,12 @@ export function PostSlides({
 }
 
 /**
- * A slide whose content is text, not media. It takes the height its content needs and
- * the deck sizes to it, rather than scrolling inside a frame it does not fill.
+ * A slide whose content is text, not media. It fills the deck's fixed frame and sits on the
+ * deck's own background; if the text is taller than the frame, the slide scrolls.
  */
 export function TextSlide({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="w-full bg-[var(--surface)] px-4 pb-8 pt-4">
+    <div className="min-h-full w-full px-4 py-4">
       <SectionTitle>{label}</SectionTitle>
       {children}
     </div>
@@ -129,7 +130,7 @@ export function TextSlide({ label, children }: { label: string; children: ReactN
 export function LabelledSlide({
   label,
   children,
-  className = "relative w-full",
+  className = "relative h-full w-full",
 }: {
   label: string | null;
   children: ReactNode;
@@ -148,21 +149,13 @@ export function LabelledSlide({
 }
 
 /**
- * An image slide, with the author's caption laid over the foot of it when there is one. The frame
- * takes the image's own shape, so a screenshot is never letterboxed.
+ * An image slide, with the author's caption laid over the foot of it when there is one. It fills
+ * the deck's fixed frame and the picture is fitted inside it.
  */
 export function PhotoSlide({ image }: { image: FeedImage }) {
-  const aspect = mediaAspect(image.width, image.height);
   return (
-    <figure
-      style={aspect ? { aspectRatio: aspect } : undefined}
-      className="relative w-full bg-[var(--surface-sunken)]"
-    >
-      <img
-        src={image.url}
-        alt={image.caption ?? ""}
-        className={aspect ? "size-full object-contain" : "w-full"}
-      />
+    <figure className="relative h-full w-full bg-[var(--surface-sunken)]">
+      <img src={image.url} alt={image.caption ?? ""} className="size-full object-contain" />
       {image.caption && (
         <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 pb-6 pt-8 text-xs text-zinc-100">
           {image.caption}

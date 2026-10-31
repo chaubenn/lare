@@ -39,7 +39,7 @@ export function NotificationsPage() {
       {running.length > 0 ? (
         <section className="mb-4">
           <h2 className="mb-2 text-xs font-medium text-[var(--text-tertiary)]">In progress</h2>
-          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]">
+          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]">
             {running.map((job) => (
               <JobRow key={job.id} job={job} />
             ))}
@@ -105,7 +105,7 @@ function NotificationsBody({
     );
   }
   return (
-    <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]">
+    <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]">
       {items.map((n) => (
         <NotificationItem key={n.id} notification={n} unread={isUnread(n)} />
       ))}

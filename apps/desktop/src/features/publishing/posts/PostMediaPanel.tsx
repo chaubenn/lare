@@ -172,7 +172,7 @@ export function PostMediaPanel({
           {images.map((image, index) => (
             <li
               key={image.id}
-              className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60"
+              className="overflow-hidden rounded-lg border border-zinc-800 bg-[var(--surface-raised)]"
             >
               {image.url ? (
                 <img

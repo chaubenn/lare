@@ -38,7 +38,7 @@ export function SessionsPage() {
           {bucket(earlier).map(([heading, group]) => (
             <section key={heading} className="mt-8" aria-label={heading}>
               <h2 className="mb-3 text-sm font-semibold text-[var(--text)]">{heading}</h2>
-              <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]">
+              <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]">
                 {group.map((sitting) => (
                   <EarlierSitting key={sitting.key} sitting={sitting} />
                 ))}
@@ -57,7 +57,7 @@ function LatestSitting({ sitting }: { sitting: Sitting<SessionRow> }) {
   return (
     <section
       aria-label="Latest sitting"
-      className="rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)]"
+      className="rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]"
     >
       <div className="flex flex-wrap items-start justify-between gap-3 p-5">
         <div className="min-w-0">
@@ -140,7 +140,7 @@ function EarlierSitting({ sitting }: { sitting: Sitting<SessionRow> }) {
       {open ? (
         <SessionRows
           sessions={sitting.sessions}
-          className="border-t border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_50%,transparent)]"
+          className="border-t border-[var(--border)] bg-[var(--surface-raised)]"
         />
       ) : null}
     </li>

@@ -120,7 +120,7 @@ export function Timeline({
   const momentTones = new Set(moments.map((m) => m.tone));
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+    <div className="rounded-xl border border-zinc-800 bg-[var(--surface-raised)] px-4 py-3">
       <div className="flex items-center justify-between font-mono text-xs tabular-nums">
         <span className="text-emerald-400">{formatMediaTime(value)}</span>
         <span className="text-zinc-500">{formatMediaTime(duration)}</span>

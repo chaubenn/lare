@@ -228,7 +228,7 @@ function PostContent({
     <section>
       <PostCarousel label={`${title} — contents`}>
         {showSummary && summary ? (
-          <LabelledSlide label={bothClips ? "Summary" : null} className="relative w-full">
+          <LabelledSlide label={bothClips ? "Summary" : null} className="relative h-full w-full">
             <VideoSlide
               videoId={summary.id}
               status={summary.status}
@@ -238,6 +238,7 @@ function PostContent({
               height={summary.height}
               title={`${title} — summary`}
               className="rounded-none border-0"
+              fill
             />
           </LabelledSlide>
         ) : null}
@@ -247,7 +248,7 @@ function PostContent({
         {showVideo && video ? (
           <LabelledSlide
             label={bothClips ? (post.video_kind === "highlights" ? "Highlights" : "Demo") : null}
-            className="relative w-full"
+            className="relative h-full w-full"
           >
             <VideoSlide
               videoId={video.id}
@@ -258,6 +259,7 @@ function PostContent({
               height={video.height}
               title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "demo"}`}
               className="rounded-none border-0"
+              fill
             />
           </LabelledSlide>
         ) : null}
@@ -272,7 +274,7 @@ function PostContent({
         ) : null}
         {review ? (
           <TextSlide label="AI review">
-            <AiReviewSection review={review} />
+            <AiReviewSection review={review} nested />
           </TextSlide>
         ) : null}
       </PostCarousel>

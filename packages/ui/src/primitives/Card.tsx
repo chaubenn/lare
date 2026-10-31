@@ -5,7 +5,7 @@ export function Card({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-raised)_40%,transparent)] p-4",
+        "rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] p-4",
         className,
       )}
       {...rest}

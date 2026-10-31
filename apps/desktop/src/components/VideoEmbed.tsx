@@ -85,7 +85,7 @@ export function VideoEmbed({
     );
   }
   return (
-    <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 text-center">
+    <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-800 bg-[var(--surface-raised)] text-center">
       <VideoIcon className="size-6 text-zinc-600" aria-hidden />
       <p className="text-sm text-zinc-400">{STATUS_TEXT[video.status] || "Video unavailable."}</p>
       {video.error ? <p className="max-w-sm text-xs text-rose-400">{video.error}</p> : null}
