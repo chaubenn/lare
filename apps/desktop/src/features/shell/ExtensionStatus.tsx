@@ -24,7 +24,7 @@ export function ExtensionStatus({ collapsed }: { collapsed: boolean }) {
         to="/settings"
         title={`Extension ${label}`}
         aria-label={`Extension ${label}`}
-        className="flex size-11 items-center justify-center rounded-lg"
+        className="flex size-11 items-center justify-center rounded-[var(--lare-r-2)]"
       >
         {dot}
       </Link>
@@ -34,7 +34,7 @@ export function ExtensionStatus({ collapsed }: { collapsed: boolean }) {
   return (
     <Link
       to="/settings"
-      className="lare-micro block rounded-lg px-3 py-1.5 text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+      className="lare-micro block rounded-[var(--lare-r-2)] px-3 py-1.5 text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
     >
       <span className="flex items-center gap-2">
         {dot}

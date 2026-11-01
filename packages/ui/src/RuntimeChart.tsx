@@ -168,7 +168,7 @@ export function RuntimeChart({
           id={gid}
           style={tipStyle}
           className={cn(
-            "pointer-events-none absolute whitespace-nowrap rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-1 text-[11px] text-[var(--text)] shadow-[var(--lare-shadow-1)]",
+            "pointer-events-none absolute whitespace-nowrap rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-1 text-xs text-[var(--text)] shadow-[var(--lare-shadow-1)]",
             !follow && "top-2 right-2",
           )}
         >

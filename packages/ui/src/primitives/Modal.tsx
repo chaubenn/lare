@@ -95,8 +95,8 @@ export function Modal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={SPRING.ui}
-            className="absolute inset-0 cursor-default bg-[color-mix(in_oklab,var(--surface)_70%,transparent)]"
-            style={{ backdropFilter: "blur(var(--lare-blur-chrome))" }}
+            className="absolute inset-0 cursor-default bg-[color-mix(in_oklab,var(--surface)_40%,transparent)]"
+            style={{ backdropFilter: "blur(var(--lare-blur-scrim))" }}
           />
           <motion.div
             ref={panelRef}

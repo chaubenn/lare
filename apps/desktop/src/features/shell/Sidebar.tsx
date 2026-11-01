@@ -58,7 +58,7 @@ function useSidebarScale(): number {
 
 /** Tight, white rows. Hover brightens the row's own background; the active page holds it. */
 const ROW =
-  "relative flex items-center rounded-lg text-base text-[var(--text)] transition-colors hover:bg-[color-mix(in_oklab,var(--text)_8%,transparent)]";
+  "relative flex items-center rounded-[var(--lare-r-2)] text-base text-[var(--text)] transition-colors hover:bg-[color-mix(in_oklab,var(--text)_8%,transparent)]";
 const ROW_ACTIVE = "bg-[color-mix(in_oklab,var(--text)_12%,transparent)] font-medium";
 const ROW_EXPANDED = "h-9 gap-2.5 py-1.5 pr-2 pl-3";
 const ROW_COLLAPSED = "size-9 justify-center";
@@ -85,7 +85,7 @@ function NavRow({
       {({ isActive }) => (
         <>
           <item.icon
-            className={cn("size-5 shrink-0", isActive && "text-[var(--accent)]")}
+            className={cn("size-5 shrink-0", isActive && "text-[var(--accent-text)]")}
             aria-hidden
           />
           {collapsed ? null : <span className="flex-1 truncate">{item.label}</span>}
@@ -230,7 +230,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
           role="menu"
           aria-label="Account"
           className={cn(
-            "lare-material-regular lare-dropdown absolute bottom-full left-0 z-30 mb-2 w-60 origin-bottom-left rounded-xl border border-[var(--border)] p-1 shadow-[var(--lare-shadow-2)]",
+            "lare-material-regular lare-dropdown absolute bottom-full left-0 z-30 mb-2 w-60 origin-bottom-left rounded-[var(--lare-r-4)] border border-[var(--border)] p-1 shadow-[var(--lare-shadow-2)]",
           )}
         >
           <div className="px-2.5 py-2">
@@ -350,7 +350,7 @@ export function Sidebar() {
           onClick={toggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="lare-press inline-flex size-9 items-center justify-center rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--surface-sunken)] hover:text-[var(--text)]"
+          className="lare-press inline-flex size-9 items-center justify-center rounded-[var(--lare-r-2)] text-[var(--text-tertiary)] hover:bg-[var(--surface-sunken)] hover:text-[var(--text)]"
         >
           <PanelLeftClose
             className={cn("size-5 transition-transform", collapsed && "rotate-180")}

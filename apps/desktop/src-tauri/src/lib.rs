@@ -6,6 +6,7 @@ pub mod deeplink;
 pub mod preview;
 pub mod recorder;
 pub mod recording;
+pub mod search;
 pub mod shutdown;
 pub mod windows;
 pub mod ws_server;
@@ -268,6 +269,9 @@ pub fn run() {
             commands::read_file_bytes,
             commands::delete_file,
             commands::path_exists,
+            search::search_open,
+            search::search_index,
+            search::search_query,
         ])
         .setup(move |app| {
             // Track the UI thread so overlay helpers can run AppKit work safely from Tokio.
@@ -289,6 +293,13 @@ pub fn run() {
             });
             app.manage(recorder);
             app.manage(previews.clone());
+
+            // The command palette's index. Nothing touches Zvec until the frontend opens it.
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::env::temp_dir().join("lare"));
+            app.manage(Arc::new(search::SearchIndex::new(data_dir)));
 
             // Deep links. macOS registers the scheme via the bundle's Info.plist; Windows/Linux
             // need a runtime registration for unpackaged (dev) builds.

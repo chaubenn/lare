@@ -18,11 +18,13 @@ export function SubSection({
   children: ReactNode;
 }) {
   return (
-    <section className="border-zinc-800 border-t pt-4 first:border-t-0 first:pt-0">
+    <section className="border-[var(--border)] border-t pt-4 first:border-t-0 first:pt-0">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-zinc-200">{title}</h3>
-          {description ? <p className="mt-0.5 text-xs text-zinc-500">{description}</p> : null}
+          {description ? (
+            <p className="mt-0.5 text-xs text-[var(--text-tertiary)]">{description}</p>
+          ) : null}
         </div>
         {action}
       </div>

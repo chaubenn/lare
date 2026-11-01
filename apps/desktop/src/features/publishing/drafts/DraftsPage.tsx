@@ -59,11 +59,11 @@ function DraftRow({ draft }: { draft: Draft }) {
         to={`/drafts/${draft.id}`}
         className="min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70"
       >
-        <p className="truncate text-sm text-zinc-100">
+        <p className="truncate text-sm text-[var(--text)]">
           {title}
-          {extra ? <span className="text-zinc-500">{extra}</span> : null}
+          {extra ? <span className="text-[var(--text-tertiary)]">{extra}</span> : null}
         </p>
-        <p className="truncate text-xs text-zinc-500 sm:hidden" title={when.title}>
+        <p className="truncate text-xs text-[var(--text-tertiary)] sm:hidden" title={when.title}>
           {session ? (session.kind === "interview" ? "Interview" : "Practice") : "Draft"}
           <span aria-hidden> · </span>
           {when.label}
@@ -79,11 +79,11 @@ function DraftRow({ draft }: { draft: Draft }) {
         {session ? (
           <KindBadge kind={session.kind} />
         ) : (
-          <span className="text-xs text-zinc-600">—</span>
+          <span className="text-xs text-[var(--text-tertiary)]">—</span>
         )}
       </div>
       <p
-        className="hidden whitespace-nowrap font-mono text-xs tabular-nums text-zinc-500 sm:block"
+        className="hidden whitespace-nowrap font-mono text-xs tabular-nums text-[var(--text-tertiary)] sm:block"
         title={when.title}
       >
         {when.label}
@@ -96,7 +96,7 @@ function DraftRow({ draft }: { draft: Draft }) {
       <p className="hidden text-xs text-zinc-400 sm:block">{plural(problems.length, "problem")}</p>
       <Link
         to={`/drafts/${draft.id}`}
-        className="hidden justify-self-end text-xs text-zinc-500 hover:text-zinc-100 sm:block"
+        className="hidden justify-self-end text-xs text-[var(--text-tertiary)] hover:text-[var(--text)] sm:block"
       >
         Edit
       </Link>

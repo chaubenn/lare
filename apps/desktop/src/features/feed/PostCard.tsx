@@ -14,7 +14,8 @@ import type { UserPost } from "@/features/profile/queries";
 import { useToggleLike } from "@/features/publishing/posts/social";
 import { errorMessage } from "@/lib/supabase";
 
-const cardClass = "rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)]";
+const cardClass =
+  "rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]";
 
 /**
  * A post in the feed, mirroring the web feed card exactly: author header with the post link
@@ -60,24 +61,24 @@ export function PostCard({
               <ProfileHoverCard handle={author.handle} className="min-w-0 truncate">
                 <Link
                   to={`/u/${author.handle}`}
-                  className="text-sm font-semibold text-zinc-100 hover:underline"
+                  className="text-sm font-semibold text-[var(--text)] hover:underline"
                 >
                   {name}
                 </Link>
               </ProfileHoverCard>
             ) : (
-              <span className="text-sm font-semibold text-zinc-100">{name}</span>
+              <span className="text-sm font-semibold text-[var(--text)]">{name}</span>
             )}
             {author?.handle && (
-              <span className="truncate text-xs text-zinc-500">@{author.handle}</span>
+              <span className="truncate text-xs text-[var(--text-tertiary)]">@{author.handle}</span>
             )}
             {author?.is_private && (
               <span title="Private account" className="inline-flex">
-                <Lock className="size-3 text-zinc-600" aria-label="Private account" />
+                <Lock className="size-3 text-[var(--text-tertiary)]" aria-label="Private account" />
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
+          <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
             <time dateTime={when}>{formatWhen(when)}</time>
             {post.visibility === "private" && (
               <>
@@ -93,7 +94,7 @@ export function PostCard({
       </header>
 
       <div className="px-4 sm:px-5">
-        <h2 className="text-base font-semibold leading-snug text-zinc-50">
+        <h2 className="text-base font-semibold leading-snug text-[var(--text)]">
           <Link to={href} className="hover:underline">
             {title}
           </Link>
@@ -129,7 +130,7 @@ export function PostCard({
               })
             }
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors hover:text-zinc-100",
+              "inline-flex items-center gap-1.5 rounded-[var(--lare-r-2)] px-2 py-1.5 transition-colors hover:text-[var(--text)]",
               isLiked && "text-rose-400 hover:text-rose-300",
             )}
           >
@@ -139,7 +140,7 @@ export function PostCard({
 
           <Link
             to={href}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors hover:text-zinc-100"
+            className="inline-flex items-center gap-1.5 rounded-[var(--lare-r-2)] px-2 py-1.5 transition-colors hover:text-[var(--text)]"
             aria-label="Comments"
           >
             <MessageCircle className="size-4.5" />
@@ -155,7 +156,7 @@ export function PostCard({
 
           <Link
             to={href}
-            className="ml-auto inline-flex items-center rounded-lg px-2 py-1.5 transition-colors hover:text-zinc-100"
+            className="ml-auto inline-flex items-center rounded-[var(--lare-r-2)] px-2 py-1.5 transition-colors hover:text-[var(--text)]"
           >
             View post →
           </Link>

@@ -392,7 +392,7 @@ function FindTab() {
     <div className="space-y-4">
       <div className="relative">
         <Search
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500"
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-tertiary)]"
           aria-hidden
         />
         <input
@@ -401,7 +401,7 @@ function FindTab() {
           placeholder="Search by @handle or name"
           aria-label="Search people by handle or name"
           autoComplete="off"
-          className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] pl-9 pr-3 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition-[border-color,box-shadow] duration-(--duration-fast) ease-(--ease-smooth-out) focus:border-zinc-600 focus:ring-2 focus:ring-zinc-500/50"
+          className="h-9 w-full rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)] pl-9 pr-3 text-sm text-[var(--text)] placeholder:text-[var(--text-tertiary)] outline-none transition-[border-color,box-shadow] duration-(--duration-fast) ease-(--ease-smooth-out) focus:border-zinc-600 focus:ring-2 focus:ring-zinc-500/50"
         />
       </div>
 

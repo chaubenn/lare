@@ -52,7 +52,7 @@ export function PostCarousel({
       className={cn("relative", className)}
     >
       <div className="relative">
-        <div className="@container relative overflow-hidden rounded-xl border border-zinc-800 bg-[var(--surface-raised)]">
+        <div className="@container relative overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]">
           <div
             ref={trackRef}
             onScroll={onScroll}
@@ -93,7 +93,7 @@ export function PostCarousel({
       </div>
 
       {slides.length > 1 && (
-        <div className="mt-2 flex justify-center gap-1.5">
+        <div className="mt-2 flex justify-center">
           {slides.map((_, i) => (
             <button
               // biome-ignore lint/suspicious/noArrayIndexKey: slides are a fixed, ordered deck.
@@ -102,13 +102,17 @@ export function PostCarousel({
               onClick={() => goTo(i)}
               aria-label={`Go to slide ${i + 1}`}
               aria-current={i === index}
-              className={cn(
-                "size-1.5 rounded-full transition-colors",
-                i === index
-                  ? "bg-[var(--text)]"
-                  : "bg-[color-mix(in_oklab,var(--text-tertiary)_50%,transparent)] hover:bg-[var(--text-tertiary)]",
-              )}
-            />
+              className="group -my-2 flex size-6 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+            >
+              <span
+                className={cn(
+                  "size-1.5 rounded-full transition-colors",
+                  i === index
+                    ? "bg-[var(--text)]"
+                    : "bg-[color-mix(in_oklab,var(--text-tertiary)_50%,transparent)] group-hover:bg-[var(--text-tertiary)]",
+                )}
+              />
+            </button>
           ))}
         </div>
       )}
@@ -138,7 +142,7 @@ function NavButton({
       disabled={disabled}
       aria-label={label}
       className={cn(
-        "absolute top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-zinc-950/60 p-1.5 text-zinc-100 ring-1 ring-white/10 backdrop-blur transition-opacity hover:bg-zinc-950/80 disabled:pointer-events-none disabled:opacity-0 sm:block",
+        "absolute top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-zinc-950/60 p-1.5 text-[var(--text)] ring-1 ring-white/10 backdrop-blur transition-opacity hover:bg-zinc-950/80 disabled:pointer-events-none disabled:opacity-0 sm:block",
         side === "left" ? "-left-3 sm:-left-4" : "-right-3 sm:-right-4",
       )}
     >

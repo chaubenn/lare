@@ -97,7 +97,7 @@ function YourWeek() {
         </div>
       </div>
       <p className="mt-3 flex items-center gap-1.5 border-t border-[var(--border)] pt-3 text-xs text-[var(--text-secondary)]">
-        <Flame className="size-3.5 text-[var(--accent)]" aria-hidden />
+        <Flame className="size-3.5 text-[var(--accent-text)]" aria-hidden />
         {summary.streak > 0 ? `${summary.streak}-day streak` : "Solve one today to start a streak"}
       </p>
     </Panel>

@@ -27,7 +27,7 @@ export function Topbar({ onOpenSearch }: { onOpenSearch: () => void }) {
             onClick={goBack}
             aria-label={`Back to ${page?.label}`}
             title="Back"
-            className="lare-press -ml-2 inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--text)]"
+            className="lare-press -ml-2 inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--lare-r-2)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--text)]"
           >
             <ArrowLeft className="size-5" aria-hidden />
           </button>
@@ -43,7 +43,7 @@ export function Topbar({ onOpenSearch }: { onOpenSearch: () => void }) {
         type="button"
         onClick={onOpenSearch}
         aria-label="Search and run commands"
-        className="lare-press flex h-9 w-69 shrink-0 items-center gap-2 rounded-lg bg-[var(--surface-sunken)] py-1 pr-2 pl-2.5 text-left text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+        className="lare-press flex h-9 w-69 shrink-0 items-center gap-2 rounded-[var(--lare-r-2)] bg-[var(--surface-sunken)] py-1 pr-2 pl-2.5 text-left text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
       >
         <Search className="size-3 shrink-0" aria-hidden />
         <span className="flex-1 truncate px-1">Search pages and actions…</span>

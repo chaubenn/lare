@@ -233,7 +233,9 @@ function AvatarUploader() {
         >
           Change photo
         </Button>
-        <p className="mt-1 text-xs text-zinc-500">JPEG, PNG, WebP or GIF, up to 20 MB.</p>
+        <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+          JPEG, PNG, WebP or GIF, up to 20 MB.
+        </p>
       </div>
       <input
         ref={inputRef}

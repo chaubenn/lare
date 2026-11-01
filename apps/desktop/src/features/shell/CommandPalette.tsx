@@ -1,15 +1,31 @@
+import { formatRelativeTime, type SearchKind } from "@lare/shared";
 import { SPRING } from "@lare/ui";
-import { Settings } from "@lare/ui/icons";
+import { Inbox, Mic, Rss, SquarePen, User } from "@lare/ui/icons";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
+import { requestSearchSync } from "@/features/search/sync";
+import { usePaletteSearch } from "@/features/search/usePaletteSearch";
+import { describeAccelerator } from "@/lib/shortcuts";
 import { NAV_ITEMS } from "./nav";
+
+const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+
+/** `CmdOrCtrl+1` as this platform writes it: ⌘1 on macOS, Ctrl+1 elsewhere. */
+function keyHint(accelerator: string): string {
+  return describeAccelerator(accelerator, isMac).join(isMac ? "" : "+");
+}
 
 interface PaletteAction {
   id: string;
   label: string;
+  /** Second line, e.g. a session's difficulty and outcome. */
+  detail?: string;
   hint?: string;
+  /** Heading drawn above the first item of each group while searching. */
+  group?: string;
+  kind?: SearchKind;
   run: () => void;
 }
 
@@ -20,6 +36,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const groups = usePaletteSearch(query);
 
   const items = useMemo<PaletteAction[]>(() => {
     const go = (to: string) => {
@@ -30,20 +47,37 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       ...NAV_ITEMS.map((item) => ({
         id: `nav:${item.to}`,
         label: item.label,
-        hint: item.shortcut,
+        hint: keyHint(item.shortcut),
         run: () => go(item.to),
       })),
-      { id: "settings", label: "Open settings", hint: "⌘8", run: () => go("/settings") },
     ];
     const q = query.trim().toLowerCase();
     if (!q) return actions;
-    return actions.filter(
-      (a) => a.label.toLowerCase().includes(q) || (a.hint?.toLowerCase().includes(q) ?? false),
+    const pages = actions
+      .filter((a) => a.label.toLowerCase().includes(q))
+      .map((a) => ({ ...a, group: "Pages" }));
+    const hits = groups.flatMap(({ label, hits }) =>
+      hits.map((hit) => ({
+        id: hit.id,
+        label: hit.title,
+        detail: hit.subtitle,
+        hint: hit.at > 0 ? formatRelativeTime(new Date(hit.at).toISOString()) : undefined,
+        group: label,
+        kind: hit.kind,
+        run: () => go(hit.route),
+      })),
     );
-  }, [navigate, onClose, query]);
+    return [...pages, ...hits];
+  }, [groups, navigate, onClose, query]);
+
+  // Results arrive after the keystroke; keep the highlight on a row that still exists.
+  useEffect(() => {
+    setActive((i) => Math.min(i, Math.max(items.length - 1, 0)));
+  }, [items.length]);
 
   useEffect(() => {
     if (!open) return;
+    requestSearchSync();
     setQuery("");
     setActive(0);
     const id = window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -102,8 +136,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={SPRING.ui}
-            className="absolute inset-0 cursor-default bg-[color-mix(in_oklab,var(--surface)_70%,transparent)]"
-            style={{ backdropFilter: "blur(var(--lare-blur-chrome))" }}
+            className="absolute inset-0 cursor-default bg-[color-mix(in_oklab,var(--surface)_40%,transparent)]"
+            style={{ backdropFilter: "blur(var(--lare-blur-scrim))" }}
           />
           <motion.div
             role="dialog"
@@ -126,38 +160,54 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                   setQuery(e.target.value);
                   setActive(0);
                 }}
-                placeholder="Go to a page or run an action…"
-                aria-label="Filter commands"
+                placeholder="Search sessions, posts and people, or go to a page…"
+                aria-label="Search or go to a page"
                 autoComplete="off"
                 className="h-9 w-full bg-transparent text-sm text-[var(--text)] placeholder:text-[var(--text-tertiary)] focus-visible:outline-none"
               />
             </div>
-            <div ref={listRef} role="listbox" className="max-h-80 overflow-y-auto p-1.5">
+            <div ref={listRef} role="listbox" className="max-h-96 overflow-y-auto p-1.5">
               {items.length === 0 ? (
                 <p className="px-3 py-6 text-center text-sm text-[var(--text-tertiary)]">
-                  No matching commands
+                  Nothing matches
                 </p>
               ) : (
                 items.map((item, index) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="option"
-                    data-index={index}
-                    aria-selected={index === active}
-                    onMouseEnter={() => setActive(index)}
-                    onClick={() => item.run()}
-                    className="lare-press flex w-full items-center gap-3 rounded-[var(--lare-r-2)] px-3 py-2 text-left text-sm text-[var(--text)] data-[selected=true]:bg-[var(--surface-raised)]"
-                    data-selected={index === active}
-                  >
-                    <PaletteIcon id={item.id} />
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    {item.hint ? (
-                      <span className="lare-micro shrink-0 text-[var(--text-tertiary)]">
-                        {item.hint}
-                      </span>
+                  <Fragment key={item.id}>
+                    {item.group && item.group !== items[index - 1]?.group ? (
+                      <p
+                        role="presentation"
+                        className="lare-micro px-3 pt-3 pb-1 text-[var(--text-tertiary)] first:pt-1"
+                      >
+                        {item.group}
+                      </p>
                     ) : null}
-                  </button>
+                    <button
+                      type="button"
+                      role="option"
+                      data-index={index}
+                      aria-selected={index === active}
+                      onMouseEnter={() => setActive(index)}
+                      onClick={() => item.run()}
+                      className="lare-press flex w-full items-center gap-3 rounded-[var(--lare-r-2)] px-3 py-2 text-left text-sm text-[var(--text)] data-[selected=true]:bg-[var(--surface-raised)]"
+                      data-selected={index === active}
+                    >
+                      <PaletteIcon item={item} />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate">{item.label}</span>
+                        {item.detail ? (
+                          <span className="lare-micro truncate text-[var(--text-tertiary)]">
+                            {item.detail}
+                          </span>
+                        ) : null}
+                      </span>
+                      {item.hint ? (
+                        <span className="lare-micro shrink-0 text-[var(--text-tertiary)]">
+                          {item.hint}
+                        </span>
+                      ) : null}
+                    </button>
+                  </Fragment>
                 ))
               )}
             </div>
@@ -169,10 +219,15 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   );
 }
 
-function PaletteIcon({ id }: { id: string }) {
+const KIND_ICONS = { session: Inbox, said: Mic, post: Rss, draft: SquarePen, person: User };
+
+function PaletteIcon({ item }: { item: PaletteAction }) {
   const className = "size-4 shrink-0 text-[var(--text-tertiary)]";
-  if (id === "settings") return <Settings className={className} aria-hidden />;
-  const item = NAV_ITEMS.find((n) => `nav:${n.to}` === id);
-  if (!item) return <span className="size-4" />;
-  return <item.icon className={className} aria-hidden />;
+  if (item.kind) {
+    const Icon = KIND_ICONS[item.kind];
+    return <Icon className={className} aria-hidden />;
+  }
+  const nav = NAV_ITEMS.find((n) => `nav:${n.to}` === item.id);
+  if (!nav) return <span className="size-4" />;
+  return <nav.icon className={className} aria-hidden />;
 }

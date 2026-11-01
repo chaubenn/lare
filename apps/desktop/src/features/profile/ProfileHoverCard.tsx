@@ -269,7 +269,7 @@ function ProfilePreview({ handle }: { handle: string }) {
 function Stat({ label, value }: { label: string; value: number | undefined }) {
   return (
     <div className="min-w-0">
-      <dt className="truncate text-[11px] text-[var(--text-tertiary)]">{label}</dt>
+      <dt className="truncate text-xs text-[var(--text-tertiary)]">{label}</dt>
       <dd className="text-sm font-semibold tabular-nums text-[var(--text)]">
         {value === undefined ? "—" : value}
       </dd>

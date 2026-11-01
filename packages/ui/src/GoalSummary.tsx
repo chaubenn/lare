@@ -82,7 +82,7 @@ export function GoalSummary({ progress }: { progress: ActiveGoalProgress }) {
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
         <p className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-          <Flame className="size-3.5 text-[var(--accent)]" aria-hidden />
+          <Flame className="size-3.5 text-[var(--accent-text)]" aria-hidden />
           {describeGoalStreak(progress.streak, goal.period)}
         </p>
         <ol className="flex gap-1" aria-label={`Last ${progress.history.length} ${goal.period}s`}>

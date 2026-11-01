@@ -62,7 +62,7 @@ export function ScreenSharingSection() {
         </Button>
       }
     >
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-[var(--text-tertiary)]">
         Other apps recording or sharing their screen will stop as well.
       </p>
     </SubSection>

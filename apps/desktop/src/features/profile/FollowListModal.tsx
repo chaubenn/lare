@@ -42,7 +42,7 @@ export function FollowListModal({
 
   return (
     <Modal open={open} onClose={onClose} title={name}>
-      <div className="border-b border-zinc-800 px-3 py-3">
+      <div className="border-b border-[var(--border)] px-3 py-3">
         <SegmentedTabs
           label="Follower lists"
           value={kind ?? "followers"}

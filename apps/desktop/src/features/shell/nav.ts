@@ -15,9 +15,10 @@ export interface NavItem {
   label: string;
   icon: IconComponent;
   /**
-   * Display label for the command palette only — the sidebar deliberately does
-   * not show it. The binding itself is positional (⌘N picks NAV_ITEMS[N - 1] in
-   * AppShell), so reordering this list reassigns the shortcuts.
+   * Accelerator shown in the command palette only — the sidebar deliberately does
+   * not show it, and the palette draws it as ⌘N or Ctrl+N. The binding itself is
+   * positional (⌘N picks NAV_ITEMS[N - 1] in AppShell), so reordering this list
+   * reassigns the shortcuts.
    */
   shortcut: string;
   end?: boolean;
@@ -35,28 +36,28 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ to: "/", label: "Feed", icon: Rss, shortcut: "⌘1", end: true }],
+    items: [{ to: "/", label: "Feed", icon: Rss, shortcut: "CmdOrCtrl+1", end: true }],
   },
   {
     label: "Create",
     items: [
-      { to: "/drafts", label: "Drafts", icon: SquarePen, shortcut: "⌘2" },
-      { to: "/sessions", label: "Sessions", icon: Inbox, shortcut: "⌘3" },
+      { to: "/drafts", label: "Drafts", icon: SquarePen, shortcut: "CmdOrCtrl+2" },
+      { to: "/sessions", label: "Sessions", icon: Inbox, shortcut: "CmdOrCtrl+3" },
     ],
   },
   {
     label: "Community",
     items: [
-      { to: "/friends", label: "Friends", icon: Users, shortcut: "⌘4" },
-      { to: "/leaderboard", label: "Leaderboard", icon: Trophy, shortcut: "⌘5" },
+      { to: "/friends", label: "Friends", icon: Users, shortcut: "CmdOrCtrl+4" },
+      { to: "/leaderboard", label: "Leaderboard", icon: Trophy, shortcut: "CmdOrCtrl+5" },
     ],
   },
   {
     label: "Account",
     items: [
-      { to: "/profile", label: "Profile", icon: User, shortcut: "⌘6" },
-      { to: "/notifications", label: "Notifications", icon: Bell, shortcut: "⌘7" },
-      { to: "/settings", label: "Settings", icon: Settings, shortcut: "⌘8" },
+      { to: "/profile", label: "Profile", icon: User, shortcut: "CmdOrCtrl+6" },
+      { to: "/notifications", label: "Notifications", icon: Bell, shortcut: "CmdOrCtrl+7" },
+      { to: "/settings", label: "Settings", icon: Settings, shortcut: "CmdOrCtrl+8" },
     ],
   },
 ];

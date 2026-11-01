@@ -349,7 +349,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
                       }`}
                     >
                       <span
-                        className={`mt-px grid size-5 shrink-0 place-items-center rounded-full border text-[11px] font-semibold tabular-nums ${
+                        className={`mt-px grid size-5 shrink-0 place-items-center rounded-full border text-xs font-semibold tabular-nums ${
                           state === "current"
                             ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]"
                             : state === "done"

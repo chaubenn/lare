@@ -33,7 +33,7 @@ export function GoalPanel() {
         <GoalSummary progress={active} />
       ) : (
         <div className="flex items-center gap-3">
-          <Target className="size-6 shrink-0 text-[var(--accent)]" aria-hidden />
+          <Target className="size-6 shrink-0 text-[var(--accent-text)]" aria-hidden />
           <p className="flex-1 text-xs text-[var(--text-secondary)]">
             Set a daily or weekly target and keep a streak going.
           </p>

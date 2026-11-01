@@ -46,7 +46,7 @@ export function UserRow({
           <ProfileHoverCard handle={person.handle} className="min-w-0 truncate">
             <ProfileLink
               handle={person.handle}
-              className="text-sm font-medium text-zinc-100 hover:underline"
+              className="text-sm font-medium text-[var(--text)] hover:underline"
             >
               {name}
             </ProfileLink>
@@ -58,13 +58,13 @@ export function UserRow({
             </Badge>
           ) : null}
         </div>
-        <div className="truncate text-xs text-zinc-500">
+        <div className="truncate text-xs text-[var(--text-tertiary)]">
           {person.handle ? `@${person.handle}` : null}
           {person.handle && meta ? " · " : null}
           {meta}
         </div>
         {showRequestHint ? (
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             {state === "pending"
               ? "Request sent — they still have to approve it."
               : "Request to follow before you can see their sessions."}

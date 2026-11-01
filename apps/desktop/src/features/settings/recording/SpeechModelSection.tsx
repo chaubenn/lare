@@ -116,7 +116,7 @@ export function SpeechModelSection() {
       </div>
       {download ? (
         <div className="mt-3">
-          <div className="flex items-center justify-between gap-3 text-xs text-zinc-500">
+          <div className="flex items-center justify-between gap-3 text-xs text-[var(--text-tertiary)]">
             <span className="truncate">Downloading {download.label}…</span>
             <span className="shrink-0 tabular-nums">
               {download.total

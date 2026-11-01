@@ -114,7 +114,7 @@ export function RecorderPillWindow() {
         data-tauri-drag-region
         className={cn(
           "flex h-[52px] w-full items-center gap-2 rounded-full border px-3 shadow-2xl backdrop-blur",
-          "border-zinc-700/80 bg-zinc-900/95 text-zinc-100",
+          "border-zinc-700/80 bg-zinc-900/95 text-[var(--text)]",
           error && "border-rose-500/60",
         )}
       >
@@ -129,7 +129,7 @@ export function RecorderPillWindow() {
         />
         <div data-tauri-drag-region className="min-w-0 flex-1 leading-tight">
           <div className="font-mono text-sm tabular-nums">{formatDuration(elapsed)}</div>
-          <div className="flex items-baseline gap-1.5 overflow-hidden text-[10px] text-zinc-400">
+          <div className="flex items-baseline gap-1.5 overflow-hidden text-xs text-zinc-400">
             <span className="truncate uppercase tracking-wider">
               {error
                 ? error
@@ -144,14 +144,14 @@ export function RecorderPillWindow() {
                         : "Recording"}
             </span>
             {caps.length > 0 && !error && (state === "recording" || paused) ? (
-              <span className="shrink-0 whitespace-nowrap text-zinc-500">
+              <span className="shrink-0 whitespace-nowrap text-[var(--text-tertiary)]">
                 <span className="font-mono">{caps.join(isMac ? "" : "+")}</span> hides
               </span>
             ) : null}
           </div>
         </div>
         {isInterview ? (
-          <span className="text-[10px] text-zinc-500">End from the extension</span>
+          <span className="text-xs text-[var(--text-tertiary)]">End from the extension</span>
         ) : (
           <>
             <PillButton

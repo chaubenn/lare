@@ -5,6 +5,7 @@ import { useRecordingEvents } from "@/features/media/useRecordingEvents";
 import { useNotificationStream } from "@/features/notifications/queries";
 import { useNoticeSources } from "@/features/notifications/sources";
 import { useDraftsRealtime } from "@/features/publishing/drafts/queries";
+import { useSearchSync } from "@/features/search/sync";
 import { CommandPalette } from "./CommandPalette";
 import { NAV_ITEMS } from "./nav";
 import { PageActionsSlot } from "./PageActions";
@@ -74,6 +75,7 @@ export function AppShell() {
   useNoticeSources();
   useRecordingEvents();
   useLocalCopyCleanup();
+  useSearchSync();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -98,7 +100,7 @@ export function AppShell() {
       <Sidebar />
       {/* Medesk's inset panel: the page sits on its own rounded surface inside the frame. */}
       <div className="flex min-w-0 flex-1 flex-col py-2 pr-2">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-[var(--surface)]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--lare-r-4)] bg-[var(--surface)]">
           <Topbar onOpenSearch={() => setPaletteOpen(true)} />
           <main
             ref={main}

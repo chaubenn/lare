@@ -14,7 +14,7 @@
   --color-zinc-200: oklch(0.25 0 0);
   --color-zinc-300: oklch(0.35 0 0);
   --color-zinc-400: oklch(0.45 0 0);
-  --color-zinc-500: oklch(0.556 0 0);
+  --color-zinc-500: oklch(0.5 0 0);
   --color-zinc-600: oklch(0.708 0 0);
   --color-zinc-700: oklch(0.85 0 0);
   --color-zinc-800: oklch(0.922 0 0);
@@ -35,7 +35,7 @@
   --color-zinc-200: #dcdcdc;
   --color-zinc-300: #c4c4c4;
   --color-zinc-400: #a8a8a8;
-  --color-zinc-500: #8f8f8f;
+  --color-zinc-500: #9a9a9a;
   --color-zinc-600: #6a6a6a;
   --color-zinc-700: #4a4a4a;
   --color-zinc-800: #363636;
@@ -60,7 +60,7 @@
   --accent: var(--lare-cobalt);
   --accent-fg: var(--lare-ink);
   --accent-hover: color-mix(in oklab, var(--lare-cobalt) 86%, white);
-  --focus: var(--lare-cobalt);
+  --focus: var(--accent-text);
   /* A solid pill reads deeper than a thin icon stroke in the same blue, so lift it to match. */
   --badge-bg: color-mix(in oklab, var(--lare-cobalt) 78%, white);
 }

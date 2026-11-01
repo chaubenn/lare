@@ -29,16 +29,20 @@
   --border-strong: oklch(0.82 0 0);
   --text: oklch(0.145 0 0);
   --text-secondary: oklch(0.4 0 0);
-  --text-tertiary: oklch(0.556 0 0);
+  --text-tertiary: oklch(0.5 0 0);
   --accent: oklch(0.205 0 0);
   --accent-fg: oklch(0.985 0 0);
   --accent-hover: oklch(0.32 0 0);
-  --focus: oklch(0.708 0 0);
+  --focus: oklch(0.55 0.17 258);
   --input-addon: oklch(0.708 0 0);
+  /* Cobalt as text or an icon needs a deeper blue on light grounds: the logo cobalt is 2.2:1 there. */
+  --accent-text: oklch(0.55 0.17 258);
+  /* A field's edge has to be told apart from its ground (3:1), unlike a card's hairline. */
+  --input-border: oklch(0.62 0 0);
 
   /* Status colours need more weight on white than on grey. */
   --lare-status-run: #3f7a47;
-  --lare-status-pause: #9a6d12;
+  --lare-status-pause: #8a600f;
   --lare-status-stop: #c0392b;
   --lare-info: #3b6f8f;
 
@@ -70,16 +74,18 @@
   --border-strong: #4a4a4a;
   --text: #ececec;
   --text-secondary: #a8a8a8;
-  --text-tertiary: #8f8f8f;
+  --text-tertiary: #9a9a9a;
   --accent: #ececec;
   --accent-fg: #1c1c1c;
   --accent-hover: #ffffff;
   --focus: #c8c2b6;
-  --input-addon: #8f8f8f;
+  --input-addon: #9a9a9a;
+  --accent-text: var(--lare-cobalt);
+  --input-border: #757575;
 
-  --lare-status-run: #6f8f6a;
+  --lare-status-run: #7fa07a;
   --lare-status-pause: #c4a15a;
-  --lare-status-stop: #c45c5c;
+  --lare-status-stop: #d27070;
   --lare-info: #7a9eb0;
 
   --lare-shadow-1: 0 8px 24px rgba(0, 0, 0, 0.35);
@@ -110,16 +116,18 @@
     --border-strong: #4a4a4a;
     --text: #ececec;
     --text-secondary: #a8a8a8;
-    --text-tertiary: #8f8f8f;
+    --text-tertiary: #9a9a9a;
     --accent: #ececec;
     --accent-fg: #1c1c1c;
     --accent-hover: #ffffff;
     --focus: #c8c2b6;
-    --input-addon: #8f8f8f;
+    --input-addon: #9a9a9a;
+    --accent-text: var(--lare-cobalt);
+    --input-border: #757575;
 
-    --lare-status-run: #6f8f6a;
+    --lare-status-run: #7fa07a;
     --lare-status-pause: #c4a15a;
-    --lare-status-stop: #c45c5c;
+    --lare-status-stop: #d27070;
     --lare-info: #7a9eb0;
 
     --lare-shadow-1: 0 8px 24px rgba(0, 0, 0, 0.35);

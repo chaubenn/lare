@@ -39,12 +39,12 @@ function ExtensionPanel() {
       </SectionTitle>
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-xs text-zinc-500">Chrome extension id</dt>
+          <dt className="text-xs text-[var(--text-tertiary)]">Chrome extension id</dt>
           <dd className="mt-1 flex items-center gap-2">
             <code className="select-text font-mono text-xs text-zinc-200">{EXTENSION_ID}</code>
             <button
               type="button"
-              className="text-xs text-zinc-500 hover:text-zinc-300"
+              className="text-xs text-[var(--text-tertiary)] hover:text-zinc-300"
               onClick={() =>
                 void copyText(EXTENSION_ID).then((ok) =>
                   notify(ok ? { title: "Copied" } : { title: "Couldn't copy", variant: "error" }),
@@ -56,11 +56,11 @@ function ExtensionPanel() {
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-zinc-500">Local server</dt>
+          <dt className="text-xs text-[var(--text-tertiary)]">Local server</dt>
           <dd className="mt-1 font-mono text-xs text-zinc-200">ws://127.0.0.1:{port || WS_PORT}</dd>
         </div>
       </dl>
-      <p className="mt-3 text-xs text-zinc-500">
+      <p className="mt-3 text-xs text-[var(--text-tertiary)]">
         The extension stays connected over localhost while a LeetCode tab is open. Reload the
         extension on chrome://extensions and the LeetCode tab if this still says not connected.
       </p>
@@ -105,7 +105,7 @@ function AccountPanel() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm">
           <div className="text-zinc-200">{session.user.email ?? session.user.id}</div>
-          <div className="mt-0.5 text-xs text-zinc-500">Lare desktop v{version}</div>
+          <div className="mt-0.5 text-xs text-[var(--text-tertiary)]">Lare desktop v{version}</div>
         </div>
         <div className="flex items-center gap-2">
           <UpdateButton />
@@ -152,7 +152,7 @@ function UpdateButton() {
 function UpdateStatusLine() {
   const state = useUpdateState();
   let text: string | null = null;
-  let tone = "text-zinc-500";
+  let tone = "text-[var(--text-tertiary)]";
   switch (state.status) {
     case "up-to-date":
       text = "You're on the latest version.";

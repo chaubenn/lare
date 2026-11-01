@@ -80,7 +80,7 @@ export function OnboardingPage() {
             Handle
           </Label>
           <div className="mt-1 flex items-center gap-1">
-            <span className="text-zinc-500">@</span>
+            <span className="text-[var(--text-tertiary)]">@</span>
             <Input
               id="ob-handle"
               value={handle}
@@ -114,7 +114,7 @@ export function OnboardingPage() {
         <div className="flex items-center justify-between pt-2">
           <button
             type="button"
-            className="text-xs text-zinc-500 hover:text-zinc-300"
+            className="text-xs text-[var(--text-tertiary)] hover:text-zinc-300"
             onClick={() => void signOut()}
           >
             Sign out

@@ -24,7 +24,7 @@ export function CommentsPreview({
       {totalCount > comments.length && (
         <Link
           to={`/posts/${postId}`}
-          className="block text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+          className="block text-xs text-[var(--text-tertiary)] transition-colors hover:text-zinc-300"
         >
           View all {totalCount} comments
         </Link>

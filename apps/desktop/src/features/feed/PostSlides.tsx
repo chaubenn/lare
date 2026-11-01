@@ -157,7 +157,7 @@ export function PhotoSlide({ image }: { image: FeedImage }) {
     <figure className="relative h-full w-full bg-[var(--surface-sunken)]">
       <img src={image.url} alt={image.caption ?? ""} className="size-full object-contain" />
       {image.caption && (
-        <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 pb-6 pt-8 text-xs text-zinc-100">
+        <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 pb-6 pt-8 text-xs text-[var(--text)]">
           {image.caption}
         </figcaption>
       )}

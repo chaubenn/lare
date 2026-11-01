@@ -73,7 +73,7 @@ export function LeaderboardItem({
         <span className="block text-lg font-semibold leading-none tabular-nums text-[var(--text)]">
           {row.total}
         </span>
-        <span className="text-[11px] text-[var(--text-tertiary)]">solved</span>
+        <span className="text-xs text-[var(--text-tertiary)]">solved</span>
       </p>
     </li>
   );

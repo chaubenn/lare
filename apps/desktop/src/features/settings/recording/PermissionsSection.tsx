@@ -54,13 +54,13 @@ export function PermissionsSection() {
       description="The operating system has to allow Lare to capture before a recording can start."
     >
       {permissions.isError ? <FieldError>{errorMessage(permissions.error)}</FieldError> : null}
-      <ul className="divide-y divide-zinc-800 rounded-lg border border-zinc-800">
+      <ul className="divide-y divide-zinc-800 rounded-[var(--lare-r-2)] border border-[var(--border)]">
         {PERMISSION_ROWS.map((row) => (
           <PermissionRow key={row.which} row={row} status={permissions.data?.[row.key]} />
         ))}
       </ul>
       {macScreenPermission ? (
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 text-xs text-[var(--text-tertiary)]">
           After allowing Screen Recording on macOS, quit and reopen Lare for it to take effect.
         </p>
       ) : null}
@@ -104,7 +104,7 @@ function StaleGrantNotice() {
   });
 
   return (
-    <div className="mt-2 rounded-lg border border-zinc-800 bg-[var(--surface-raised)] px-3 py-2.5">
+    <div className="mt-2 rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2.5">
       <p className="text-xs text-zinc-400">
         Switched on in System Settings but still denied? An update can invalidate the permission
         while leaving Lare in the list. Clearing it lets macOS grant it to this build.
@@ -189,10 +189,10 @@ function PermissionRow({
 
   return (
     <li className="flex flex-wrap items-center gap-3 px-3 py-2.5">
-      <Icon className="size-4 shrink-0 text-zinc-500" aria-hidden />
+      <Icon className="size-4 shrink-0 text-[var(--text-tertiary)]" aria-hidden />
       <div className="min-w-0 flex-1">
-        <div className="text-sm text-zinc-100">{row.label}</div>
-        <div className="text-xs text-zinc-500">{row.description}</div>
+        <div className="text-sm text-[var(--text)]">{row.label}</div>
+        <div className="text-xs text-[var(--text-tertiary)]">{row.description}</div>
       </div>
       <PermissionBadge status={status} />
       {showAllow ? (
@@ -228,8 +228,8 @@ function PermissionBadge({ status }: { status: PermissionStatus | undefined }) {
     case "not_determined":
       return <Badge tone="amber">Not allowed yet</Badge>;
     case "not_applicable":
-      return <span className="text-xs text-zinc-500">Not required on this OS</span>;
+      return <span className="text-xs text-[var(--text-tertiary)]">Not required on this OS</span>;
     default:
-      return <span className="text-xs text-zinc-500">Checking…</span>;
+      return <span className="text-xs text-[var(--text-tertiary)]">Checking…</span>;
   }
 }

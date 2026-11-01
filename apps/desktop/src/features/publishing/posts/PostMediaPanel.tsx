@@ -172,7 +172,7 @@ export function PostMediaPanel({
           {images.map((image, index) => (
             <li
               key={image.id}
-              className="overflow-hidden rounded-lg border border-zinc-800 bg-[var(--surface-raised)]"
+              className="overflow-hidden rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)]"
             >
               {image.url ? (
                 <img
@@ -181,11 +181,11 @@ export function PostMediaPanel({
                   className="aspect-video w-full object-cover"
                 />
               ) : (
-                <div className="flex aspect-video items-center justify-center text-xs text-zinc-600">
+                <div className="flex aspect-video items-center justify-center text-xs text-[var(--text-tertiary)]">
                   Unavailable
                 </div>
               )}
-              <div className="flex items-center gap-0.5 border-t border-zinc-800 px-1 py-1">
+              <div className="flex items-center gap-0.5 border-t border-[var(--border)] px-1 py-1">
                 <IconButton
                   label="Move earlier"
                   disabled={busy || index === 0}
@@ -217,7 +217,7 @@ export function PostMediaPanel({
                     { onError: fail("Couldn't save the caption") },
                   );
                 }}
-                className="w-full border-t border-zinc-800 bg-transparent px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+                className="w-full border-t border-[var(--border)] bg-transparent px-2 py-1.5 text-xs text-zinc-200 placeholder:text-[var(--text-tertiary)] focus:outline-none"
               />
             </li>
           ))}
@@ -248,7 +248,7 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "rounded p-1 text-zinc-400 transition-colors hover:text-zinc-100 disabled:opacity-40",
+        "rounded p-1 text-zinc-400 transition-colors hover:text-[var(--text)] disabled:opacity-40",
         danger && "hover:text-rose-300",
       )}
     >

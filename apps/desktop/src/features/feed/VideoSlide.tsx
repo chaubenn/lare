@@ -95,7 +95,7 @@ export function VideoSlide({
       <div
         role="status"
         className={cn(
-          "flex aspect-video flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-800 bg-[var(--surface-raised)] text-sm text-zinc-400",
+          "flex aspect-video flex-col items-center justify-center gap-2 rounded-[var(--lare-r-4)] border border-dashed border-[var(--border)] bg-[var(--surface-raised)] text-sm text-zinc-400",
           className,
         )}
       >
@@ -103,12 +103,14 @@ export function VideoSlide({
           <CircleAlert className="size-6 text-rose-400" />
         ) : (
           <span className="relative inline-flex">
-            <VideoIcon className="size-6 text-zinc-500" />
+            <VideoIcon className="size-6 text-[var(--text-tertiary)]" />
             <LoaderCircle className="absolute -right-2 -top-2 size-3.5 animate-spin text-amber-400" />
           </span>
         )}
         <span>{STATUS_LABEL[status]}</span>
-        {!failed && <span className="text-xs text-zinc-600">Check back in a few minutes.</span>}
+        {!failed && (
+          <span className="text-xs text-[var(--text-tertiary)]">Check back in a few minutes.</span>
+        )}
       </div>
     );
   }
@@ -117,7 +119,7 @@ export function VideoSlide({
     <div
       style={aspect ? { aspectRatio: aspect } : undefined}
       className={cn(
-        "relative overflow-hidden rounded-xl border border-zinc-800 bg-black",
+        "relative overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-black",
         fill ? "h-full" : "aspect-video",
         className,
       )}
@@ -151,7 +153,7 @@ export function VideoSlide({
             <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(240,236,228,0.10),_transparent_65%)]" />
           )}
           <span className="absolute inset-0 flex items-center justify-center">
-            <span className="inline-flex size-14 items-center justify-center rounded-full bg-zinc-950/70 text-zinc-100 ring-1 ring-white/10 backdrop-blur transition-transform group-hover:scale-105">
+            <span className="inline-flex size-14 items-center justify-center rounded-full bg-zinc-950/70 text-[var(--text)] ring-1 ring-white/10 backdrop-blur transition-transform group-hover:scale-105">
               {loading ? (
                 <LoaderCircle className="size-6 animate-spin" />
               ) : (
@@ -160,7 +162,7 @@ export function VideoSlide({
             </span>
           </span>
           {durationMs ? (
-            <span className="absolute bottom-2 right-2 rounded-md bg-zinc-950/70 px-1.5 py-0.5 text-[11px] font-medium text-zinc-200">
+            <span className="absolute bottom-2 right-2 rounded-md bg-zinc-950/70 px-1.5 py-0.5 text-xs font-medium text-zinc-200">
               {formatDurationHuman(durationMs)}
             </span>
           ) : null}

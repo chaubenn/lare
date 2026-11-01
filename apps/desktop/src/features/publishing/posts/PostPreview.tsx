@@ -65,8 +65,8 @@ export function PostPreview({
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">Preview</h2>
-            <p className="text-xs text-zinc-500">
+            <h2 className="text-sm font-semibold text-[var(--text)]">Preview</h2>
+            <p className="text-xs text-[var(--text-tertiary)]">
               {published
                 ? "How this post looks in the feed."
                 : "How this post will look once you publish it."}
@@ -76,23 +76,25 @@ export function PostPreview({
             type="button"
             onClick={onClose}
             aria-label="Close preview"
-            className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-1.5 text-zinc-400 transition-colors hover:text-zinc-100"
+            className="rounded-[var(--lare-r-2)] border border-[var(--border)] bg-zinc-900/60 p-1.5 text-zinc-400 transition-colors hover:text-[var(--text)]"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <article className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)]">
+        <article className="overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]">
           <header className="flex items-center gap-3 p-4 pb-3 sm:px-5">
             <Avatar url={profile?.avatar_url} name={name} size={40} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-x-2">
-                <span className="truncate text-sm font-semibold text-zinc-100">{name}</span>
+                <span className="truncate text-sm font-semibold text-[var(--text)]">{name}</span>
                 {profile?.handle && profile.display_name && (
-                  <span className="truncate text-xs text-zinc-500">@{profile.handle}</span>
+                  <span className="truncate text-xs text-[var(--text-tertiary)]">
+                    @{profile.handle}
+                  </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
+              <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
                 <span>{formatLocalTimestamp(when)}</span>
                 {visibility === "private" && (
                   <>
@@ -108,7 +110,7 @@ export function PostPreview({
           </header>
 
           <div className="px-4 sm:px-5">
-            <h3 className="text-base font-semibold leading-snug text-zinc-50">{shown}</h3>
+            <h3 className="text-base font-semibold leading-snug text-[var(--text)]">{shown}</h3>
             {body.trim() && (
               <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-400">
                 {body.trim()}

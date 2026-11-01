@@ -172,7 +172,7 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
       {draft.video_id && video.data ? (
         <div className="space-y-3">
           <VideoEmbed video={video.data} title={draft.title ?? "Demo video"} />
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-[var(--text-tertiary)]">
             {draft.video_kind === "highlights" ? "Highlights reel" : "Full recording"}
             {video.data.duration_ms ? ` · ${Math.round(video.data.duration_ms / 1000)}s` : ""}
           </p>
@@ -258,7 +258,7 @@ function SummaryVideoPanel({ draft }: { draft: Draft }) {
       {draft.demo_video_id && video.data ? (
         <div className="space-y-3">
           <VideoEmbed video={video.data} title="Summary video" />
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-[var(--text-tertiary)]">
             Plays before the full recording
             {video.data.duration_ms ? ` · ${Math.round(video.data.duration_ms / 1000)}s` : ""}
           </p>
@@ -310,7 +310,7 @@ function JobProgress({
   return (
     <div className="space-y-2">
       <p className="text-sm text-zinc-300">{label}</p>
-      <p className="text-xs text-zinc-500">{detail ?? "Working…"}</p>
+      <p className="text-xs text-[var(--text-tertiary)]">{detail ?? "Working…"}</p>
       {percent !== null ? <Progress value={percent} label={label} /> : null}
     </div>
   );
@@ -396,7 +396,7 @@ function RecordControls({
         </Button>
       </div>
       {recordingBusy ? (
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-[var(--text-tertiary)]">
           A recording is in progress — stop it from the pill first.
         </p>
       ) : null}

@@ -180,7 +180,7 @@ export function ActivityChart({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface)_60%,transparent)] p-0.5 text-[11px]">
+          <div className="flex rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface)_60%,transparent)] p-0.5 text-xs">
             {(["day", "week"] as const).map((m) => (
               <button
                 key={m}

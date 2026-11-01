@@ -182,7 +182,7 @@ function SessionReview({ session }: { session: SessionDetail }) {
     <div className="space-y-5">
       <header>
         <div className="flex items-start justify-between gap-4">
-          <h1 className="select-text text-2xl font-semibold text-zinc-50">{title}</h1>
+          <h1 className="select-text text-2xl font-semibold text-[var(--text)]">{title}</h1>
           {postLink ? (
             <Link to={postLink.to} className={buttonClass("secondary", "sm")}>
               {postLink.label}
@@ -208,7 +208,7 @@ function SessionReview({ session }: { session: SessionDetail }) {
           <span>{plural(problems.length, "problem")}</span>
         </div>
         {isInterview && !videoPending && !video.data ? (
-          <p className="mt-2 text-xs text-zinc-500">
+          <p className="mt-2 text-xs text-[var(--text-tertiary)]">
             The desktop app uploads the interview after it stops recording.
           </p>
         ) : null}
@@ -223,13 +223,13 @@ function SessionReview({ session }: { session: SessionDetail }) {
               <>
                 <VideoEmbed video={video.data} title={title} startAt={seekTarget ?? undefined} />
                 {video.data.status === "ready" ? (
-                  <p className="mt-1.5 text-xs text-zinc-500">
+                  <p className="mt-1.5 text-xs text-[var(--text-tertiary)]">
                     Seeking re-loads the player at the chosen time.
                   </p>
                 ) : null}
               </>
             ) : videoPending ? (
-              <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-zinc-800 bg-black">
+              <div className="flex aspect-video w-full items-center justify-center rounded-[var(--lare-r-4)] border border-[var(--border)] bg-black">
                 <Spinner label="Loading video…" />
               </div>
             ) : video.isError || latestVideo.isError ? (
@@ -327,8 +327,8 @@ function SessionReview({ session }: { session: SessionDetail }) {
         ) : (
           <Card>
             <SectionTitle>AI review</SectionTitle>
-            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-800 px-4 py-8 text-center">
-              <Sparkles className="size-6 text-zinc-600" aria-hidden />
+            <div className="flex flex-col items-center gap-3 rounded-[var(--lare-r-2)] border border-dashed border-[var(--border)] px-4 py-8 text-center">
+              <Sparkles className="size-6 text-[var(--text-tertiary)]" aria-hidden />
               <p className="max-w-sm text-sm text-zinc-400">
                 Get a graded debrief of this interview: scores for communication, problem solving,
                 code quality, speed and correctness, plus timestamped moments and next steps.
@@ -343,9 +343,11 @@ function SessionReview({ session }: { session: SessionDetail }) {
                 {generate.isPending ? "Generating…" : "Generate AI review"}
               </Button>
               {generate.isPending ? (
-                <p className="text-xs text-zinc-500">This usually takes about a minute.</p>
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  This usually takes about a minute.
+                </p>
               ) : generateBlocked ? (
-                <p className="text-xs text-zinc-500">{generateBlocked}</p>
+                <p className="text-xs text-[var(--text-tertiary)]">{generateBlocked}</p>
               ) : null}
             </div>
           </Card>
@@ -356,7 +358,9 @@ function SessionReview({ session }: { session: SessionDetail }) {
       <section className="space-y-3">
         <SectionTitle>Problems</SectionTitle>
         {problems.length === 0 ? (
-          <p className="text-sm text-zinc-500">No problems were captured in this session.</p>
+          <p className="text-sm text-[var(--text-tertiary)]">
+            No problems were captured in this session.
+          </p>
         ) : (
           problems.map((p) => <ProblemSection key={p.id} problem={p} />)
         )}

@@ -80,7 +80,7 @@ export function LocalPreview({
         title={title}
         onPlaying={() => setProblem(null)}
         style={aspectRatio ? { aspectRatio } : undefined}
-        className="aspect-video w-full rounded-xl border border-zinc-800 bg-black"
+        className="aspect-video w-full rounded-[var(--lare-r-4)] border border-[var(--border)] bg-black"
       />
       {problem ? (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-amber-400">
@@ -98,7 +98,7 @@ export function LocalPreview({
           </Button>
         </div>
       ) : (
-        <p className="flex items-center gap-1.5 text-xs text-zinc-500">
+        <p className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
           <HardDrive className="size-3.5" aria-hidden />
           {status === "failed"
             ? "Local preview. The cloud copy failed to process."

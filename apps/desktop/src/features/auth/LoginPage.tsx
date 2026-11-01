@@ -20,7 +20,7 @@ export function LoginPage() {
   return (
     <WindowScreen className="max-w-sm">
       <div className="mb-8 text-center">
-        <Wordmark className="justify-center text-xl text-zinc-50" markClassName="size-8" />
+        <Wordmark className="justify-center text-xl text-[var(--text)]" markClassName="size-8" />
         <h1 className="mt-6 text-xl font-medium">Sign in to Lare</h1>
         <p className="mt-1 text-sm text-zinc-400">
           Social progress tracking for LeetCode. Log sessions, share what you learned.
@@ -28,7 +28,7 @@ export function LoginPage() {
       </div>
       <LoginForm />
       {!inTauri ? (
-        <p className="mt-6 text-center text-xs text-zinc-600">
+        <p className="mt-6 text-center text-xs text-[var(--text-tertiary)]">
           Running in a browser: OAuth needs the desktop app to receive the callback. Use the email
           code instead.
         </p>
@@ -76,13 +76,13 @@ function LoginForm() {
         Continue with Google
       </Button>
       {waiting ? (
-        <output className="block rounded-lg border border-zinc-800 bg-[var(--surface-raised)] p-3 text-center text-xs text-zinc-300">
+        <output className="block rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)] p-3 text-center text-xs text-zinc-300">
           Finish signing in with {waiting === "github" ? "GitHub" : "Google"} in your browser. This
           window updates automatically.
         </output>
       ) : null}
 
-      <div className="flex items-center gap-3 py-2 text-xs text-zinc-600">
+      <div className="flex items-center gap-3 py-2 text-xs text-[var(--text-tertiary)]">
         <span className="h-px flex-1 bg-zinc-800" />
         or
         <span className="h-px flex-1 bg-zinc-800" />
@@ -165,7 +165,7 @@ function EmailOtpForm() {
         <FieldError>{error}</FieldError>
         <button
           type="button"
-          className="text-xs text-zinc-500 hover:text-zinc-300"
+          className="text-xs text-[var(--text-tertiary)] hover:text-zinc-300"
           onClick={() => {
             setStage("email");
             setCode("");

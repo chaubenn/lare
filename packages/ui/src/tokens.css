@@ -55,6 +55,7 @@
 
   --lare-blur-chrome: 20px;
   --lare-blur-sheet: 30px;
+  --lare-blur-scrim: 4px;
   --lare-material-thin: color-mix(in oklab, var(--lare-ink-2) 52%, transparent);
   --lare-material-thin-blur: 12px;
   --lare-material-regular: color-mix(in oklab, var(--lare-ink-2) 72%, transparent);
@@ -74,6 +75,7 @@
     --lare-material-thick-blur: 0px;
     --lare-blur-chrome: 0px;
     --lare-blur-sheet: 0px;
+    --lare-blur-scrim: 0px;
   }
 }
 

@@ -242,6 +242,15 @@ mod macos {
             let mask: u64 = msg_send![ns, styleMask];
             if mask & NON_ACTIVATING_PANEL == 0 {
                 let _: () = msg_send![ns, setStyleMask: mask | NON_ACTIVATING_PANEL];
+                // The class swap skips NSPanel's init, which is the only place AppKit tells
+                // WindowServer the panel prevents activation, and `setStyleMask:` does not sync it.
+                // Without that tag WindowServer treats the pill as an ordinary window of a Dock
+                // app and keeps it off another app's fullscreen Space (Chrome in fullscreen).
+                let prevents = sel!(_setPreventsActivation:);
+                let responds: BOOL = msg_send![ns, respondsToSelector: prevents];
+                if responds == YES {
+                    let _: () = msg_send![ns, _setPreventsActivation: YES];
+                }
             }
             let _: () = msg_send![ns, setBecomesKeyOnlyIfNeeded: YES];
             let _: () = msg_send![ns, setWorksWhenModal: YES];

@@ -25,7 +25,7 @@ export function RecordingPanel() {
           <SpeechModelSection />
         </div>
       ) : (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-[var(--text-tertiary)]">
           Recording settings are only available in the desktop app.
         </p>
       )}

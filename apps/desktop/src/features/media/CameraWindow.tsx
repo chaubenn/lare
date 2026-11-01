@@ -63,7 +63,7 @@ export function CameraWindow() {
     <div className="flex h-full w-full items-center justify-center p-1">
       <div
         data-tauri-drag-region
-        className="relative size-full overflow-hidden rounded-full border-2 border-zinc-800 bg-zinc-900 shadow-2xl"
+        className="relative size-full overflow-hidden rounded-full border-2 border-[var(--border)] bg-zinc-900 shadow-2xl"
         title="Drag to move"
       >
         <video
@@ -78,12 +78,12 @@ export function CameraWindow() {
           onClick={() => setMirror((m) => !m)}
           title={mirror ? "Un-mirror" : "Mirror"}
           aria-label={mirror ? "Un-mirror camera" : "Mirror camera"}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-950/70 px-2 py-0.5 text-[10px] text-zinc-300 opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-950/70 px-2 py-0.5 text-xs text-zinc-300 opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100"
         >
           {mirror ? "mirrored" : "normal"}
         </button>
         {error ? (
-          <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-[11px] text-rose-300">
+          <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-rose-300">
             {error}
           </div>
         ) : null}

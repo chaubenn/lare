@@ -4349,7 +4349,7 @@ dependencies = [
 
 [[package]]
 name = "lare-desktop"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -4380,6 +4380,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "zvec-rust",
+ "zvec-rust-build",
 ]
 
 [[package]]
@@ -11233,3 +11235,24 @@ dependencies = [
  "syn 2.0.106",
  "winnow 1.0.3",
 ]
+
+[[package]]
+name = "zvec-rust"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ec11541f1f506b528060104d7951b0c4341a5edd98d61e67f28165c19ce707c"
+dependencies = [
+ "zvec-rust-sys",
+]
+
+[[package]]
+name = "zvec-rust-build"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d46d4af74a8a8b8184734e9bd9d81963ccf37e377ae27e7e3d83f8e3d4d83b5"
+
+[[package]]
+name = "zvec-rust-sys"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfd2c31dcadd477a0f6f68865c06f49fd425b26cb04477861abf865461ddb048"

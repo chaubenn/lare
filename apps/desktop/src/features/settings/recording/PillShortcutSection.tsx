@@ -73,7 +73,7 @@ export function PillShortcutSection() {
               {capturing ? (
                 <span className="text-zinc-400">Press the new shortcut… (Esc to cancel)</span>
               ) : off ? (
-                <span className="text-zinc-500">Off</span>
+                <span className="text-[var(--text-tertiary)]">Off</span>
               ) : (
                 <Keycaps accelerator={accelerator} />
               )}
@@ -116,7 +116,7 @@ export function PillShortcutSection() {
             ) : null}
           </div>
           {rejection ? <FieldError>{rejection}</FieldError> : null}
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-[var(--text-tertiary)]">
             The default is {describeAccelerator(DEFAULT_PILL_SHORTCUT, isMac).join(" ")}. It is only
             claimed while a recording is running, so it never gets in the way of other apps the rest
             of the time.

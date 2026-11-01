@@ -19,7 +19,7 @@ export function CommentText({ body }: { body: string }) {
             // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and never reorder
             key={i}
             to={`/u/${segment.handle}`}
-            className="font-medium text-[var(--accent)] hover:underline"
+            className="font-medium text-[var(--accent-text)] hover:underline"
           >
             @{segment.handle}
           </Link>

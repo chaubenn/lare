@@ -51,17 +51,17 @@ export function AiReviewSection({
   return (
     <section
       className={cn(
-        "@container rounded-xl border border-zinc-800 p-4 @2xl:p-5",
+        "@container rounded-[var(--lare-r-4)] border border-[var(--border)] p-4 @2xl:p-5",
         nested ? "bg-[var(--surface-sunken)]" : "bg-[var(--surface-raised)]",
       )}
     >
       <div className="grid gap-5 @4xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <div className="min-w-0">
           <header className="flex items-end justify-between gap-3">
-            <h2 className="text-sm font-medium text-zinc-100">AI interview review</h2>
+            <h2 className="text-sm font-medium text-[var(--text)]">AI interview review</h2>
             <p className="tabular-nums leading-none text-zinc-300">
-              <span className="text-3xl font-semibold text-zinc-50">{review.overall}</span>
-              <span className="text-sm text-zinc-500">/100</span>
+              <span className="text-3xl font-semibold text-[var(--text)]">{review.overall}</span>
+              <span className="text-sm text-[var(--text-tertiary)]">/100</span>
             </p>
           </header>
           <p className="mt-3 select-text text-sm leading-relaxed text-zinc-300">{review.summary}</p>
@@ -73,11 +73,13 @@ export function AiReviewSection({
             return (
               <div
                 key={key}
-                className="rounded-lg border border-[var(--border)] bg-[color-mix(in_oklab,var(--text)_3%,transparent)] px-3 py-2.5"
+                className="rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--text)_3%,transparent)] px-3 py-2.5"
               >
                 <div className="flex items-baseline justify-between gap-2">
                   <dt className="truncate text-xs text-zinc-400">{label}</dt>
-                  <dd className="text-base font-semibold tabular-nums text-zinc-100">{s.score}</dd>
+                  <dd className="text-base font-semibold tabular-nums text-[var(--text)]">
+                    {s.score}
+                  </dd>
                 </div>
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-zinc-800">
                   <div
@@ -92,7 +94,7 @@ export function AiReviewSection({
       </div>
 
       {tabs.length > 0 && active ? (
-        <div className="mt-5 border-t border-zinc-800 pt-4">
+        <div className="mt-5 border-t border-[var(--border)] pt-4">
           <SegmentedTabs
             label="Review detail"
             value={active}
@@ -102,7 +104,7 @@ export function AiReviewSection({
               label: t.label,
               badge:
                 t.badge !== undefined ? (
-                  <span className="tabular-nums text-zinc-500">{t.badge}</span>
+                  <span className="tabular-nums text-[var(--text-tertiary)]">{t.badge}</span>
                 ) : undefined,
             }))}
           />
@@ -116,7 +118,9 @@ export function AiReviewSection({
                   <div key={key}>
                     <dt className="text-sm text-zinc-200">
                       {label}{" "}
-                      <span className="tabular-nums text-zinc-500">{review.scores[key].score}</span>
+                      <span className="tabular-nums text-[var(--text-tertiary)]">
+                        {review.scores[key].score}
+                      </span>
                     </dt>
                     <dd className="mt-0.5 select-text text-sm leading-relaxed text-zinc-400">
                       {review.scores[key].rationale}
@@ -131,7 +135,7 @@ export function AiReviewSection({
                 {review.moments.map((m) => {
                   const body = (
                     <>
-                      <span className="flex items-center gap-2 text-xs text-zinc-500">
+                      <span className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
                         <span
                           aria-hidden
                           className={cn(
@@ -186,14 +190,14 @@ export function AiReviewSection({
                         {formatDuration(it.t_ms)}
                       </button>
                     ) : (
-                      <span className="w-14 shrink-0 font-mono text-xs text-zinc-500">
+                      <span className="w-14 shrink-0 font-mono text-xs text-[var(--text-tertiary)]">
                         {formatDuration(it.t_ms)}
                       </span>
                     )}
                     <div>
                       <span className="text-zinc-200">{it.label}</span>
                       {it.complexity ? (
-                        <span className="ml-2 font-mono text-xs text-zinc-500">
+                        <span className="ml-2 font-mono text-xs text-[var(--text-tertiary)]">
                           {it.complexity}
                         </span>
                       ) : null}

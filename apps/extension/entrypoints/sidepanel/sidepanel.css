@@ -8,10 +8,11 @@
   --font-ui: "Outfit Variable", Outfit, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  --text-xs: 11px;
+  /* Three clear steps (12 / 14 / 16) instead of 11 / 12 / 13 / 15, which sat only ~1.08x apart. */
+  --text-xs: 12px;
   --text-sm: 12px;
-  --text-md: 13px;
-  --text-lg: 15px;
+  --text-md: 14px;
+  --text-lg: 16px;
   --text-timer: 32px;
 
   --space-1: 4px;
@@ -20,7 +21,7 @@
   --space-4: 16px;
   --space-5: 20px;
 
-  --control-h: 34px;
+  --control-h: 36px;
 }
 
 /*
@@ -380,7 +381,7 @@ label.problem:hover {
   position: relative;
   width: 16px;
   height: 16px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--input-border);
   border-radius: 4px;
   background: var(--surface-raised);
 }
@@ -408,7 +409,7 @@ label.problem:hover {
   width: 32px;
   height: 18px;
   border-radius: var(--lare-r-5);
-  background: var(--border-strong);
+  background: var(--input-border);
 }
 .switch::after {
   content: "";
@@ -478,7 +479,7 @@ label.problem:hover {
   flex: 1;
   height: var(--control-h);
   padding: 0 var(--space-3);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--input-border);
   border-radius: var(--lare-r-2);
   background: var(--surface-raised);
   color: var(--text);
@@ -537,7 +538,9 @@ label.problem:hover {
 }
 
 .link {
-  padding: 0;
+  /* A 12px text link is a small target: pad it to ~24px tall and pull the margin back in. */
+  padding: 6px 8px;
+  margin: -6px -8px;
   border: 0;
   background: none;
   color: var(--text-secondary);

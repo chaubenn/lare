@@ -4,7 +4,7 @@ import type { ComponentProps, InputHTMLAttributes, ReactNode, SelectHTMLAttribut
 import { cn } from "../cn";
 
 const CONTROL =
-  "w-full rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] disabled:opacity-50";
+  "w-full rounded-[var(--lare-r-2)] border border-[var(--input-border)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--text-tertiary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] disabled:opacity-50";
 
 export function Label({
   children,

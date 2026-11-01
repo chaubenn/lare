@@ -1,6 +1,6 @@
 [package]
 name = "lare-desktop"
-version = "2.3.0"
+version = "2.4.0"
 description = "Lare desktop app: review drafts, publish posts, and (later) record demo videos and mock interviews."
 edition.workspace = true
 license.workspace = true
@@ -13,6 +13,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Stages Zvec's shared library where the bundler picks it up (see `build.rs`).
+zvec-rust-build = "=0.8.0"
 
 [dependencies]
 # No `protocol-asset`: nothing in the webview uses `asset://` (recordings are previewed over the
@@ -29,6 +31,9 @@ tauri-plugin-notification = "~2.3"
 tauri-plugin-updater = "2"
 # Hides and shows the recorder pill from the keyboard while a recording is running.
 tauri-plugin-global-shortcut = "2"
+# The command palette's local search index (`src/search.rs`). Pinned: the crate is pre-1.0 and
+# its C API has been renamed between minor versions.
+zvec-rust = "=0.8.0"
 
 axum = { version = "0.8", features = ["ws"] }
 # `signal`: SIGINT/SIGTERM/SIGHUP have to release the capture devices (see `src/shutdown.rs`).

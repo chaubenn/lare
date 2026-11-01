@@ -7,13 +7,13 @@ import "./splash.css";
 /** Slow idle spin while the app loads, in degrees per second. */
 const IDLE_DEG_PER_SEC = 55;
 /** The idle spin plays at least this long, so a fast start doesn't flash the animation. */
-const MIN_IDLE_MS = 700;
-const SPIN_MS = 1500;
+const MIN_IDLE_MS = 500;
+const SPIN_MS = 900;
 /** Whole turns added by the speed-up, on top of whatever is needed to land upright. */
-const SPIN_EXTRA_TURNS = 2;
-const REVEAL_MS = 800;
-const SHINE_MS = 1000;
-const EXIT_MS = 400;
+const SPIN_EXTRA_TURNS = 1;
+const REVEAL_MS = 500;
+const SHINE_MS = 600;
+const EXIT_MS = 300;
 
 type Phase = "idle" | "spin" | "reveal" | "shine" | "exit" | "done";
 
@@ -97,6 +97,22 @@ export function Splash() {
     const id = setTimeout(() => setPhase(step[0]), step[1]);
     return () => clearTimeout(id);
   }, [phase]);
+
+  // The splash covers the app, so it must never be a wait: any key or click goes straight to the
+  // fade-out, whichever step it is on. (It cannot be skipped before the app is ready; then there
+  // is nothing underneath yet.)
+  useEffect(() => {
+    if (phase === "exit" || phase === "done") return;
+    const skip = () => {
+      if (appReady) setPhase("exit");
+    };
+    window.addEventListener("keydown", skip);
+    window.addEventListener("pointerdown", skip);
+    return () => {
+      window.removeEventListener("keydown", skip);
+      window.removeEventListener("pointerdown", skip);
+    };
+  }, [phase, appReady]);
 
   if (phase === "done") return null;
 

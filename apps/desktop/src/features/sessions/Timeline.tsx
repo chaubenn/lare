@@ -19,6 +19,27 @@ const TONE_BG: Record<MarkerTone, string> = {
   sky: "bg-sky-400",
 };
 
+/**
+ * Colour is never the only signal: each outcome also has its own shape, so the markers still read
+ * for anyone who cannot tell the colours apart. Submissions use a square and a triangle; the AI's
+ * moments use a circle (good), a triangle (issue) and a diamond (suggestion).
+ */
+type MarkerShape = "square" | "circle" | "triangle" | "diamond";
+
+const SHAPE_CLASS: Record<MarkerShape, string> = {
+  square: "rounded-[3px]",
+  circle: "rounded-full",
+  triangle: "[clip-path:polygon(50%_6%,100%_94%,0_94%)]",
+  diamond: "rotate-45 scale-90 rounded-[2px]",
+};
+
+type Lane = "submission" | "moment";
+
+function shapeFor(lane: Lane, tone: MarkerTone): MarkerShape {
+  if (lane === "submission") return tone === "rose" ? "triangle" : "square";
+  return tone === "rose" ? "triangle" : tone === "sky" ? "diamond" : "circle";
+}
+
 /** The thumb is 14px wide, so its centre travels from 7px to (width - 7px). */
 const THUMB = 14;
 const HALF = THUMB / 2;
@@ -41,12 +62,12 @@ function positionStyle(t: number, duration: number): CSSProperties {
 function MarkerLane({
   markers,
   duration,
-  shape,
+  lane,
   onSeek,
 }: {
   markers: readonly TimelineMarker[];
   duration: number;
-  shape: "square" | "dot";
+  lane: Lane;
   onSeek: (t: number) => void;
 }) {
   return (
@@ -60,8 +81,8 @@ function MarkerLane({
           onClick={() => onSeek(m.t)}
           style={positionStyle(m.t, duration)}
           className={cn(
-            "absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-150 focus-visible:scale-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
-            shape === "dot" ? "rounded-full" : "rounded-[3px]",
+            "absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-150 focus-visible:scale-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+            SHAPE_CLASS[shapeFor(lane, m.tone)],
             TONE_BG[m.tone],
           )}
         />
@@ -70,20 +91,12 @@ function MarkerLane({
   );
 }
 
-function LegendItem({
-  tone,
-  shape,
-  label,
-}: {
-  tone: MarkerTone;
-  shape: "square" | "dot";
-  label: string;
-}) {
+function LegendItem({ tone, lane, label }: { tone: MarkerTone; lane: Lane; label: string }) {
   return (
     <span className="inline-flex items-center gap-1">
       <span
         aria-hidden
-        className={cn("size-2", shape === "dot" ? "rounded-full" : "rounded-[2px]", TONE_BG[tone])}
+        className={cn("size-2.5", SHAPE_CLASS[shapeFor(lane, tone)], TONE_BG[tone])}
       />
       {label}
     </span>
@@ -92,7 +105,7 @@ function LegendItem({
 
 /**
  * Master timeline for the review page: a scrubber over the whole session plus marker lanes for
- * submissions (squares) and AI moments (dots).
+ * submissions and AI moments, each outcome with its own shape.
  *
  *  - Dragging the scrubber calls `onScrub` continuously (code + transcript follow live).
  *  - Releasing it, or clicking a marker, calls `onSeek` (which also re-positions the video).
@@ -120,10 +133,10 @@ export function Timeline({
   const momentTones = new Set(moments.map((m) => m.tone));
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-[var(--surface-raised)] px-4 py-3">
+    <div className="rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-3">
       <div className="flex items-center justify-between font-mono text-xs tabular-nums">
         <span className="text-emerald-400">{formatMediaTime(value)}</span>
-        <span className="text-zinc-500">{formatMediaTime(duration)}</span>
+        <span className="text-[var(--text-tertiary)]">{formatMediaTime(duration)}</span>
       </div>
 
       <div className="relative mt-2 h-3.5">
@@ -160,20 +173,22 @@ export function Timeline({
             style={positionStyle(value, max)}
           />
           {submissions.length > 0 ? (
-            <MarkerLane markers={submissions} duration={max} shape="square" onSeek={onSeek} />
+            <MarkerLane markers={submissions} duration={max} lane="submission" onSeek={onSeek} />
           ) : null}
           {moments.length > 0 ? (
-            <MarkerLane markers={moments} duration={max} shape="dot" onSeek={onSeek} />
+            <MarkerLane markers={moments} duration={max} lane="moment" onSeek={onSeek} />
           ) : null}
         </div>
       ) : null}
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500">
-        {hasAccepted ? <LegendItem tone="emerald" shape="square" label="Accepted" /> : null}
-        {hasRejected ? <LegendItem tone="rose" shape="square" label="Not accepted" /> : null}
-        {momentTones.has("emerald") ? <LegendItem tone="emerald" shape="dot" label="Good" /> : null}
-        {momentTones.has("rose") ? <LegendItem tone="rose" shape="dot" label="Issue" /> : null}
-        {momentTones.has("sky") ? <LegendItem tone="sky" shape="dot" label="Suggestion" /> : null}
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-tertiary)]">
+        {hasAccepted ? <LegendItem tone="emerald" lane="submission" label="Accepted" /> : null}
+        {hasRejected ? <LegendItem tone="rose" lane="submission" label="Not accepted" /> : null}
+        {momentTones.has("emerald") ? (
+          <LegendItem tone="emerald" lane="moment" label="Good" />
+        ) : null}
+        {momentTones.has("rose") ? <LegendItem tone="rose" lane="moment" label="Issue" /> : null}
+        {momentTones.has("sky") ? <LegendItem tone="sky" lane="moment" label="Suggestion" /> : null}
         {submissions.length === 0 && moments.length === 0 ? (
           <span>Drag to scrub the code and transcript; release to move the video.</span>
         ) : (

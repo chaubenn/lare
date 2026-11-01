@@ -57,8 +57,11 @@ export function VideoEmbed({
   if (video.status === "ready" && video.bunny_video_id) {
     if (playback.isPending) {
       return (
-        <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-zinc-800 bg-black">
-          <LoaderCircle className="size-5 animate-spin text-zinc-500" aria-label="Loading player" />
+        <div className="flex aspect-video w-full items-center justify-center rounded-[var(--lare-r-4)] border border-[var(--border)] bg-black">
+          <LoaderCircle
+            className="size-5 animate-spin text-[var(--text-tertiary)]"
+            aria-label="Loading player"
+          />
         </div>
       );
     }
@@ -70,7 +73,7 @@ export function VideoEmbed({
       startAt !== undefined && Number.isFinite(startAt) ? Math.max(0, Math.floor(startAt)) : null;
     const src = start === null ? base : `${base}${base.includes("?") ? "&" : "?"}t=${start}s`;
     return (
-      <div className="overflow-hidden rounded-xl border border-zinc-800 bg-black">
+      <div className="overflow-hidden rounded-[var(--lare-r-4)] border border-[var(--border)] bg-black">
         <iframe
           key={start === null ? "start" : `t-${start}`}
           title={title}
@@ -85,8 +88,8 @@ export function VideoEmbed({
     );
   }
   return (
-    <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-800 bg-[var(--surface-raised)] text-center">
-      <VideoIcon className="size-6 text-zinc-600" aria-hidden />
+    <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-[var(--lare-r-4)] border border-dashed border-[var(--border)] bg-[var(--surface-raised)] text-center">
+      <VideoIcon className="size-6 text-[var(--text-tertiary)]" aria-hidden />
       <p className="text-sm text-zinc-400">{STATUS_TEXT[video.status] || "Video unavailable."}</p>
       {video.error ? <p className="max-w-sm text-xs text-rose-400">{video.error}</p> : null}
     </div>

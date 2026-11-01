@@ -66,15 +66,17 @@ export function CodeTimeline({
                 aria-selected={active}
                 onClick={() => setSelectedId(p.id)}
                 className={cn(
-                  "inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors",
+                  "inline-flex max-w-full items-center gap-1.5 rounded-[var(--lare-r-2)] border px-2.5 py-1 text-xs transition-colors",
                   active
-                    ? "border-zinc-700 bg-zinc-800 text-zinc-100"
-                    : "border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200",
+                    ? "border-zinc-700 bg-zinc-800 text-[var(--text)]"
+                    : "border-[var(--border)] text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200",
                 )}
               >
                 <span className="truncate">{p.title}</span>
                 <DifficultyBadge difficulty={p.difficulty} />
-                {!p.edits_path ? <span className="text-zinc-600">(no edits)</span> : null}
+                {!p.edits_path ? (
+                  <span className="text-[var(--text-tertiary)]">(no edits)</span>
+                ) : null}
               </button>
             );
           })}
@@ -110,8 +112,8 @@ export function CodeTimeline({
 
 function Placeholder({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-800 px-4 py-8 text-center">
-      <FileCode2 className="size-5 text-zinc-600" aria-hidden />
+    <div className="flex flex-col items-center gap-2 rounded-[var(--lare-r-2)] border border-dashed border-[var(--border)] px-4 py-8 text-center">
+      <FileCode2 className="size-5 text-[var(--text-tertiary)]" aria-hidden />
       <p className="text-sm text-zinc-400">{children}</p>
     </div>
   );
@@ -168,7 +170,7 @@ function LogView({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-tertiary)]">
         <span>
           edits: {log.events.length}
           {" · "}
