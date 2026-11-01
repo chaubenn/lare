@@ -84,6 +84,8 @@ export const ExtToAppSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.pause"), sessionId: z.string(), at: z.number() }),
   z.object({ type: z.literal("session.resume"), sessionId: z.string(), at: z.number() }),
   z.object({ type: z.literal("session.end"), sessionId: z.string(), at: z.number() }),
+  /** Throw the recording away: the interview was discarded rather than ended. */
+  z.object({ type: z.literal("session.cancel"), sessionId: z.string(), at: z.number() }),
   ProblemOpenSchema,
   EditsBatchSchema,
   SubmissionMsgSchema,

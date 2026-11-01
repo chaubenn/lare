@@ -49,7 +49,8 @@ export function App() {
   const [email, setEmail] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
-  const [confirmEnd, setConfirmEnd] = useState(false);
+  /** Which of the interview's two endings is waiting to be confirmed. */
+  const [confirmFinish, setConfirmFinish] = useState<"end" | "discard" | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [facecam, setFacecam] = useState(false);
   const [graded, setGraded] = useState(true);
@@ -167,7 +168,7 @@ export function App() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is the trigger
   useEffect(() => {
-    setConfirmEnd(false);
+    setConfirmFinish(null);
   }, [sessionId]);
 
   // A live interview is what the panel is for until it ends.
@@ -481,33 +482,59 @@ export function App() {
                         Resume
                       </button>
                     )}
-                    {!confirmEnd && status !== "ended" ? (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={busy}
-                        onClick={() => setConfirmEnd(true)}
-                      >
-                        End &amp; save
-                      </button>
+                    {!confirmFinish && status !== "ended" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={busy}
+                          onClick={() => setConfirmFinish("discard")}
+                        >
+                          Discard
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={busy}
+                          onClick={() => setConfirmFinish("end")}
+                        >
+                          End &amp; save
+                        </button>
+                      </>
                     ) : null}
                   </div>
-                  {confirmEnd && (
-                    <div className="confirm-sheet" role="dialog" aria-label="End mock interview">
-                      <p>End and save this mock interview?</p>
+                  {confirmFinish && (
+                    <div
+                      className="confirm-sheet"
+                      role="dialog"
+                      aria-label={
+                        confirmFinish === "end" ? "End mock interview" : "Discard mock interview"
+                      }
+                    >
+                      <p>
+                        {confirmFinish === "end"
+                          ? "End and save this mock interview?"
+                          : "Discard this mock interview? The recording is deleted and nothing is saved."}
+                      </p>
                       <div className="row">
                         <button
                           type="button"
                           className="btn btn-danger"
                           disabled={busy}
                           onClick={() => {
-                            setConfirmEnd(false);
-                            void run(() => sendRuntime({ type: "END_SESSION" }));
+                            const type =
+                              confirmFinish === "end" ? "END_SESSION" : "DISCARD_SESSION";
+                            setConfirmFinish(null);
+                            void run(() => sendRuntime({ type }));
                           }}
                         >
-                          Confirm end
+                          {confirmFinish === "end" ? "Confirm end" : "Confirm discard"}
                         </button>
-                        <button type="button" className="btn" onClick={() => setConfirmEnd(false)}>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setConfirmFinish(null)}
+                        >
                           Cancel
                         </button>
                       </div>

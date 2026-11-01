@@ -147,6 +147,8 @@ export interface RecorderEvents {
   "recording:completed": CompletedRecording;
   /** Whether the facecam preview window should be holding the webcam open. */
   "camera:active": boolean;
+  /** The pointer over the pill window, in points from its top-left; `null` off it. */
+  "recorder:pointer": [number, number] | null;
   "upload:progress": { jobId: string; uploaded: number; total: number };
   "transcribe:progress":
     | { stage: "download"; jobId: string; received: number; total: number | null }

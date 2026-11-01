@@ -39,6 +39,8 @@ pub trait RecordingBackend: Send + Sync {
     fn resume(&self, hub: &WsHub, session_id: &str, at: u64);
     /// The session ended (`session.end`): finish the recording and hand it to the upload pipeline.
     fn stop(&self, hub: &WsHub, session_id: &str, at: u64);
+    /// The session was discarded (`session.cancel`): stop the recording and delete it.
+    fn cancel(&self, hub: &WsHub, session_id: &str, at: u64);
     /// Whether screen recording permission is granted and devices are available right now.
     /// Reported to the extension as `hello.ack.recordingCapable`.
     fn capable(&self) -> bool {

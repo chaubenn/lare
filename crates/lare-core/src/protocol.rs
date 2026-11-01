@@ -88,6 +88,9 @@ pub enum ExtToApp {
     SessionResume { session_id: String, at: u64 },
     #[serde(rename = "session.end", rename_all = "camelCase")]
     SessionEnd { session_id: String, at: u64 },
+    /// The interview was discarded: stop the recording and throw it away.
+    #[serde(rename = "session.cancel", rename_all = "camelCase")]
+    SessionCancel { session_id: String, at: u64 },
     #[serde(rename = "problem.open", rename_all = "camelCase")]
     ProblemOpen {
         session_id: String,

@@ -55,6 +55,8 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("PAUSE_SESSION") }),
   z.object({ type: z.literal("RESUME_SESSION") }),
   z.object({ type: z.literal("END_SESSION") }),
+  /** Close the interview and throw its recording away, without saving anything. */
+  z.object({ type: z.literal("DISCARD_SESSION") }),
   z.object({
     type: z.literal("PROBLEM_OPENED"),
     problem: ProblemInfoSchema,

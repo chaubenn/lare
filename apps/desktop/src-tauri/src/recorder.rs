@@ -862,6 +862,16 @@ impl RecordingBackend for CapRecordingBackend {
         });
     }
 
+    fn cancel(&self, hub: &WsHub, _session_id: &str, _at: u64) {
+        let recorder = self.recorder.clone();
+        let hub = hub.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = recorder.cancel(Some(&hub)).await {
+                warn!(%e, "cancel failed");
+            }
+        });
+    }
+
     fn capable(&self) -> bool {
         self.recorder.permissions().recording_capable()
     }

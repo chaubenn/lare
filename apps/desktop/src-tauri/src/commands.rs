@@ -168,19 +168,26 @@ pub async fn recording_start(rec: Rec<'_>, req: DemoStart) -> Result<StatePayloa
         .await
 }
 
+// Pause, resume, stop and cancel come from the pill, which drives mock interviews too. The hub
+// tells the extension, so it can keep the interview timer it owns in step (or close the session).
+// Demo takes have no session id, and the extension ignores a `recording.state` frame that is not
+// about its own session.
 #[tauri::command]
-pub async fn recording_pause(rec: Rec<'_>) -> Result<StatePayload, String> {
-    rec.pause(None).await
+pub async fn recording_pause(
+    rec: Rec<'_>,
+    state: State<'_, crate::AppState>,
+) -> Result<StatePayload, String> {
+    rec.pause(Some(&state.ws)).await
 }
 
 #[tauri::command]
-pub async fn recording_resume(rec: Rec<'_>) -> Result<StatePayload, String> {
-    rec.resume(None).await
+pub async fn recording_resume(
+    rec: Rec<'_>,
+    state: State<'_, crate::AppState>,
+) -> Result<StatePayload, String> {
+    rec.resume(Some(&state.ws)).await
 }
 
-// Stop and cancel come from the pill, which also ends mock interviews now. The hub tells the
-// extension, so it can close the interview session it owns. Demo takes have no session id, and
-// the extension ignores a `recording.state` frame that is not about its own session.
 #[tauri::command]
 pub async fn recording_stop(
     app: AppHandle,

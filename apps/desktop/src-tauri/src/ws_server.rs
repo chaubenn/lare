@@ -568,6 +568,11 @@ fn handle_frame(ctx: &ServerContext, tx: &mpsc::UnboundedSender<AppToExt>, raw: 
                 backend.stop(&ctx.hub, &session_id, at);
             }
         }
+        ExtToApp::SessionCancel { session_id, at } => {
+            if let Some(backend) = ctx.recording_backend() {
+                backend.cancel(&ctx.hub, &session_id, at);
+            }
+        }
         // Practice sessions, problem/edit/submission frames only need to reach the frontend.
         ExtToApp::SessionStart { .. }
         | ExtToApp::ProblemOpen { .. }
@@ -803,6 +808,7 @@ mod tests {
     struct FakeRecorder {
         started: Mutex<Vec<RecordingRequest>>,
         stopped: Mutex<Vec<String>>,
+        cancelled: Mutex<Vec<String>>,
     }
 
     impl RecordingBackend for FakeRecorder {
@@ -813,6 +819,9 @@ mod tests {
         fn resume(&self, _hub: &WsHub, _session_id: &str, _at: u64) {}
         fn stop(&self, _hub: &WsHub, session_id: &str, _at: u64) {
             self.stopped.lock().unwrap().push(session_id.to_string());
+        }
+        fn cancel(&self, _hub: &WsHub, session_id: &str, _at: u64) {
+            self.cancelled.lock().unwrap().push(session_id.to_string());
         }
     }
 
@@ -840,6 +849,11 @@ mod tests {
             vec![RecordingRequest { session_id: "s9".into(), started_at: 42, facecam: true, mic: true }]
         );
         assert_eq!(*recorder.stopped.lock().unwrap(), vec!["s9".to_string()]);
+        assert!(recorder.cancelled.lock().unwrap().is_empty());
+
+        send_json(&mut client, json!({ "type": "session.cancel", "sessionId": "s9", "at": 60u64 })).await;
+        let _ = next_event(&mut server.events).await; // forwarded cancel
+        assert_eq!(*recorder.cancelled.lock().unwrap(), vec!["s9".to_string()]);
     }
 
     #[tokio::test]

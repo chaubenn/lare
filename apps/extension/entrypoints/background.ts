@@ -248,6 +248,9 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
     case "END_SESSION":
       return endSession();
 
+    case "DISCARD_SESSION":
+      return discardFromPanel();
+
     case "PROBLEM_OPENED":
       return problemOpened(req.problem, req.question, sourceTabId);
 
@@ -428,12 +431,20 @@ async function showIndicator(tabId: number): Promise<boolean> {
   return false;
 }
 
-async function pauseOrResume(type: "pause" | "resume"): Promise<RuntimeResponse> {
+/**
+ * Pause or resume the interview timer. `fromDesktop` is the desktop pill having already paused or
+ * resumed the recording, so the timer only follows it.
+ */
+async function pauseOrResume(
+  type: "pause" | "resume",
+  fromDesktop = false,
+): Promise<RuntimeResponse> {
   const current = await loadState();
   if (!current.interview || timerStatus(current.interview.events) === "ended")
     throw new Error("No live interview");
   const now = Date.now();
-  desktop.send({ type: `session.${type}`, sessionId: current.interview.sessionId, at: now });
+  if (!fromDesktop)
+    desktop.send({ type: `session.${type}`, sessionId: current.interview.sessionId, at: now });
   const result = await withState(async (s) => {
     if (!s.interview) return { state: s, result: null };
     const status = timerStatus(s.interview.events);
@@ -905,9 +916,14 @@ async function onDesktopMessage(msg: AppToExt): Promise<void> {
   if (msg.state === "recording" || msg.state === "paused" || msg.state === "stopping")
     await setRecording(msg.state, msg.message);
   // The desktop pill can finish an interview on its own. Once the side panel has ended it there is
-  // nothing to do: `ending` is in flight, or the session already carries its end event (a save
-  // that failed and waits to be retried).
-  if (ending || timerStatus(interview.events) === "ended") return;
+  // nothing to do: `ending` or `discarding` is in flight, or the session already carries its end
+  // event (a save that failed and waits to be retried).
+  if (ending || discarding || timerStatus(interview.events) === "ended") return;
+  // Pause and resume from the pill: the recording already did it, so the timer follows. A frame
+  // that only echoes the side panel's own pause or resume finds the timer there already.
+  const status = timerStatus(interview.events);
+  if (msg.state === "paused" && status === "running") await pauseOrResume("pause", true);
+  else if (msg.state === "recording" && status === "paused") await pauseOrResume("resume", true);
   // End: stop comes first, so save the session exactly as the side panel's End button would. The
   // `session.end` that sends is answered from the recorder's last result, not stopped twice.
   if (msg.state === "stopping") void endSession();
@@ -915,7 +931,24 @@ async function onDesktopMessage(msg: AppToExt): Promise<void> {
   else if (msg.state === "idle") await discardSession(interview);
 }
 
-/** The take was thrown away from the desktop pill: close the interview without a recording. */
+let discarding: Promise<RuntimeResponse> | null = null;
+/** Discard from the side panel: the desktop throws the recording away, the session closes here. */
+function discardFromPanel(): Promise<RuntimeResponse> {
+  discarding ??= (async () => {
+    const { interview } = await loadState();
+    if (!interview || timerStatus(interview.events) === "ended")
+      throw new Error("No live interview");
+    // The `idle` frame this answers with is ignored while `discarding` is set.
+    desktop.send({ type: "session.cancel", sessionId: interview.sessionId, at: Date.now() });
+    await discardSession(interview);
+    return { ok: true, ...(await snapshot()) } satisfies RuntimeResponse;
+  })().finally(() => {
+    discarding = null;
+  });
+  return discarding;
+}
+
+/** The take was thrown away: close the interview without a recording. */
 async function discardSession(interview: ActiveSession): Promise<void> {
   if (interview.tabId !== null)
     await chrome.tabs

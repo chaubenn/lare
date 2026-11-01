@@ -149,8 +149,12 @@ fn target_work_area(app: &AppHandle, display_id: Option<&str>) -> WorkArea {
         .unwrap_or(WorkArea { x: 0.0, y: 0.0, w: 1440.0, h: 900.0 })
 }
 
-/// The pill itself is 52pt tall; the rest is transparent room for its shadow.
-const RECORDER_SIZE: (f64, f64) = (464.0, 72.0);
+/// Transparent room above the pill for its tooltips. The window keeps it the whole time, and the
+/// pointer watch lets clicks through it (see [`start_pointer_watch`]).
+const TOOLTIP_ROOM: f64 = 34.0;
+/// The pill itself is 52pt tall, sitting in the bottom 72pt with room for its shadow; the
+/// tooltip room is on top of that.
+const RECORDER_SIZE: (f64, f64) = (464.0, 72.0 + TOOLTIP_ROOM);
 const CAMERA_SIZE: f64 = 220.0;
 const EDGE_MARGIN: f64 = 16.0;
 
@@ -289,6 +293,48 @@ mod macos {
         let _: () = msg_send![ns, setCollectionBehavior: OVERLAY_BEHAVIOR];
     }
 
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGRect {
+        origin: CGPoint,
+        size: CGSize,
+    }
+    unsafe impl objc::Encode for CGPoint {
+        fn encode() -> objc::Encoding {
+            unsafe { objc::Encoding::from_str("{CGPoint=dd}") }
+        }
+    }
+    unsafe impl objc::Encode for CGRect {
+        fn encode() -> objc::Encoding {
+            unsafe { objc::Encoding::from_str("{CGRect={CGPoint=dd}{CGSize=dd}}") }
+        }
+    }
+
+    /// Where the pointer is over the window, in points from its top-left, or `None` off it.
+    pub unsafe fn pointer_in(ns: *mut Object) -> Option<(f64, f64)> {
+        if ns.is_null() {
+            return None;
+        }
+        let event = Class::get("NSEvent")?;
+        let at: CGPoint = msg_send![event, mouseLocation];
+        let frame: CGRect = msg_send![ns, frame];
+        let x = at.x - frame.origin.x;
+        let y = frame.origin.y + frame.size.height - at.y;
+        (x >= 0.0 && y >= 0.0 && x < frame.size.width && y < frame.size.height).then_some((x, y))
+    }
+
     /// Order the panel in front of everything without making it key or activating Lare.
     pub unsafe fn order_in(ns: *mut Object) {
         if ns.is_null() {
@@ -369,6 +415,97 @@ fn start_overlay_watchdog(app: &AppHandle) {
     });
 }
 
+static POINTER_WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Event carrying the pointer's position over the pill window, in points from its top-left
+/// (`null` when it is off the window).
+const POINTER_EVENT: &str = "recorder:pointer";
+
+/// While the pill is up, follow the pointer over it.
+///
+/// Two jobs. The window is taller than the pill, to leave room for tooltips, and a transparent
+/// window still takes the clicks meant for the page behind it; so the window ignores the mouse
+/// unless the pointer is on the pill itself. And on macOS the pill is a non-activating panel, never
+/// the key window, where WebKit tracks no hover while overlay scrollbars are on (the default), so
+/// the webview is told where the pointer is instead.
+fn start_pointer_watch(app: &AppHandle) {
+    if POINTER_WATCH_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let mut last: Option<(i32, i32)> = None;
+        let mut ignoring: Option<bool> = None;
+        loop {
+            std::thread::sleep(Duration::from_millis(50));
+            let at = on_main(&app, |app| {
+                let Some(w) = app.get_webview_window(RECORDER_LABEL) else {
+                    return Ok(None);
+                };
+                if !w.is_visible().unwrap_or(false) {
+                    return Ok(None);
+                }
+                Ok(Some(pointer_over(&w)))
+            });
+            // The pill is gone (or the app is quitting), so the watch ends with it. It starts out
+            // taking the mouse again next time.
+            let Ok(Some(at)) = at else {
+                if let Some(w) = app.get_webview_window(RECORDER_LABEL) {
+                    let _ = w.set_ignore_cursor_events(false);
+                }
+                if last.is_some() {
+                    let _ = app.emit_to(RECORDER_LABEL, POINTER_EVENT, None::<(i32, i32)>);
+                }
+                break;
+            };
+            let on_pill = at.is_some_and(|(_, y)| y >= TOOLTIP_ROOM);
+            if ignoring != Some(!on_pill) {
+                if let Some(w) = app.get_webview_window(RECORDER_LABEL) {
+                    let _ = w.set_ignore_cursor_events(!on_pill);
+                }
+                ignoring = Some(!on_pill);
+            }
+            let at = at.map(|(x, y)| (x.round() as i32, y.round() as i32));
+            if at != last {
+                let _ = app.emit_to(RECORDER_LABEL, POINTER_EVENT, at);
+                last = at;
+            }
+        }
+        POINTER_WATCH_RUNNING.store(false, Ordering::SeqCst);
+        // Shown again while this was on its way out: its own start found the watch still running.
+        let shown = on_main(&app, |app| {
+            Ok(app
+                .get_webview_window(RECORDER_LABEL)
+                .is_some_and(|w| w.is_visible().unwrap_or(false)))
+        });
+        if shown.unwrap_or(false) {
+            start_pointer_watch(&app);
+        }
+    });
+}
+
+/// Where the pointer is over the window, in points from its top-left, or `None` off it. Main
+/// thread only.
+fn pointer_over(w: &tauri::WebviewWindow) -> Option<(f64, f64)> {
+    #[cfg(target_os = "macos")]
+    {
+        let ptr = w.ns_window().ok()?;
+        // SAFETY: on the main thread with a live NSWindow owned by tao.
+        unsafe { macos::pointer_in(ptr.cast()) }
+    }
+    // Physical pixels on both sides: the cursor and the window share the desktop's coordinates.
+    #[cfg(not(target_os = "macos"))]
+    {
+        let cursor = w.cursor_position().ok()?;
+        let pos = w.outer_position().ok()?;
+        let size = w.outer_size().ok()?;
+        let scale = w.scale_factor().ok()?;
+        let (x, y) = (cursor.x - pos.x as f64, cursor.y - pos.y as f64);
+        (x >= 0.0 && y >= 0.0 && x < size.width as f64 && y < size.height as f64)
+            .then_some((x / scale, y / scale))
+    }
+}
+
 /// Whether a shortcut is safe to claim system-wide: a function key, or any key held with a
 /// modifier other than Shift. Anything else would swallow ordinary typing for as long as a
 /// recording runs. The settings page enforces the same rule when it captures a chord.
@@ -442,6 +579,7 @@ pub fn toggle_recorder(app: &AppHandle) {
             let _ = w.hide();
         } else if show_overlay(&w).is_ok() {
             start_overlay_watchdog(app);
+            start_pointer_watch(app);
         }
     });
 }
@@ -468,6 +606,7 @@ pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), St
             let _ = w.set_position(LogicalPosition::new(x, y));
             show_overlay(&w)?;
             start_overlay_watchdog(app);
+            start_pointer_watch(app);
             return Ok(());
         }
         let (w, h) = RECORDER_SIZE;
@@ -488,6 +627,7 @@ pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), St
         prepare_overlay(&window);
         show_overlay(&window)?;
         start_overlay_watchdog(app);
+        start_pointer_watch(app);
         Ok(())
     })
 }

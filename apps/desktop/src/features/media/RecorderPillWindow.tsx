@@ -1,15 +1,16 @@
 /**
  * The always-on-top recorder pill (`?window=recorder`). Shows the live timer and lets the user
- * pause/resume, stop or discard. Mock interviews get the same pill without pause: the interview
- * timer lives in the extension, and its pause is the one that counts. State comes from `recording:state` events; the initial state is
- * fetched on mount so the pill is correct even if it opened after the recording started.
+ * pause/resume, stop, discard or hide it. Mock interviews get the same controls: the desktop tells
+ * the extension, which keeps the interview timer it owns in step. State comes from
+ * `recording:state` events; the initial state is fetched on mount so the pill is correct even if it
+ * opened after the recording started.
  */
 
 import { formatDuration } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Emblem } from "@lare/ui/brand";
 import { EyeOff, GripVertical, Pause, Play, Trash2 } from "@lare/ui/icons";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type RecorderStatus, recorder } from "@/lib/recorder";
 import { DEFAULT_PILL_SHORTCUT, describeAccelerator } from "@/lib/shortcuts";
 import { useTauriEvent } from "@/lib/tauri";
@@ -61,13 +62,68 @@ function useHideShortcut(state: RecorderStatus["state"]): string | null {
   return accelerator;
 }
 
+/** How long the pointer rests on a control before its tooltip shows. */
+const TOOLTIP_DELAY_MS = 350;
+
+/**
+ * Which control the pointer is on (`pointed`, for the hover highlight) and whose tooltip shows.
+ * Once one tooltip has shown, sliding to the next control shows its tooltip straight away.
+ *
+ * The pointer comes from two places: the webview's own pointer events, and the
+ * `recorder:pointer` events Rust sends while the pill is up. On macOS the pill is never the key
+ * window, and WebKit sends it no hover at all, so there the second is the only one that arrives.
+ */
+function useTooltips() {
+  const [pointed, setPointed] = useState<string | null>(null);
+  const [shown, setShown] = useState<string | null>(null);
+  const warm = useRef(false);
+  const timer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    window.clearTimeout(timer.current);
+    if (pointed === null) {
+      setShown(null);
+      // A gap between two buttons should not start the delay over.
+      timer.current = window.setTimeout(() => {
+        warm.current = false;
+      }, 250);
+      return;
+    }
+    if (warm.current) {
+      setShown(pointed);
+      return;
+    }
+    setShown(null);
+    timer.current = window.setTimeout(() => {
+      warm.current = true;
+      setShown(pointed);
+    }, TOOLTIP_DELAY_MS);
+  }, [pointed]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  useTauriEvent("recorder:pointer", (at) => {
+    const el = at ? document.elementFromPoint(at[0], at[1]) : null;
+    setPointed(el?.closest<HTMLElement>("[data-tip]")?.dataset.tip ?? null);
+  });
+
+  /** Props for the element wrapping a control and its tooltip. */
+  const target = (id: string) => ({
+    "data-tip": id,
+    onPointerEnter: () => setPointed(id),
+    onPointerLeave: () => setPointed((p) => (p === id ? null : p)),
+    onFocus: () => setPointed(id),
+    onBlur: () => setPointed((p) => (p === id ? null : p)),
+  });
+
+  return { pointed, shown, target };
+}
+
 /**
  * Window position uses `data-tauri-drag-region` (native Tauri drag). `useDraggable` would
  * fight that and risk breaking recording, so snap/rubber-band stay with the OS drag.
  *
- * The window is only as tall as the pill (a taller transparent window would swallow clicks meant
- * for the page behind it), so there is no room for a tooltip above it. Hovering a control swaps
- * the pill's second line for a hint instead.
+ * The window is taller than the pill: the strip above it is room for tooltips, and Rust lets
+ * clicks through it while the pointer is not on the pill itself.
  */
 
 export function RecorderPillWindow() {
@@ -116,13 +172,8 @@ export function RecorderPillWindow() {
 
   const live = state === "recording" || paused;
   const keys = caps.join(isMac ? "" : "+");
-  const [hint, setHint] = useState<string | null>(null);
-  const hintProps = (text: string) => ({
-    onMouseEnter: () => setHint(text),
-    onMouseLeave: () => setHint(null),
-    onFocus: () => setHint(text),
-    onBlur: () => setHint(null),
-  });
+  const { pointed, shown, target } = useTooltips();
+  const noun = isInterview ? "interview" : "recording";
 
   const label = error
     ? error
@@ -137,112 +188,162 @@ export function RecorderPillWindow() {
             : "Recording";
 
   return (
-    <div className="flex h-full w-full items-center justify-center p-2.5">
-      {/* Decorative children ignore the pointer so a press anywhere off a button lands on the drag
+    <div className="flex h-full w-full flex-col justify-end">
+      <div className="flex h-[72px] w-full shrink-0 items-center justify-center p-2.5">
+        {/* Decorative children ignore the pointer so a press anywhere off a button lands on the drag
           region itself: Tauri only drags from the element that carries the attribute. */}
-      <div
-        data-tauri-drag-region
-        role="toolbar"
-        aria-label="Recording controls"
-        onMouseLeave={() => setHint(null)}
-        className={cn(
-          "flex h-[52px] w-full cursor-grab items-center gap-2.5 rounded-full border pr-2 pl-2 active:cursor-grabbing",
-          "bg-[color-mix(in_oklab,var(--lare-ink-2)_92%,transparent)] backdrop-blur-xl",
-          "shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_6px_20px_rgb(0_0_0/0.45),0_0_0_0.5px_rgb(0_0_0/0.8)]",
-          error
-            ? "border-[color-mix(in_oklab,var(--lare-status-stop)_55%,transparent)]"
-            : "border-white/[0.08]",
-        )}
-      >
-        <span
+        <div
           data-tauri-drag-region
-          className="flex h-9 w-4 shrink-0 items-center justify-center text-[var(--lare-muted)] transition-colors hover:text-[var(--lare-soft)]"
-          {...hintProps("Drag to move")}
+          role="toolbar"
+          aria-label="Recording controls"
+          className={cn(
+            "flex h-[52px] w-full cursor-grab items-center gap-2.5 rounded-full border pr-2 pl-2 active:cursor-grabbing",
+            "bg-[color-mix(in_oklab,var(--lare-ink-2)_92%,transparent)] backdrop-blur-xl",
+            "shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_6px_20px_rgb(0_0_0/0.45),0_0_0_0.5px_rgb(0_0_0/0.8)]",
+            error
+              ? "border-[color-mix(in_oklab,var(--lare-status-stop)_55%,transparent)]"
+              : "border-white/[0.08]",
+          )}
         >
-          <GripVertical className="pointer-events-none size-4" aria-hidden />
-        </span>
-        <Emblem className="pointer-events-none size-[18px] shrink-0" />
-        <span className="pointer-events-none h-6 w-px shrink-0 bg-white/[0.08]" aria-hidden />
-        <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-2.5">
-          <StatusDot state={state} error={Boolean(error)} />
-          <div className="min-w-0 flex-1 leading-none">
-            <div className="font-mono text-[15px] font-medium tabular-nums tracking-tight text-[var(--lare-bone)]">
-              {formatDuration(elapsed)}
-            </div>
-            <div className="mt-1 truncate text-[11px] font-medium" aria-live="polite">
-              {hint && !error ? (
-                <span className="text-[var(--lare-soft)]" title={hint}>
-                  {hint}
-                </span>
-              ) : (
-                <span
-                  className={cn(
-                    "text-[10.5px] uppercase tracking-[0.08em]",
-                    error ? "text-[var(--lare-status-stop)]" : "text-[var(--lare-muted)]",
-                  )}
-                >
-                  {label}
-                </span>
+          <span data-tauri-drag-region className="relative flex shrink-0" {...target("drag")}>
+            <span
+              data-tauri-drag-region
+              className={cn(
+                "flex h-9 w-4 items-center justify-center text-[var(--lare-muted)] transition-colors hover:text-[var(--lare-soft)]",
+                pointed === "drag" && "text-[var(--lare-soft)]",
               )}
+            >
+              <GripVertical className="pointer-events-none size-4" aria-hidden />
+            </span>
+            <Tooltip show={shown === "drag"} align="start">
+              Drag to move
+            </Tooltip>
+          </span>
+          <Emblem className="pointer-events-none size-[18px] shrink-0" />
+          <span className="pointer-events-none h-6 w-px shrink-0 bg-white/[0.08]" aria-hidden />
+          <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-2.5">
+            <StatusDot state={state} error={Boolean(error)} />
+            <div className="min-w-0 flex-1 leading-none">
+              <div className="font-mono text-[15px] font-medium tabular-nums tracking-tight text-[var(--lare-bone)]">
+                {formatDuration(elapsed)}
+              </div>
+              <div
+                className={cn(
+                  "mt-1 truncate text-[10.5px] font-medium uppercase tracking-[0.08em]",
+                  error ? "text-[var(--lare-status-stop)]" : "text-[var(--lare-muted)]",
+                )}
+                aria-live="polite"
+              >
+                {label}
+              </div>
             </div>
           </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <span className="relative flex" {...target("pause")}>
+              <PillButton
+                label={paused ? "Resume" : "Pause"}
+                hot={pointed === "pause"}
+                disabled={busy || !live}
+                onClick={() => void run(() => (paused ? recorder.resume() : recorder.pause()))}
+              >
+                {paused ? (
+                  <Play className="size-4 fill-current" aria-hidden />
+                ) : (
+                  <Pause className="size-4 fill-current" aria-hidden />
+                )}
+              </PillButton>
+              <Tooltip show={shown === "pause"}>
+                {paused ? `Resume ${noun}` : `Pause ${noun}`}
+              </Tooltip>
+            </span>
+            <span className="relative mx-1 flex" {...target("end")}>
+              <button
+                type="button"
+                aria-label="End and save"
+                disabled={busy || !live}
+                onClick={() => void run(() => recorder.stop())}
+                className={cn(
+                  "lare-press inline-flex h-9 shrink-0 items-center gap-2 rounded-full pr-3.5 pl-3 text-[13px] font-semibold text-white",
+                  "bg-[color-mix(in_oklab,var(--lare-status-stop)_82%,black)] shadow-[inset_0_1px_0_rgb(255_255_255/0.14)]",
+                  "transition-colors hover:bg-[var(--lare-status-stop)] disabled:cursor-not-allowed disabled:opacity-40",
+                  pointed === "end" && !(busy || !live) && "bg-[var(--lare-status-stop)]",
+                )}
+              >
+                <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
+                End
+              </button>
+              <Tooltip show={shown === "end"}>End &amp; save {noun}</Tooltip>
+            </span>
+            <span className="relative flex" {...target("discard")}>
+              <PillButton
+                label="Discard"
+                danger
+                hot={pointed === "discard"}
+                disabled={busy || state === "stopping"}
+                onClick={() => void run(() => recorder.cancel())}
+              >
+                <Trash2 className="size-4" aria-hidden />
+              </PillButton>
+              <Tooltip show={shown === "discard"}>Discard {noun}</Tooltip>
+            </span>
+          </div>
+          {keys ? (
+            <span className="relative flex" {...target("hide")}>
+              <PillButton
+                label={`Hide (${keys} toggles it)`}
+                hot={pointed === "hide"}
+                onClick={() => void run(() => recorder.tuckRecorderWindow())}
+              >
+                <EyeOff className="size-4" aria-hidden />
+              </PillButton>
+              <Tooltip show={shown === "hide"} align="end">
+                Hide
+                <span className="ml-1.5 inline-flex gap-0.5">
+                  {caps.map((cap) => (
+                    <kbd
+                      key={cap}
+                      className="rounded-[4px] border border-white/[0.1] bg-white/[0.06] px-1 font-sans text-[10.5px] leading-4 text-[var(--lare-soft)]"
+                    >
+                      {cap}
+                    </kbd>
+                  ))}
+                </span>
+              </Tooltip>
+            </span>
+          ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {isInterview ? null : (
-            <PillButton
-              label={paused ? "Resume" : "Pause"}
-              disabled={busy || !live}
-              onClick={() => void run(() => (paused ? recorder.resume() : recorder.pause()))}
-              {...hintProps(paused ? "Resume recording" : "Pause recording")}
-            >
-              {paused ? (
-                <Play className="size-4 fill-current" aria-hidden />
-              ) : (
-                <Pause className="size-4 fill-current" aria-hidden />
-              )}
-            </PillButton>
-          )}
-          <button
-            type="button"
-            aria-label="End and save"
-            disabled={busy || !live}
-            onClick={() => void run(() => recorder.stop())}
-            {...hintProps(
-              isInterview ? "End and save the interview" : "End and save the recording",
-            )}
-            className={cn(
-              "lare-press mx-1 inline-flex h-9 shrink-0 items-center gap-2 rounded-full pr-3.5 pl-3 text-[13px] font-semibold text-white",
-              "bg-[color-mix(in_oklab,var(--lare-status-stop)_82%,black)] shadow-[inset_0_1px_0_rgb(255_255_255/0.14)]",
-              "transition-colors hover:bg-[var(--lare-status-stop)] disabled:cursor-not-allowed disabled:opacity-40",
-            )}
-          >
-            <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
-            End
-          </button>
-          <PillButton
-            label="Discard"
-            danger
-            disabled={busy || state === "stopping"}
-            onClick={() => void run(() => recorder.cancel())}
-            {...hintProps(isInterview ? "Discard this interview" : "Discard this take")}
-          >
-            <Trash2 className="size-4" aria-hidden />
-          </PillButton>
-        </div>
-        {keys ? (
-          <PillButton
-            label={`Hide (${keys} shows it again)`}
-            onClick={() => {
-              setHint(null);
-              void run(() => recorder.tuckRecorderWindow());
-            }}
-            {...hintProps(`Hide · ${keys} to show`)}
-          >
-            <EyeOff className="size-4" aria-hidden />
-          </PillButton>
-        ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * A control's tooltip, in the room above the pill. It is drawn by the control's wrapper rather
+ * than the button, so a disabled button's fade does not reach it.
+ */
+function Tooltip({
+  show,
+  align = "center",
+  children,
+}: {
+  show: boolean;
+  align?: "start" | "center" | "end";
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      role="tooltip"
+      aria-hidden={!show}
+      className={cn(
+        "pointer-events-none absolute bottom-[calc(100%+16px)] z-10 flex items-center whitespace-nowrap rounded-lg border border-white/[0.08] px-2 py-1 text-[11.5px] font-medium leading-4 text-[var(--lare-bone)]",
+        "bg-[color-mix(in_oklab,var(--lare-ink-2)_96%,transparent)] shadow-[0_4px_14px_rgb(0_0_0/0.45)]",
+        "transition-opacity duration-100 motion-reduce:transition-none",
+        align === "start" ? "left-0" : align === "end" ? "right-0" : "left-1/2 -translate-x-1/2",
+        show ? "opacity-100" : "opacity-0",
+      )}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -276,31 +377,31 @@ function StatusDot({ state, error }: { state: RecorderStatus["state"]; error: bo
 function PillButton({
   label,
   danger,
+  hot,
   disabled,
   onClick,
   children,
-  ...hover
 }: {
   label: string;
   danger?: boolean;
+  /** The pointer is on it: macOS gets no CSS hover in the pill (see `useTooltips`). */
+  hot?: boolean;
   disabled?: boolean;
   onClick: () => void;
   children: React.ReactNode;
-} & Pick<
-  React.ButtonHTMLAttributes<HTMLButtonElement>,
-  "onMouseEnter" | "onMouseLeave" | "onFocus" | "onBlur"
->) {
+}) {
   return (
     <button
       type="button"
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      {...hover}
       className={cn(
         "lare-press inline-flex size-9 shrink-0 items-center justify-center rounded-full text-[var(--lare-soft)] transition-colors",
         "hover:bg-white/[0.08] hover:text-[var(--lare-bone)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
         danger && "hover:text-[var(--lare-status-stop)]",
+        hot && !disabled && "bg-white/[0.08] text-[var(--lare-bone)]",
+        hot && !disabled && danger && "text-[var(--lare-status-stop)]",
       )}
     >
       {children}
