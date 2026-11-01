@@ -14,7 +14,7 @@ runtime and memory percentiles and the runtime distribution graph.
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Chrome-lightgrey)
 
-[Install](#install) · [Architecture](docs/architecture.md) · [Privacy](docs/privacy.md)
+[Install](#install) · [Architecture](docs/architecture.md) · [Privacy policy](docs/privacy-policy.md) · [Privacy design](docs/privacy.md)
 
 </div>
 

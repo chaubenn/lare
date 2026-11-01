@@ -13,7 +13,7 @@
 //! Tokio worker, so public helpers marshal via `run_on_main_thread` (and run inline when
 //! already on the main thread to avoid deadlocking the event loop).
 
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::ThreadId;
 use std::time::Duration;
@@ -377,12 +377,50 @@ mod macos {
     }
 }
 
+/// Where the pill was last placed for the user, and the display it was placed on. `None` once the
+/// user drags it: from then on it stays wherever they put it.
+struct PillAnchor {
+    display_id: Option<String>,
+    at: (f64, f64),
+}
+
+static PILL_ANCHOR: Mutex<Option<PillAnchor>> = Mutex::new(None);
+
+/// Keep an undragged pill at the bottom-centre of the Space the user is looking at.
+///
+/// The usable area of a screen depends on the Space: a fullscreen app's Space has no Dock or menu
+/// bar, the desktop has both. The pill is placed once, when the take starts, so one opened from a
+/// fullscreen Chrome sat on top of the Dock on the desktop, and one opened from the desktop floated
+/// well above the bottom edge in fullscreen. Placing it against the current work area on every
+/// watchdog tick follows the user from one to the other. Main thread only.
+fn reanchor_recorder(app: &AppHandle, w: &tauri::WebviewWindow) {
+    let mut anchor = PILL_ANCHOR.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(a) = anchor.as_mut() else { return };
+    let (Ok(pos), Ok(scale)) = (w.outer_position(), w.scale_factor()) else {
+        return;
+    };
+    let (x, y) = (pos.x as f64 / scale, pos.y as f64 / scale);
+    if (x - a.at.0).abs() > 2.0 || (y - a.at.1).abs() > 2.0 {
+        // Moved by the user, not by us.
+        *anchor = None;
+        return;
+    }
+    let next = recorder_position(target_work_area(app, a.display_id.as_deref()));
+    if (next.0 - a.at.0).abs() > 1.0 || (next.1 - a.at.1).abs() > 1.0 {
+        let _ = w.set_position(LogicalPosition::new(next.0, next.1));
+        a.at = next;
+    }
+}
+
 /// Re-assert overlay window levels after another app takes focus.
 pub fn repromote_overlays(app: &AppHandle) {
     on_main_unit(app, |app| {
         for label in [RECORDER_LABEL, CAMERA_LABEL] {
             if let Some(w) = app.get_webview_window(label) {
                 promote_overlay(&w);
+                if label == RECORDER_LABEL && w.is_visible().unwrap_or(false) {
+                    reanchor_recorder(app, &w);
+                }
             }
         }
     });
@@ -600,6 +638,10 @@ pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), St
     let display_id = display_id.map(str::to_owned);
     on_main(app, move |app| {
         let (x, y) = recorder_position(target_work_area(app, display_id.as_deref()));
+        *PILL_ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) = Some(PillAnchor {
+            display_id: display_id.clone(),
+            at: (x, y),
+        });
         PILL_LIVE.store(true, Ordering::SeqCst);
         sync_pill_shortcut(app);
         if let Some(w) = app.get_webview_window(RECORDER_LABEL) {

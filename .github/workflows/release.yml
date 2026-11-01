@@ -184,33 +184,38 @@ jobs:
           WXT_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
           WXT_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
           WXT_SITE_URL: https://lare-one.vercel.app
-        run: pnpm build && pnpm zip
+        # Two packages: the unpacked install pins the extension id with `key`; the Chrome Web Store
+        # package must not carry one (the store assigns its own). wxt names both zips the same, so
+        # each is copied out before the next build overwrites it.
+        run: |
+          set -euo pipefail
+          pnpm build && pnpm zip
+          cp "$(ls .output/*-chrome.zip | head -n1)" ../../Lare-Chrome-Extension.zip
+          pnpm zip:store
+          cp "$(ls .output/*-chrome.zip | head -n1)" ../../Lare-Chrome-Extension-Store.zip
       - uses: actions/upload-artifact@v4
         with:
           name: extension-chrome-mv3
-          path: apps/extension/.output/*.zip
-          # wxt writes to `.output`, and upload-artifact skips dotted paths by default —
-          # without this the step finds nothing and only warns.
-          include-hidden-files: true
+          path: Lare-Chrome-Extension*.zip
       - name: Attach to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.create-release.outputs.tag }}
         run: |
           set -euo pipefail
-          zip=$(ls apps/extension/.output/*-chrome.zip | head -n1)
-          cp "$zip" Lare-Chrome-Extension.zip
           # Same retry as the desktop assets: GitHub's asset endpoint does 500 sometimes.
-          for attempt in 1 2 3 4 5; do
-            if gh release upload "$TAG" Lare-Chrome-Extension.zip --clobber; then
-              break
-            fi
-            if [ "$attempt" -eq 5 ]; then
-              echo "::error::failed to upload Lare-Chrome-Extension.zip after 5 attempts"
-              exit 1
-            fi
-            echo "::warning::upload failed (attempt $attempt); retrying in $((attempt * 15))s"
-            sleep $((attempt * 15))
+          for asset in Lare-Chrome-Extension.zip Lare-Chrome-Extension-Store.zip; do
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "$TAG" "$asset" --clobber; then
+                break
+              fi
+              if [ "$attempt" -eq 5 ]; then
+                echo "::error::failed to upload $asset after 5 attempts"
+                exit 1
+              fi
+              echo "::warning::upload failed (attempt $attempt); retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            done
           done
 
   assemble:
