@@ -160,6 +160,9 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         # Same as release.yml: without it every QA build resets macOS permissions.
         run: |
           if [ -z "$APPLE_CERTIFICATE" ]; then
@@ -171,6 +174,15 @@ jobs:
             echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
             echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
           } >> "$GITHUB_ENV"
+          # With a Developer ID identity and all three of these, the bundler also notarises and
+          # staples. Exported only when set, like the certificate, so a fork without them still builds.
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            {
+              echo "APPLE_ID=$APPLE_ID"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Build installers
         uses: tauri-apps/tauri-action@v0
         env:

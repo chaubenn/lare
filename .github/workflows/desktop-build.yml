@@ -91,6 +91,9 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         # macOS keys camera/mic/screen permissions to the code signature. Unsigned builds get a new
         # one every time, so each update revokes them. Only exported when set: an empty
         # APPLE_CERTIFICATE makes the bundler fail at "security import".
@@ -104,6 +107,15 @@ jobs:
             echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
             echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
           } >> "$GITHUB_ENV"
+          # With a Developer ID identity and all three of these, the bundler also notarises and
+          # staples. Exported only when set, like the certificate, so a fork without them still builds.
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            {
+              echo "APPLE_ID=$APPLE_ID"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Build and sign updater bundles
         uses: tauri-apps/tauri-action@v0
         env:
@@ -111,7 +123,6 @@ jobs:
           # Updater signing (minisign). The matching public key is in tauri.conf.json.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Notarisation stays off; it additionally needs APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID.
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
