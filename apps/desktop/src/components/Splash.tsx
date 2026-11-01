@@ -1,7 +1,16 @@
 import { cn } from "@lare/ui";
 import { Emblem } from "@lare/ui/brand";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { inTauri } from "@/lib/tauri";
+import {
+  checkOnLaunch,
+  dismissUpdate,
+  installUpdate,
+  type UpdateState,
+  useUpdateState,
+} from "@/lib/updater";
 import "./splash.css";
 
 /** Slow idle spin while the app loads, in degrees per second. */
@@ -26,10 +35,14 @@ const easeInOutCubic = (p: number) => (p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2
  * ready, speeds up and eases to a stop upright, the name wipes in beside it from left to right, and
  * a highlight sweeps across the logo before the whole thing fades away. The app is already mounted
  * underneath, so nothing waits on the fade.
+ *
+ * Every launch also checks for an update first. When there is one, the splash stays up, shows the
+ * download and installs it, and Lare relaunches into the new version.
  */
 export function Splash() {
   const { session, profileLoading } = useAuth();
-  const appReady = session !== undefined && !profileLoading;
+  const gate = useLaunchUpdate();
+  const appReady = session !== undefined && !profileLoading && gate === "clear";
   const [phase, setPhase] = useState<Phase>("idle");
   const [minIdleElapsed, setMinIdleElapsed] = useState(false);
   const spinner = useRef<HTMLDivElement>(null);
@@ -117,6 +130,9 @@ export function Splash() {
   if (phase === "done") return null;
 
   const named = phase === "reveal" || phase === "shine" || phase === "exit";
+  // The status line sits under the logo only while it says something: the update check, then the
+  // download. It leaves with the spin, so it never competes with the name.
+  const showStatus = phase === "idle" && gate !== "clear";
   return (
     <div
       className={cn("lare-splash", phase === "exit" && "lare-splash-exit")}
@@ -137,7 +153,118 @@ export function Splash() {
             <span>Lare</span>
           </div>
         </div>
+        {showStatus ? <UpdateStatus gate={gate} /> : null}
       </div>
+    </div>
+  );
+}
+
+type Gate = "checking" | "updating" | "clear";
+
+/**
+ * Whether the launch update check lets the app open. "checking" until GitHub answers; "updating"
+ * while a newer release downloads and installs (the app relaunches at the end, so it never turns
+ * "clear" unless the install fails and the user carries on); "clear" otherwise, including when the
+ * check itself failed.
+ */
+function useLaunchUpdate(): Gate {
+  const [gate, setGate] = useState<Gate>(inTauri ? "checking" : "clear");
+  const state = useUpdateState();
+  useEffect(() => {
+    if (!inTauri) return;
+    let active = true;
+    void checkOnLaunch().then((result) => {
+      if (!active) return;
+      if (result.status === "available") return setGate("updating");
+      // A failed check is not worth a notice: the hourly check will try again.
+      if (result.status === "error") dismissUpdate();
+      setGate("clear");
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  // "Continue without updating" after a failed install dismisses the error, which is the way out.
+  useEffect(() => {
+    if (gate === "updating" && state.status === "idle") setGate("clear");
+  }, [gate, state.status]);
+  return gate;
+}
+
+/** The line under the spinning logo: the check, then the download with its bar, then the install. */
+function UpdateStatus({ gate }: { gate: Exclude<Gate, "clear"> }) {
+  const state = useUpdateState();
+  if (gate === "checking") {
+    return (
+      <div className="lare-splash-status lare-splash-status-delayed" aria-live="polite">
+        <p className="lare-splash-status-text">Checking for updates…</p>
+      </div>
+    );
+  }
+  return (
+    <div className="lare-splash-status" aria-live="polite">
+      <p className="lare-splash-status-title">{updateTitle(state)}</p>
+      {state.status === "error" ? (
+        <>
+          <p className="lare-splash-status-text lare-splash-status-error">{state.message}</p>
+          <div className="lare-splash-status-actions">
+            <Button variant="primary" size="sm" onClick={() => void installUpdate()}>
+              Try again
+            </Button>
+            <Button size="sm" onClick={dismissUpdate}>
+              Continue without updating
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <ProgressBar
+            value={
+              state.status === "downloading"
+                ? state.progress
+                : state.status === "installing"
+                  ? 1
+                  : null
+            }
+          />
+          <p className="lare-splash-status-text">{updateDetail(state)}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function updateTitle(state: UpdateState): string {
+  if (state.status === "error") return "The update did not install";
+  const version = "version" in state ? ` v${state.version}` : "";
+  return `Updating to Lare${version}`;
+}
+
+function updateDetail(state: UpdateState): string {
+  if (state.status === "installing") return "Installing. Lare will restart in a moment.";
+  if (state.status === "downloading" && state.progress !== null)
+    return `Downloading… ${Math.round(state.progress * 100)}%`;
+  return "Downloading…";
+}
+
+/** Determinate when the download size is known, otherwise a sliding band. */
+function ProgressBar({ value }: { value: number | null }) {
+  return (
+    <div
+      className="lare-splash-progress"
+      role="progressbar"
+      aria-label="Update progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={value === null ? undefined : Math.round(value * 100)}
+    >
+      <div
+        className={cn(
+          "lare-splash-progress-fill",
+          value === null && "lare-splash-progress-indeterminate",
+        )}
+        style={value === null ? undefined : { transform: `scaleX(${value})` }}
+      />
     </div>
   );
 }

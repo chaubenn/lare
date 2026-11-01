@@ -57,8 +57,9 @@ All versions: [Releases](https://github.com/chaubenn/lare/releases).
   Grant Screen Recording / Camera / Microphone when asked (needed for demo videos and interviews).
 - **Windows**: run the installer. If SmartScreen appears, click **More info** > **Run anyway**.
 
-Lare checks GitHub Releases on every launch and installs updates in the background; you can also
-run **Settings > Check for updates**.
+Lare checks GitHub Releases on every launch and installs any update before it opens, then
+relaunches into it. While it is open it checks hourly; **Settings > Check for updates** does it on
+demand.
 
 ### 2. Chrome extension
 

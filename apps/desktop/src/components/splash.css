@@ -16,8 +16,10 @@
   pointer-events: none;
 }
 .lare-splash-stage {
+  position: relative;
   display: flex;
   flex: 1;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   /* Sit a little above centre, where the eye expects a logo. */
@@ -96,12 +98,98 @@
   }
 }
 
+/* Update status under the logo. Absolutely placed, so the logo stays exactly where it is whether
+   or not there is anything to say. */
+.lare-splash-status {
+  position: absolute;
+  top: calc(50% - 3vh + var(--splash-mark) / 2 + 28px);
+  left: 50%;
+  display: flex;
+  width: min(320px, 80vw);
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  transform: translateX(-50%);
+  animation: lare-splash-status-in 300ms ease-out both;
+}
+/* "Checking for updates" usually answers in well under a second: only say it if it doesn't. */
+.lare-splash-status-delayed {
+  animation-delay: 900ms;
+}
+@keyframes lare-splash-status-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+.lare-splash-status-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+.lare-splash-status-text {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+.lare-splash-status-error {
+  color: var(--text-secondary);
+  user-select: text;
+}
+.lare-splash-status-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lare-splash-progress {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+.lare-splash-progress-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 200ms linear;
+}
+.lare-splash-progress-indeterminate {
+  right: auto;
+  width: 35%;
+  transition: none;
+  animation: lare-splash-progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes lare-splash-progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lare-splash-lockup,
   .lare-splash-name > span {
     transition: none;
   }
-  .lare-splash-shine {
+  .lare-splash-shine,
+  .lare-splash-status {
     animation: none;
+  }
+  .lare-splash-progress-indeterminate {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
   }
 }

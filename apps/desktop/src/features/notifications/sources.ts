@@ -14,11 +14,9 @@ import { inTauri } from "@/lib/tauri";
 import { checkForUpdate, dismissUpdate, useUpdateState } from "@/lib/updater";
 import { notify } from "./notices";
 
-/** Delay before the launch check so it never competes with the first paint / auth round-trip. */
-const LAUNCH_CHECK_DELAY_MS = 3_000;
 /**
- * Re-check interval. People leave Lare open for days; a launch-only check would never notice a
- * release published after startup, so poll while running too.
+ * Re-check interval. The splash checks (and installs) on every launch; people leave Lare open for
+ * days, though, so poll while running too.
  */
 const RECHECK_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -60,7 +58,7 @@ function jobNotice(job: Job) {
 }
 
 /**
- * Checks GitHub Releases on launch and then hourly, and posts a notice when a newer Lare exists.
+ * Checks GitHub Releases hourly after launch, and posts a notice when a newer Lare exists.
  * Settings is where it is installed from, so that is where the notice points. Errors from
  * background checks stay silent — Settings shows them on a manual check.
  */
@@ -69,7 +67,7 @@ function useUpdateNotices() {
 
   useEffect(() => {
     if (!inTauri) return;
-    let timer = setTimeout(run, LAUNCH_CHECK_DELAY_MS);
+    let timer = setTimeout(run, RECHECK_INTERVAL_MS);
     function run() {
       void checkForUpdate().then((result) => {
         if (result.status === "error") dismissUpdate();
@@ -84,7 +82,7 @@ function useUpdateNotices() {
     notify({
       key: `update:${state.version}`,
       title: `Lare v${state.version} is available`,
-      description: "Install it from Settings.",
+      description: "Install it from Settings, or restart Lare to update.",
       href: "/settings",
     });
   }, [state]);

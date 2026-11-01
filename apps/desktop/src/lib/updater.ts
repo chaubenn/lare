@@ -3,8 +3,12 @@
  * release (see `plugins.updater.endpoints` in tauri.conf.json), compares it with its own version
  * and, when newer, downloads + installs the signed bundle and relaunches.
  *
- * State lives in a tiny module-level store so the launch check (AppShell banner) and the manual
- * check (Settings) share one source of truth and never run two downloads at once.
+ * Updates are not optional: the splash checks on every launch and, when a newer release exists,
+ * installs it before the app opens (see {@link checkOnLaunch}). The hourly background check and
+ * the manual one in Settings cover a release published while Lare is open.
+ *
+ * State lives in a tiny module-level store so the splash, the background check and Settings share
+ * one source of truth and never run two downloads at once.
  */
 
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -52,7 +56,7 @@ function describe(err: unknown): string {
 }
 
 /** Ask GitHub whether a newer release exists. Safe to call repeatedly; no-op in a browser. */
-export async function checkForUpdate(): Promise<UpdateState> {
+export async function checkForUpdate(timeoutMs = 15_000): Promise<UpdateState> {
   if (!inTauri) return state;
   if (
     state.status === "checking" ||
@@ -63,7 +67,7 @@ export async function checkForUpdate(): Promise<UpdateState> {
   }
   set({ status: "checking" });
   try {
-    const update = await check({ timeout: 15_000 });
+    const update = await check({ timeout: timeoutMs });
     if (update) {
       pending = update;
       set({ status: "available", version: update.version, notes: update.body ?? null });
@@ -110,6 +114,27 @@ export async function installUpdate(): Promise<void> {
   } catch (err) {
     set({ status: "error", message: describe(err) });
   }
+}
+
+/**
+ * The launch check is held to a shorter timeout than a manual one: the splash waits on it, and a
+ * slow or absent network should cost a few seconds, not keep Lare from opening.
+ */
+const LAUNCH_CHECK_TIMEOUT_MS = 8_000;
+let launchCheck: Promise<UpdateState> | null = null;
+
+/**
+ * The check the splash waits on, run once per launch (memoised, so React's double-mounted effects
+ * in development do not race two of them). An update it finds is installed straight away and the
+ * app relaunches into it; the result is "available" while that runs. A failed check lets the app
+ * open, since being offline should not lock anyone out.
+ */
+export function checkOnLaunch(): Promise<UpdateState> {
+  launchCheck ??= checkForUpdate(LAUNCH_CHECK_TIMEOUT_MS).then((result) => {
+    if (result.status === "available") void installUpdate();
+    return result;
+  });
+  return launchCheck;
 }
 
 export function dismissUpdate(): void {
