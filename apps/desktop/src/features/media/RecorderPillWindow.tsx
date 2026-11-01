@@ -6,7 +6,8 @@
 
 import { formatDuration } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { Pause, Play, Square, X } from "@lare/ui/icons";
+import { Emblem } from "@lare/ui/brand";
+import { EyeOff, GripVertical, Pause, Play, Trash2 } from "@lare/ui/icons";
 import { useCallback, useEffect, useState } from "react";
 import { type RecorderStatus, recorder } from "@/lib/recorder";
 import { DEFAULT_PILL_SHORTCUT, describeAccelerator } from "@/lib/shortcuts";
@@ -62,6 +63,10 @@ function useHideShortcut(state: RecorderStatus["state"]): string | null {
 /**
  * Window position uses `data-tauri-drag-region` (native Tauri drag). `useDraggable` would
  * fight that and risk breaking recording, so snap/rubber-band stay with the OS drag.
+ *
+ * The window is only as tall as the pill (a taller transparent window would swallow clicks meant
+ * for the page behind it), so there is no room for a tooltip above it. Hovering a control swaps
+ * the pill's second line for a hint instead.
  */
 
 export function RecorderPillWindow() {
@@ -108,110 +113,195 @@ export function RecorderPillWindow() {
   const hideShortcut = useHideShortcut(state);
   const caps = hideShortcut ? describeAccelerator(hideShortcut, isMac) : [];
 
+  const live = state === "recording" || paused;
+  const keys = caps.join(isMac ? "" : "+");
+  const [hint, setHint] = useState<string | null>(null);
+  const hintProps = (text: string) => ({
+    onMouseEnter: () => setHint(text),
+    onMouseLeave: () => setHint(null),
+    onFocus: () => setHint(text),
+    onBlur: () => setHint(null),
+  });
+
+  const label = error
+    ? error
+    : state === "starting"
+      ? "Starting"
+      : state === "stopping"
+        ? "Saving"
+        : paused
+          ? "Paused"
+          : isInterview
+            ? "Mock interview"
+            : "Recording";
+
   return (
-    <div className="flex h-full w-full items-center justify-center p-1.5">
+    <div className="flex h-full w-full items-center justify-center p-2.5">
+      {/* Decorative children ignore the pointer so a press anywhere off a button lands on the drag
+          region itself: Tauri only drags from the element that carries the attribute. */}
       <div
         data-tauri-drag-region
+        role="toolbar"
+        aria-label="Recording controls"
+        onMouseLeave={() => setHint(null)}
         className={cn(
-          "flex h-[52px] w-full items-center gap-2 rounded-full border px-3 shadow-2xl backdrop-blur",
-          "border-zinc-700/80 bg-zinc-900/95 text-[var(--text)]",
-          error && "border-rose-500/60",
+          "flex h-[52px] w-full cursor-grab items-center gap-2.5 rounded-full border pr-2 pl-2 active:cursor-grabbing",
+          "bg-[color-mix(in_oklab,var(--lare-ink-2)_92%,transparent)] backdrop-blur-xl",
+          "shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_6px_20px_rgb(0_0_0/0.45),0_0_0_0.5px_rgb(0_0_0/0.8)]",
+          error
+            ? "border-[color-mix(in_oklab,var(--lare-status-stop)_55%,transparent)]"
+            : "border-white/[0.08]",
         )}
       >
         <span
-          className={cn(
-            "size-3 shrink-0 rounded-full",
-            state === "recording" && "animate-pulse bg-[var(--lare-status-stop)]",
-            paused && "bg-[var(--lare-status-pause)]",
-            (state === "starting" || state === "stopping") && "animate-pulse bg-zinc-400",
-          )}
-          aria-hidden
-        />
-        <div data-tauri-drag-region className="min-w-0 flex-1 leading-tight">
-          <div className="font-mono text-sm tabular-nums">{formatDuration(elapsed)}</div>
-          <div className="flex items-baseline gap-1.5 overflow-hidden text-xs text-zinc-400">
-            <span className="truncate uppercase tracking-wider">
-              {error
-                ? error
-                : state === "starting"
-                  ? "Starting…"
-                  : state === "stopping"
-                    ? "Finishing…"
-                    : paused
-                      ? "Paused"
-                      : isInterview
-                        ? "Mock interview"
-                        : "Recording"}
-            </span>
-            {caps.length > 0 && !error && (state === "recording" || paused) ? (
-              <span className="shrink-0 whitespace-nowrap text-[var(--text-tertiary)]">
-                <span className="font-mono">{caps.join(isMac ? "" : "+")}</span> hides
-              </span>
-            ) : null}
+          data-tauri-drag-region
+          className="flex h-9 w-4 shrink-0 items-center justify-center text-[var(--lare-muted)] transition-colors hover:text-[var(--lare-soft)]"
+          {...hintProps("Drag to move")}
+        >
+          <GripVertical className="pointer-events-none size-4" aria-hidden />
+        </span>
+        <Emblem className="pointer-events-none size-[18px] shrink-0" />
+        <span className="pointer-events-none h-6 w-px shrink-0 bg-white/[0.08]" aria-hidden />
+        <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-2.5">
+          <StatusDot state={state} error={Boolean(error)} />
+          <div className="min-w-0 flex-1 leading-none">
+            <div className="font-mono text-[15px] font-medium tabular-nums tracking-tight text-[var(--lare-bone)]">
+              {formatDuration(elapsed)}
+            </div>
+            <div className="mt-1 truncate text-[11px] font-medium" aria-live="polite">
+              {hint && !error ? (
+                <span className="text-[var(--lare-soft)]" title={hint}>
+                  {hint}
+                </span>
+              ) : (
+                <span
+                  className={cn(
+                    "text-[10.5px] uppercase tracking-[0.08em]",
+                    error ? "text-[var(--lare-status-stop)]" : "text-[var(--lare-muted)]",
+                  )}
+                >
+                  {label}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         {isInterview ? (
-          <span className="text-xs text-[var(--text-tertiary)]">End from the extension</span>
+          <span className="pointer-events-none shrink-0 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-[var(--lare-soft)]">
+            End from the extension
+          </span>
         ) : (
-          <>
+          <div className="flex shrink-0 items-center gap-0.5">
             <PillButton
               label={paused ? "Resume" : "Pause"}
-              disabled={busy || (state !== "recording" && state !== "paused")}
+              disabled={busy || !live}
               onClick={() => void run(() => (paused ? recorder.resume() : recorder.pause()))}
+              {...hintProps(paused ? "Resume recording" : "Pause recording")}
             >
               {paused ? (
-                <Play className="size-4" aria-hidden />
+                <Play className="size-4 fill-current" aria-hidden />
               ) : (
-                <Pause className="size-4" aria-hidden />
+                <Pause className="size-4 fill-current" aria-hidden />
               )}
             </PillButton>
-            <PillButton
-              label="Stop and save"
-              accent
-              disabled={busy || (state !== "recording" && state !== "paused")}
+            <button
+              type="button"
+              aria-label="End and save"
+              disabled={busy || !live}
               onClick={() => void run(() => recorder.stop())}
+              {...hintProps("End and save the recording")}
+              className={cn(
+                "lare-press mx-1 inline-flex h-9 shrink-0 items-center gap-2 rounded-full pr-3.5 pl-3 text-[13px] font-semibold text-white",
+                "bg-[color-mix(in_oklab,var(--lare-status-stop)_82%,black)] shadow-[inset_0_1px_0_rgb(255_255_255/0.14)]",
+                "transition-colors hover:bg-[var(--lare-status-stop)] disabled:cursor-not-allowed disabled:opacity-40",
+              )}
             >
-              <Square className="size-4 fill-current" aria-hidden />
-            </PillButton>
+              <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
+              End
+            </button>
             <PillButton
               label="Discard"
+              danger
               disabled={busy || state === "stopping"}
               onClick={() => void run(() => recorder.cancel())}
+              {...hintProps("Discard this take")}
             >
-              <X className="size-4" aria-hidden />
+              <Trash2 className="size-4" aria-hidden />
             </PillButton>
-          </>
+          </div>
         )}
+        {keys ? (
+          <PillButton
+            label={`Hide (${keys} shows it again)`}
+            onClick={() => {
+              setHint(null);
+              void run(() => recorder.tuckRecorderWindow());
+            }}
+            {...hintProps(`Hide · ${keys} to show`)}
+          >
+            <EyeOff className="size-4" aria-hidden />
+          </PillButton>
+        ) : null}
       </div>
     </div>
   );
 }
 
+/** Live red with a halo while recording, steady amber while paused, a soft grey pulse in between. */
+function StatusDot({ state, error }: { state: RecorderStatus["state"]; error: boolean }) {
+  const color =
+    error || state === "recording"
+      ? "bg-[var(--lare-status-stop)]"
+      : state === "paused"
+        ? "bg-[var(--lare-status-pause)]"
+        : "bg-[var(--lare-muted)]";
+  return (
+    <span className="relative flex size-2.5 shrink-0" aria-hidden>
+      {state === "recording" && !error ? (
+        <span
+          className={cn("absolute inset-0 rounded-full opacity-60 motion-safe:animate-ping", color)}
+        />
+      ) : null}
+      <span
+        className={cn(
+          "relative size-2.5 rounded-full",
+          color,
+          (state === "starting" || state === "stopping") && "motion-safe:animate-pulse",
+          state === "recording" && !error && "shadow-[0_0_8px_var(--lare-status-stop)]",
+        )}
+      />
+    </span>
+  );
+}
+
 function PillButton({
   label,
-  accent,
+  danger,
   disabled,
   onClick,
   children,
+  ...hover
 }: {
   label: string;
-  accent?: boolean;
+  danger?: boolean;
   disabled?: boolean;
   onClick: () => void;
   children: React.ReactNode;
-}) {
+} & Pick<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  "onMouseEnter" | "onMouseLeave" | "onFocus" | "onBlur"
+>) {
   return (
     <button
       type="button"
-      title={label}
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
+      {...hover}
       className={cn(
-        "inline-flex size-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-        accent
-          ? "bg-rose-500 text-white hover:bg-rose-400"
-          : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700",
+        "lare-press inline-flex size-9 shrink-0 items-center justify-center rounded-full text-[var(--lare-soft)] transition-colors",
+        "hover:bg-white/[0.08] hover:text-[var(--lare-bone)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
+        danger && "hover:text-[var(--lare-status-stop)]",
       )}
     >
       {children}

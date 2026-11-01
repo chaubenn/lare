@@ -291,6 +291,11 @@ pub fn hide_recorder_window(app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn tuck_recorder_window(app: AppHandle) {
+    windows::tuck_recorder(&app);
+}
+
+#[tauri::command]
 pub fn open_camera_window(app: AppHandle, rec: Rec<'_>) -> Result<(), String> {
     windows::open_camera(&app, rec.settings().display_id.as_deref())
 }

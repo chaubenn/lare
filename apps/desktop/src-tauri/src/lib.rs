@@ -255,6 +255,7 @@ pub fn run() {
             commands::clear_screen_sharing,
             commands::open_recorder_window,
             commands::hide_recorder_window,
+            commands::tuck_recorder_window,
             commands::open_camera_window,
             commands::hide_camera_window,
             commands::resize_camera_window,

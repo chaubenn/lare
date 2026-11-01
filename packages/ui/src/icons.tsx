@@ -16,6 +16,7 @@ import {
   Copy01Icon,
   Delete02Icon,
   Download01Icon,
+  DragDropVerticalIcon,
   FavouriteIcon,
   FireIcon,
   GlobalIcon,
@@ -64,6 +65,7 @@ import {
   UserIcon,
   Video01Icon,
   ViewIcon,
+  ViewOffSlashIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type HugeiconsProps, type IconSvgElement } from "@hugeicons/react";
 import type { ComponentType } from "react";
@@ -100,9 +102,11 @@ export const Copy = icon(Copy01Icon);
 export const Download = icon(Download01Icon);
 export const ExternalLink = icon(LinkSquare02Icon);
 export const Eye = icon(ViewIcon);
+export const EyeOff = icon(ViewOffSlashIcon);
 export const FileCode2 = icon(SourceCodeIcon);
 export const Flame = icon(FireIcon);
 export const Globe = icon(GlobalIcon);
+export const GripVertical = icon(DragDropVerticalIcon);
 export const HardDrive = icon(HardDriveIcon);
 export const Heart = icon(FavouriteIcon);
 export const ImagePlus = icon(ImageAdd01Icon);

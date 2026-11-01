@@ -192,6 +192,8 @@ export const recorder = {
 
   openRecorderWindow: () => invoke<void>("open_recorder_window"),
   hideRecorderWindow: () => invoke<void>("hide_recorder_window"),
+  /** Hide the pill mid-take; the pill shortcut brings it back. */
+  tuckRecorderWindow: () => invoke<void>("tuck_recorder_window"),
   openCameraWindow: () => invoke<void>("open_camera_window"),
   hideCameraWindow: () => invoke<void>("hide_camera_window"),
   resizeCameraWindow: (size: number) => invoke<void>("resize_camera_window", { size }),
