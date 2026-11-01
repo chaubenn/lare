@@ -74,9 +74,8 @@ jobs:
           | Windows 10/11 (x64) | `Lare-Windows-x64-Setup.exe` |
           | Chrome extension | `Lare-Chrome-Extension.zip` |
 
-          Builds are not notarised yet. macOS: right-click the app > Open the first time (or
-          `xattr -dr com.apple.quarantine /Applications/Lare.app`). Windows: choose "More info"
-          > "Run anyway" on the SmartScreen prompt.
+          macOS builds are signed and notarised, so they open normally. Windows is not signed
+          yet: choose "More info" > "Run anyway" on the SmartScreen prompt.
 
           Installed apps update themselves from this release on launch. Setup guide:
           https://github.com/chaubenn/lare#install

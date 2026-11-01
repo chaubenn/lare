@@ -904,6 +904,43 @@ async function onDesktopMessage(msg: AppToExt): Promise<void> {
   }
   if (msg.state === "recording" || msg.state === "paused" || msg.state === "stopping")
     await setRecording(msg.state, msg.message);
+  // The desktop pill can finish an interview on its own. Once the side panel has ended it there is
+  // nothing to do: `ending` is in flight, or the session already carries its end event (a save
+  // that failed and waits to be retried).
+  if (ending || timerStatus(interview.events) === "ended") return;
+  // End: stop comes first, so save the session exactly as the side panel's End button would. The
+  // `session.end` that sends is answered from the recorder's last result, not stopped twice.
+  if (msg.state === "stopping") void endSession();
+  // Discard: the recording went straight to idle, with no stop before it.
+  else if (msg.state === "idle") await discardSession(interview);
+}
+
+/** The take was thrown away from the desktop pill: close the interview without a recording. */
+async function discardSession(interview: ActiveSession): Promise<void> {
+  if (interview.tabId !== null)
+    await chrome.tabs
+      .sendMessage(interview.tabId, { type: "LARE_RECORDING_INDICATOR", visible: false })
+      .catch(() => undefined);
+  await withState(async (s) => ({
+    state: {
+      ...s,
+      interview: s.interview?.sessionId === interview.sessionId ? null : s.interview,
+    },
+    result: undefined,
+  }));
+  // Same close as a start that failed: the row stays, ungraded, so nothing waits on a recording.
+  if (interview.synced)
+    await getSupabase()
+      .from("sessions")
+      .update({ status: "ended", ended_at: new Date().toISOString(), graded: false })
+      .eq("id", interview.sessionId)
+      .then(({ error }) => {
+        if (error) console.warn("[lare] close discarded session", error);
+      });
+  await chrome.alarms.clear(TICK_ALARM);
+  await setRecording("idle");
+  await refreshBadge();
+  await broadcast({ kind: "success", text: "Mock interview discarded." });
 }
 
 async function setRecording(state: RecordingState, message?: string | null): Promise<void> {

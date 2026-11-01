@@ -52,8 +52,8 @@ Two pieces: the desktop app and the Chrome extension. About two minutes.
 
 All versions: [Releases](https://github.com/chaubenn/lare/releases).
 
-- **macOS**: open the DMG, drag Lare to Applications. The build is not notarised yet, so the
-  first launch needs right-click > **Open** (or `xattr -dr com.apple.quarantine /Applications/Lare.app`).
+- **macOS**: open the DMG, drag Lare to Applications. The app is signed and notarised, so it opens
+  normally.
   Grant Screen Recording / Camera / Microphone when asked (needed for demo videos and interviews).
 - **Windows**: run the installer. If SmartScreen appears, click **More info** > **Run anyway**.
 

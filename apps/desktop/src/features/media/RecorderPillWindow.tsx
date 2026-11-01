@@ -1,6 +1,7 @@
 /**
  * The always-on-top recorder pill (`?window=recorder`). Shows the live timer and lets the user
- * pause/resume, stop or discard. State comes from `recording:state` events; the initial state is
+ * pause/resume, stop or discard. Mock interviews get the same pill without pause: the interview
+ * timer lives in the extension, and its pause is the one that counts. State comes from `recording:state` events; the initial state is
  * fetched on mount so the pill is correct even if it opened after the recording started.
  */
 
@@ -186,12 +187,8 @@ export function RecorderPillWindow() {
             </div>
           </div>
         </div>
-        {isInterview ? (
-          <span className="pointer-events-none shrink-0 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-[var(--lare-soft)]">
-            End from the extension
-          </span>
-        ) : (
-          <div className="flex shrink-0 items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
+          {isInterview ? null : (
             <PillButton
               label={paused ? "Resume" : "Pause"}
               disabled={busy || !live}
@@ -204,32 +201,34 @@ export function RecorderPillWindow() {
                 <Pause className="size-4 fill-current" aria-hidden />
               )}
             </PillButton>
-            <button
-              type="button"
-              aria-label="End and save"
-              disabled={busy || !live}
-              onClick={() => void run(() => recorder.stop())}
-              {...hintProps("End and save the recording")}
-              className={cn(
-                "lare-press mx-1 inline-flex h-9 shrink-0 items-center gap-2 rounded-full pr-3.5 pl-3 text-[13px] font-semibold text-white",
-                "bg-[color-mix(in_oklab,var(--lare-status-stop)_82%,black)] shadow-[inset_0_1px_0_rgb(255_255_255/0.14)]",
-                "transition-colors hover:bg-[var(--lare-status-stop)] disabled:cursor-not-allowed disabled:opacity-40",
-              )}
-            >
-              <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
-              End
-            </button>
-            <PillButton
-              label="Discard"
-              danger
-              disabled={busy || state === "stopping"}
-              onClick={() => void run(() => recorder.cancel())}
-              {...hintProps("Discard this take")}
-            >
-              <Trash2 className="size-4" aria-hidden />
-            </PillButton>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            aria-label="End and save"
+            disabled={busy || !live}
+            onClick={() => void run(() => recorder.stop())}
+            {...hintProps(
+              isInterview ? "End and save the interview" : "End and save the recording",
+            )}
+            className={cn(
+              "lare-press mx-1 inline-flex h-9 shrink-0 items-center gap-2 rounded-full pr-3.5 pl-3 text-[13px] font-semibold text-white",
+              "bg-[color-mix(in_oklab,var(--lare-status-stop)_82%,black)] shadow-[inset_0_1px_0_rgb(255_255_255/0.14)]",
+              "transition-colors hover:bg-[var(--lare-status-stop)] disabled:cursor-not-allowed disabled:opacity-40",
+            )}
+          >
+            <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
+            End
+          </button>
+          <PillButton
+            label="Discard"
+            danger
+            disabled={busy || state === "stopping"}
+            onClick={() => void run(() => recorder.cancel())}
+            {...hintProps(isInterview ? "Discard this interview" : "Discard this take")}
+          >
+            <Trash2 className="size-4" aria-hidden />
+          </PillButton>
+        </div>
         {keys ? (
           <PillButton
             label={`Hide (${keys} shows it again)`}

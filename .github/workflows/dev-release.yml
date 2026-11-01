@@ -102,9 +102,8 @@ jobs:
 
           Only the targets named in the tag are attached.
 
-          Builds are not notarised. macOS: right-click the app > Open the first time (or
-          `xattr -dr com.apple.quarantine /Applications/Lare.app`). Windows: choose "More info"
-          > "Run anyway" on the SmartScreen prompt.
+          macOS builds are signed and notarised, so they open normally. Windows is not signed
+          yet: choose "More info" > "Run anyway" on the SmartScreen prompt.
 
           The extension is unpacked, not from the Web Store: unzip it, then load the folder
           at `chrome://extensions` with Developer mode on.

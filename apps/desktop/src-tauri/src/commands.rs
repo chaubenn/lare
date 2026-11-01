@@ -178,16 +178,26 @@ pub async fn recording_resume(rec: Rec<'_>) -> Result<StatePayload, String> {
     rec.resume(None).await
 }
 
+// Stop and cancel come from the pill, which also ends mock interviews now. The hub tells the
+// extension, so it can close the interview session it owns. Demo takes have no session id, and
+// the extension ignores a `recording.state` frame that is not about its own session.
 #[tauri::command]
-pub async fn recording_stop(app: AppHandle, rec: Rec<'_>) -> Result<CompletedPayload, String> {
-    let result = rec.stop(None).await;
+pub async fn recording_stop(
+    app: AppHandle,
+    rec: Rec<'_>,
+    state: State<'_, crate::AppState>,
+) -> Result<CompletedPayload, String> {
+    let result = rec.stop(Some(&state.ws)).await;
     crate::focus_main_window(&app);
     result
 }
 
 #[tauri::command]
-pub async fn recording_cancel(rec: Rec<'_>) -> Result<(), String> {
-    rec.cancel(None).await
+pub async fn recording_cancel(
+    rec: Rec<'_>,
+    state: State<'_, crate::AppState>,
+) -> Result<(), String> {
+    rec.cancel(Some(&state.ws)).await
 }
 
 /// Clear a screen-sharing session macOS is still attributing to Lare.

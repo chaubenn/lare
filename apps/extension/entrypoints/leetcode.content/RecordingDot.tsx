@@ -8,7 +8,7 @@ import type { PageController } from "@/src/pageController";
  * There is deliberately nothing else here. Practice is tracked silently, and an
  * interview should not put a timer or a control panel in front of someone who is
  * trying to think — but recording without any visible sign of it would be worse,
- * so the dot stays. Controls live in the extension side panel.
+ * so the dot stays. Controls live in the extension side panel and the desktop pill.
  */
 export function RecordingDot({ controller }: { controller: PageController }) {
   const [state, setState] = useState(() => controller.getState());
