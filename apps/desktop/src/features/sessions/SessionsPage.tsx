@@ -175,7 +175,7 @@ function SessionRows({ sessions, className }: { sessions: SessionRow[]; classNam
             className="flex min-w-0 items-center gap-2 rounded-[var(--lare-r-1)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
           >
             {/* Fixed width so difficulty and title line up whatever the kind. */}
-            <span className="flex w-[4.5rem] shrink-0 items-center">
+            <span className="flex w-[5.75rem] shrink-0 items-center">
               <KindBadge kind={s.kind} />
             </span>
             {s.session_problems[0] ? (

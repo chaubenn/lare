@@ -99,7 +99,8 @@ export function AppShell() {
     <div className="flex h-full bg-[var(--frame)]">
       <Sidebar />
       {/* Medesk's inset panel: the page sits on its own rounded surface inside the frame. */}
-      <div className="flex min-w-0 flex-1 flex-col py-2 pr-2">
+      {/* The 8px frame around the panel moves the window too; on Windows there is no title bar. */}
+      <div data-tauri-drag-region className="flex min-w-0 flex-1 flex-col py-2 pr-2">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--lare-r-4)] bg-[var(--surface)]">
           <Topbar onOpenSearch={() => setPaletteOpen(true)} />
           <main

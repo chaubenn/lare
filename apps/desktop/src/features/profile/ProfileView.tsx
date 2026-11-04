@@ -214,7 +214,7 @@ export function ProfileView({
               ) : null}
               {/* Side by side, so neither panel sprawls across the whole page on its own. */}
               <div
-                className={`grid items-start gap-4 ${activity?.visible && skills?.visible ? "lg:grid-cols-2" : ""}`}
+                className={`grid items-stretch gap-4 ${activity?.visible && skills?.visible ? "lg:grid-cols-2" : ""}`}
               >
                 {activity?.visible ? <ActivityGrid activity={activity} /> : null}
                 {skills?.visible ? <SkillsPanel skills={skills} /> : null}

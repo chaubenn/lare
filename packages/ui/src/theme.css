@@ -147,8 +147,14 @@
   }
 }
 
+/* Windows reports "Transparency effects: off" as reduced transparency. tokens.css drops the blur;
+   the panels have to go solid too, or they stay see-through with nothing behind them blurred. The
+   selectors repeat the theme blocks above so this one wins on order, not lose on specificity. */
 @media (prefers-reduced-transparency: reduce) {
-  :root {
+  :root,
+  :root.light,
+  :root.dark,
+  :root:not(.light):not(.dark) {
     --lare-material-thin: var(--surface);
     --lare-material-regular: var(--surface);
     --lare-material-thick: var(--frame);

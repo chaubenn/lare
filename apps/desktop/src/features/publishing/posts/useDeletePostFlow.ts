@@ -1,22 +1,18 @@
-import { ask } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router";
 import { useNotify } from "@/features/notifications/notices";
+import { confirm } from "@/lib/confirm";
 import { errorMessage } from "@/lib/supabase";
-import { inTauri } from "@/lib/tauri";
 import { useDeletePost } from "./queries";
 
-async function confirmDelete(): Promise<boolean> {
-  const message =
-    "Delete this post? It disappears from the feed and your profile. The session stays in your account.";
-  if (inTauri) {
-    return ask(message, {
-      title: "Delete post",
-      kind: "warning",
-      okLabel: "Delete",
-      cancelLabel: "Keep",
-    });
-  }
-  return window.confirm(message);
+function confirmDelete(): Promise<boolean> {
+  return confirm({
+    title: "Delete post",
+    message:
+      "Delete this post? It disappears from the feed and your profile. The session stays in your account.",
+    confirmLabel: "Delete",
+    cancelLabel: "Keep",
+    destructive: true,
+  });
 }
 
 /** Confirm, delete, then leave the post's pages for the profile it was on. */

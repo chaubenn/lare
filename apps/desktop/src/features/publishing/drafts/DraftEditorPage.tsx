@@ -1,7 +1,6 @@
 import { formatDurationHuman, showsActiveTime } from "@lare/shared";
 import type { Post } from "@lare/supabase-types";
 import { ArrowLeft, ArrowRight, Check, Eye, Send, Trash2 } from "@lare/ui/icons";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -17,10 +16,10 @@ import { useNotify } from "@/features/notifications/notices";
 import { PostMediaPanel } from "@/features/publishing/posts/PostMediaPanel";
 import { PostPreview, usePreviewSlides } from "@/features/publishing/posts/PostPreview";
 import { PageActions } from "@/features/shell/PageActions";
+import { confirm } from "@/lib/confirm";
 import { formatDateTime, plural } from "@/lib/format";
 import { useHotkey } from "@/lib/hotkeys";
 import { errorMessage } from "@/lib/supabase";
-import { inTauri } from "@/lib/tauri";
 import { DemoVideoPanel } from "./DemoVideoPanel";
 import { PostExtrasPanel } from "./PostExtrasPanel";
 import {
@@ -89,17 +88,14 @@ function defaultTitle(draft: Draft): string {
   return `${kind}: ${titles.join(", ")}${more}`;
 }
 
-async function confirmDelete(): Promise<boolean> {
-  const message = "Delete this draft? The session data stays; only the post is removed.";
-  if (inTauri) {
-    return ask(message, {
-      title: "Delete draft",
-      kind: "warning",
-      okLabel: "Delete",
-      cancelLabel: "Keep",
-    });
-  }
-  return window.confirm(message);
+function confirmDelete(): Promise<boolean> {
+  return confirm({
+    title: "Delete draft",
+    message: "Delete this draft? The session data stays; only the post is removed.",
+    confirmLabel: "Delete",
+    cancelLabel: "Keep",
+    destructive: true,
+  });
 }
 
 function DraftEditor({ draft }: { draft: Draft }) {

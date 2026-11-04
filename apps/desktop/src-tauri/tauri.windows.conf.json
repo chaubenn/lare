@@ -5,5 +5,24 @@
       "../../../target/ffmpeg/bin/*.dll": "./",
       "../../../target/zvec/zvec_c_api.dll": "./"
     }
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lare",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true,
+        "windowEffects": {
+          "effects": ["mica"]
+        },
+        "dragDropEnabled": false,
+        "decorations": false
+      }
+    ]
   }
 }

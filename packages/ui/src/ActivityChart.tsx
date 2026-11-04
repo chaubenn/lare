@@ -24,6 +24,8 @@ type Mode = "day" | "week";
 const DAY_WINDOW = 7;
 /** Weeks per page: about a month. Seven weeks back read as an arbitrary span. */
 const WEEK_WINDOW = 4;
+/** Matches the frame's `min-h-40`. */
+const MIN_CHART_HEIGHT = 160;
 
 function describeDayPage(bars: ActivityDay[]): string {
   const total = bars.reduce((n, d) => n + d.count, 0);
@@ -82,6 +84,7 @@ export function ActivityChart({
   const [page, setPage] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
   const [width, setWidth] = useState(0);
+  const [frameHeight, setFrameHeight] = useState(0);
   const frameRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<HTMLDivElement>(null);
 
@@ -98,11 +101,13 @@ export function ActivityChart({
     const el = frameRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
-      const next = entries[0]?.contentRect.width ?? 0;
-      setWidth(next);
+      const rect = entries[0]?.contentRect;
+      setWidth(rect?.width ?? 0);
+      setFrameHeight(rect?.height ?? 0);
     });
     ro.observe(el);
     setWidth(el.clientWidth);
+    setFrameHeight(el.clientHeight);
     return () => ro.disconnect();
   }, []);
 
@@ -132,7 +137,8 @@ export function ActivityChart({
   const activeWeek = mode === "week" && hover !== null ? weekBars[hover] : null;
 
   const summary = useMemo(() => summarizeActivity(days), [days]);
-  const height = 160;
+  // The chart fills whatever height the card has left, e.g. when it sits beside a taller panel.
+  const height = Math.max(MIN_CHART_HEIGHT, frameHeight);
   const pad = { top: 18, right: 0, bottom: 22, left: 0 };
   const innerH = height - pad.top - pad.bottom;
   const gap = 10;
@@ -143,7 +149,7 @@ export function ActivityChart({
     <section
       aria-labelledby="activity-heading"
       className={cn(
-        "@container relative rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] p-5",
+        "@container relative flex flex-col rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] p-5",
         className,
       )}
       onKeyDown={(e) => {
@@ -225,8 +231,10 @@ export function ActivityChart({
         ))}
       </dl>
 
-      <div ref={frameRef} className="relative mt-4 min-w-0">
-        <div ref={dragRef} className="touch-pan-y">
+      {/* The frame takes the leftover height; the chart is laid over it so its own size never
+          feeds back into the frame's. */}
+      <div ref={frameRef} className="relative mt-4 min-h-40 min-w-0 flex-1">
+        <div ref={dragRef} className="absolute inset-0 touch-pan-y">
           <svg
             width="100%"
             height={height}
@@ -305,20 +313,20 @@ export function ActivityChart({
             })}
           </svg>
         </div>
+        {/* Inside the frame, so the arrows centre on the bars rather than on the whole card. */}
+        <NavButton
+          side="left"
+          disabled={clampedPage >= lastPage}
+          onClick={() => goToPage(clampedPage + 1)}
+          label="Previous period"
+        />
+        <NavButton
+          side="right"
+          disabled={clampedPage <= 0}
+          onClick={() => goToPage(clampedPage - 1)}
+          label="Next period"
+        />
       </div>
-
-      <NavButton
-        side="left"
-        disabled={clampedPage >= lastPage}
-        onClick={() => goToPage(clampedPage + 1)}
-        label="Previous period"
-      />
-      <NavButton
-        side="right"
-        disabled={clampedPage <= 0}
-        onClick={() => goToPage(clampedPage - 1)}
-        label="Next period"
-      />
     </section>
   );
 }

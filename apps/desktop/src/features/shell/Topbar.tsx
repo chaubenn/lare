@@ -3,6 +3,9 @@ import { useLocation } from "react-router";
 import { useGoBack } from "@/lib/useGoBack";
 import { navItemForPath } from "./nav";
 import { TopbarBlurbSlot } from "./PageBlurb";
+import { drawsWindowControls, WindowControls } from "./WindowControls";
+
+const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 
 /**
  * Medesk's header: the page's name on the left and quick search on the right. It is the only
@@ -39,19 +42,26 @@ export function Topbar({ onOpenSearch }: { onOpenSearch: () => void }) {
         <TopbarBlurbSlot />
       </div>
 
-      <button
-        type="button"
-        onClick={onOpenSearch}
-        aria-label="Search and run commands"
-        className="lare-press flex h-9 w-69 shrink-0 items-center gap-2 rounded-[var(--lare-r-2)] bg-[var(--surface-sunken)] py-1 pr-2 pl-2.5 text-left text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
-      >
-        <Search className="size-3 shrink-0" aria-hidden />
-        <span className="flex-1 truncate px-1">Search pages and actions…</span>
-        <span className="flex h-6 items-center justify-center gap-1 rounded-md bg-[var(--surface)] px-1.5">
-          <Command className="size-3" aria-hidden />
-          <span className="text-xs leading-none">K</span>
-        </span>
-      </button>
+      <div className="flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          aria-label="Search and run commands"
+          className="lare-press flex h-9 w-69 shrink-0 items-center gap-2 rounded-[var(--lare-r-2)] bg-[var(--surface-sunken)] py-1 pr-2 pl-2.5 text-left text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+        >
+          <Search className="size-3 shrink-0" aria-hidden />
+          <span className="flex-1 truncate px-1">Search pages and actions…</span>
+          <span className="flex h-6 items-center justify-center gap-1 rounded-md bg-[var(--surface)] px-1.5">
+            {isMac ? (
+              <Command className="size-3" aria-hidden />
+            ) : (
+              <span className="text-xs leading-none">Ctrl</span>
+            )}
+            <span className="text-xs leading-none">K</span>
+          </span>
+        </button>
+        {drawsWindowControls ? <WindowControls /> : null}
+      </div>
     </header>
   );
 }

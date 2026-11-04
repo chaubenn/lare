@@ -1,9 +1,9 @@
 import { MonitorX } from "@lare/ui/icons";
 import { useMutation } from "@tanstack/react-query";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/features/media/hooks";
 import { useNotify } from "@/features/notifications/notices";
+import { confirm } from "@/lib/confirm";
 import { recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { SubSection } from "./shared";
@@ -19,10 +19,13 @@ export function ScreenSharingSection() {
   const { notify } = useNotify();
   const clear = useMutation({
     mutationFn: async () => {
-      const ok = await ask(
-        "This releases the screen, camera and microphone, and restarts the macOS service that owns screen-capture sessions.\n\nAny other app that is recording or sharing its screen right now will stop too.",
-        { title: "Clear the screen-sharing indicator?", kind: "warning", okLabel: "Clear" },
-      );
+      const ok = await confirm({
+        title: "Clear the screen-sharing indicator?",
+        message:
+          "This releases the screen, camera and microphone, and restarts the macOS service that owns screen-capture sessions.\n\nAny other app that is recording or sharing its screen right now will stop too.",
+        confirmLabel: "Clear",
+        destructive: true,
+      });
       if (!ok) return false;
       await recorder.clearScreenSharing();
       return true;

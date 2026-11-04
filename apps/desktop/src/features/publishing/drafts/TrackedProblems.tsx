@@ -1,14 +1,13 @@
 import { DifficultyBadge } from "@lare/ui";
 import { Radio } from "@lare/ui/icons";
-import { ask } from "@tauri-apps/plugin-dialog";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { useNotify } from "@/features/notifications/notices";
-import { formatListWhen, plural } from "@/lib/format";
+import { confirm } from "@/lib/confirm";
+import { formatListWhen, plural, timeAgo } from "@/lib/format";
 import { errorMessage } from "@/lib/supabase";
-import { inTauri } from "@/lib/tauri";
 import {
   type TrackedProblemRow,
   useClearTracked,
@@ -16,14 +15,15 @@ import {
   useTrackedProblems,
 } from "./queries";
 
-async function confirmClear(count: number, all: boolean): Promise<boolean> {
-  const message = `Remove ${all ? "all " : ""}${plural(count, "tracked problem")}? ${
-    count === 1 ? "It" : "They"
-  } will no longer be available to post.`;
-  if (inTauri) {
-    return ask(message, { title: "Clear tracked problems", kind: "warning", okLabel: "Clear" });
-  }
-  return window.confirm(message);
+function confirmClear(count: number, all: boolean): Promise<boolean> {
+  return confirm({
+    title: "Clear tracked problems",
+    message: `Remove ${all ? "all " : ""}${plural(count, "tracked problem")}? ${
+      count === 1 ? "It" : "They"
+    } will no longer be available to post.`,
+    confirmLabel: "Clear",
+    destructive: true,
+  });
 }
 
 /**
@@ -43,6 +43,11 @@ export function TrackedProblems() {
 
   const rows = tracked.data ?? [];
   const chosen = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
+
+  const allChosen = rows.length > 0 && chosen.length === rows.length;
+  function toggleAll() {
+    setSelected(allChosen ? new Set() : new Set(rows.map((r) => r.id)));
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -120,7 +125,14 @@ export function TrackedProblems() {
         <p className="mt-3 text-sm text-[var(--text-tertiary)]">Loading…</p>
       ) : (
         <>
-          <ul className="mt-3 space-y-1">
+          {rows.length > 1 ? (
+            <SelectAll
+              checked={allChosen}
+              mixed={chosen.length > 0 && !allChosen}
+              onToggle={toggleAll}
+            />
+          ) : null}
+          <ul className={rows.length > 1 ? "space-y-1" : "mt-3 space-y-1"}>
             {rows.map((row) => (
               <li key={row.id}>
                 <TrackedRow
@@ -139,8 +151,13 @@ export function TrackedProblems() {
               loading={publish.isPending}
               onClick={() => void doPublish()}
             >
-              {chosen.length <= 1 ? "Create post" : `Create post from ${chosen.length} problems`}
+              {chosen.length <= 1 ? "Create draft" : `Create draft from ${chosen.length} problems`}
             </Button>
+            {chosen.length === 0 ? (
+              <span className="text-xs text-[var(--text-tertiary)]">
+                Select the problems to put in the post
+              </span>
+            ) : null}
             {chosen.length > 0 && (
               <Button variant="ghost" onClick={() => setSelected(new Set())}>
                 Deselect
@@ -180,11 +197,39 @@ function TrackedRow({
         {submissions.length === 0 ? "opened" : `${accepted}/${submissions.length} accepted`}
       </span>
       <span
-        className="hidden whitespace-nowrap font-mono text-xs tabular-nums text-[var(--text-tertiary)] sm:block"
+        className="hidden whitespace-nowrap text-xs tabular-nums text-[var(--text-tertiary)] sm:block"
         title={when.title}
       >
-        {when.label}
+        {timeAgo(row.opened_at)}
       </span>
+    </label>
+  );
+}
+
+/** Ticks every tracked problem at once; shows a dash while only some are ticked. */
+function SelectAll({
+  checked,
+  mixed,
+  onToggle,
+}: {
+  checked: boolean;
+  mixed: boolean;
+  onToggle: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = mixed;
+  }, [mixed]);
+  return (
+    <label className="mt-3 flex cursor-pointer items-center gap-3 border-b border-[var(--border)] px-2 pt-1 pb-2 text-xs text-[var(--text-tertiary)]">
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className="size-4 shrink-0 accent-[var(--accent)]"
+      />
+      Select all
     </label>
   );
 }

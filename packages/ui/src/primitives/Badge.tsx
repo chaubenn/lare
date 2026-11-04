@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "../cn";
+import { Mic } from "../icons";
 
 type Tone = "zinc" | "emerald" | "amber" | "rose" | "sky" | "violet" | "easy" | "medium" | "hard";
 
@@ -41,8 +42,12 @@ export function Badge({
 }
 
 export function KindBadge({ kind }: { kind: "practice" | "interview" }) {
+  // The two pills sit close in colour; the mic marks the one that was recorded.
   return kind === "interview" ? (
-    <Badge tone="violet">Interview</Badge>
+    <Badge tone="violet">
+      <Mic className="size-3" aria-hidden />
+      Interview
+    </Badge>
   ) : (
     <Badge tone="sky">Practice</Badge>
   );

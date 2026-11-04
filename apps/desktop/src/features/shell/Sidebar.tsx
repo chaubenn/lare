@@ -58,7 +58,7 @@ function useSidebarScale(): number {
 
 /** Tight, white rows. Hover brightens the row's own background; the active page holds it. */
 const ROW =
-  "relative flex items-center rounded-[var(--lare-r-2)] text-base text-[var(--text)] transition-colors hover:bg-[color-mix(in_oklab,var(--text)_8%,transparent)]";
+  "relative flex items-center rounded-[var(--lare-r-2)] text-sm text-[var(--text)] transition-colors hover:bg-[color-mix(in_oklab,var(--text)_8%,transparent)]";
 const ROW_ACTIVE = "bg-[color-mix(in_oklab,var(--text)_12%,transparent)] font-medium";
 const ROW_EXPANDED = "h-9 gap-2.5 py-1.5 pr-2 pl-3";
 const ROW_COLLAPSED = "size-9 justify-center";
@@ -85,7 +85,7 @@ function NavRow({
       {({ isActive }) => (
         <>
           <item.icon
-            className={cn("size-5 shrink-0", isActive && "text-[var(--accent-text)]")}
+            className={cn("size-[1.125rem] shrink-0", isActive && "text-[var(--accent-text)]")}
             aria-hidden
           />
           {collapsed ? null : <span className="flex-1 truncate">{item.label}</span>}
@@ -120,11 +120,12 @@ function NavSection({
 }) {
   const [open, setOpen] = useState(true);
   const expanded = !collapsible || open || collapsed;
+  // Small caps headings, so the section names group the rows instead of competing with them.
   const labelClass =
-    "flex h-7 w-full items-center justify-between text-[1.0625rem] font-normal text-[color-mix(in_oklab,var(--text)_70%,transparent)]";
+    "lare-label flex h-7 w-full items-center justify-between pr-2 pl-3 text-[var(--text-tertiary)]";
 
   return (
-    <section aria-label={label} className="space-y-0.5">
+    <section aria-label={label} className="space-y-0.5 pt-1">
       {collapsed ? null : collapsible ? (
         <button
           type="button"
@@ -134,7 +135,7 @@ function NavSection({
         >
           <span>{label}</span>
           <ChevronRight
-            className={cn("size-4 transition-transform", open && "rotate-90")}
+            className={cn("size-3.5 transition-transform", open && "rotate-90")}
             aria-hidden
           />
         </button>

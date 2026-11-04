@@ -500,7 +500,8 @@ label.problem:hover {
   background: var(--surface-sunken);
   color: var(--text);
   font-size: var(--text-md);
-  font-weight: 600;
+  /* Matches the shared Button in @lare/ui: secondary at regular weight, primary at medium. */
+  font-weight: 400;
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -524,6 +525,7 @@ label.problem:hover {
   border-color: var(--text);
   background: var(--text);
   color: var(--surface);
+  font-weight: 500;
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);

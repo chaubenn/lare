@@ -44,7 +44,9 @@ export function SkillsPanel({ skills, className }: { skills: SolvedSkills; class
         </p>
       ) : (
         <>
-          <div className="mt-2 grid items-center gap-4 @sm:grid-cols-[minmax(0,1fr)_minmax(0,9.5rem)]">
+          {/* Side by side only once the radar still gets most of the width; otherwise stacked,
+              so its labels stay readable. */}
+          <div className="mt-3 grid items-center gap-5 @lg:grid-cols-[minmax(0,1fr)_minmax(0,9.5rem)]">
             <Radar areas={areas} />
             <Difficulty split={split} />
           </div>
@@ -102,7 +104,7 @@ function Difficulty({ split }: { split: DifficultySplit }) {
           ) : null,
         )}
       </div>
-      <dl className="mt-3 space-y-2">
+      <dl className="mt-3 grid grid-cols-3 gap-x-5 gap-y-2 @lg:grid-cols-1">
         {DIFF.map((d) => (
           <div key={d.key} className="flex items-center justify-between gap-3 text-sm">
             <dt className="flex items-center gap-2 text-[var(--text-secondary)]">
@@ -131,9 +133,10 @@ function Radar({ areas }: { areas: SkillArea[] }) {
   const shape = areas.map((a, i) => point(i, 0.08 + a.share * 0.92).join(",")).join(" ");
 
   return (
+    // Wide side margins hold the left and right labels; drawn about 1:1, so 12 units ≈ 12px.
     <svg
-      viewBox={`-72 -6 ${size + 144} ${size + 12}`}
-      className="mx-auto w-full max-w-[19rem]"
+      viewBox={`-92 -10 ${size + 184} ${size + 20}`}
+      className="mx-auto w-full max-w-[26rem]"
       role="img"
       aria-label={areas.map((a) => `${a.label}: ${a.solved}`).join(", ")}
     >
@@ -153,10 +156,10 @@ function Radar({ areas }: { areas: SkillArea[] }) {
       />
       {areas.map((a, i) => {
         const [x, y] = point(i, 0.08 + a.share * 0.92);
-        return <circle key={a.key} cx={x} cy={y} r={2.5} fill="var(--accent)" />;
+        return <circle key={a.key} cx={x} cy={y} r={3} fill="var(--accent)" />;
       })}
       {areas.map((a, i) => {
-        const [x, y] = point(i, 1.2);
+        const [x, y] = point(i, 1.16);
         const anchor = Math.abs(x - c) < 4 ? "middle" : x > c ? "start" : "end";
         return (
           <text
@@ -165,7 +168,7 @@ function Radar({ areas }: { areas: SkillArea[] }) {
             y={y}
             textAnchor={anchor}
             dominantBaseline="middle"
-            fontSize={10}
+            fontSize={12}
             fill="var(--text-secondary)"
           >
             {a.label}
