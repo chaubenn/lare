@@ -333,6 +333,85 @@ pub fn focus_main(app: AppHandle) {
 }
 
 // ---------------------------------------------------------------------------
+// Desktop notifications
+// ---------------------------------------------------------------------------
+
+/// Show an OS notification that, when clicked, focuses the main window and opens `route` (an
+/// in-app path such as `/posts/<id>`). The notification plugin cannot report clicks on desktop,
+/// so on Windows the toast is raised through WinRT with an activation handler; elsewhere it falls
+/// back to the plugin, and a click only does what the OS does by default.
+#[tauri::command]
+pub fn show_desktop_notification(
+    app: AppHandle,
+    title: String,
+    body: String,
+    route: Option<String>,
+) -> Result<(), String> {
+    // Only in-app paths: the route goes straight to the router, like a `lare://` link.
+    let route = route.filter(|r| r.starts_with('/'));
+    show_notification(app, title, body, route)
+}
+
+#[cfg(windows)]
+fn show_notification(
+    app: AppHandle,
+    title: String,
+    body: String,
+    route: Option<String>,
+) -> Result<(), String> {
+    use tauri_winrt_notification::Toast;
+
+    // Same rule as tauri-plugin-notification: a build run from `target/` has no registered
+    // AppUserModelID, so it borrows PowerShell's for the toast to show at all.
+    let from_target = tauri::utils::platform::current_exe()
+        .ok()
+        .and_then(|exe| {
+            exe.parent()
+                .map(|dir| dir.ends_with("target/debug") || dir.ends_with("target/release"))
+        })
+        .unwrap_or(false);
+    let app_id = if from_target {
+        Toast::POWERSHELL_APP_ID.to_string()
+    } else {
+        app.config().identifier.clone()
+    };
+    tauri::async_runtime::spawn(async move {
+        let handle = app.clone();
+        let shown = Toast::new(&app_id)
+            .title(&title)
+            .text1(&body)
+            .on_activated(move |_action| {
+                match &route {
+                    Some(path) => crate::emit_deeplink(&handle, path),
+                    None => crate::focus_main_window(&handle),
+                }
+                Ok(())
+            })
+            .show();
+        if let Err(e) = shown {
+            tracing::warn!(error = %e, "could not show a desktop notification");
+        }
+    });
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn show_notification(
+    app: AppHandle,
+    title: String,
+    body: String,
+    _route: Option<String>,
+) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(err)
+}
+
+// ---------------------------------------------------------------------------
 // Media helpers
 // ---------------------------------------------------------------------------
 

@@ -92,6 +92,7 @@ export function useUpdatePost() {
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: postKey(vars.id) });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
+      void queryClient.invalidateQueries({ queryKey: ["user-posts"] });
     },
   });
 }

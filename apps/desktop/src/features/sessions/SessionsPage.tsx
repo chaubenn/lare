@@ -4,10 +4,12 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
+import { LoadMore } from "@/components/ui/LoadMore";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { PageBlurb } from "@/features/shell/PageBlurb";
 import { plural } from "@/lib/format";
 import { groupSittings, SITTING_GAP_MS, type Sitting } from "./grouping";
+import { UnfinishedInterviews } from "./InterviewRecovery";
 import { type SessionRow, useSessions } from "./queries";
 
 /**
@@ -22,9 +24,10 @@ export function SessionsPage() {
   return (
     <div>
       <PageBlurb>Your practice and mock interviews, by sitting.</PageBlurb>
+      <UnfinishedInterviews />
       {sessions.isPending ? (
         <ListSkeleton />
-      ) : sessions.isError ? (
+      ) : sessions.isError && !sessions.data ? (
         <ErrorState error={sessions.error} onRetry={() => void sessions.refetch()} />
       ) : !latest ? (
         <EmptyState
@@ -45,6 +48,7 @@ export function SessionsPage() {
               </ul>
             </section>
           ))}
+          <LoadMore query={sessions} />
         </>
       )}
     </div>

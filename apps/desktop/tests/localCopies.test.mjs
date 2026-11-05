@@ -39,3 +39,17 @@ test("only uploaded copies whose video is ready, or gone, are removed", () => {
   };
   assert.deepEqual(copiesToRemove(metas, statuses).sort(), ["r-deleted", "r-ready"]);
 });
+
+test("a copy whose transcription failed is kept for a retry", () => {
+  const withFailure = [
+    {
+      recordingId: "r-ready",
+      videoId: "v-ready",
+      uploaded: true,
+      transcribeError: "model missing",
+    },
+    { recordingId: "r-retried", videoId: "v-retried", uploaded: true, transcribeError: null },
+  ];
+  const statuses = { "v-ready": "ready", "v-retried": "ready" };
+  assert.deepEqual(copiesToRemove(withFailure, statuses), ["r-retried"]);
+});

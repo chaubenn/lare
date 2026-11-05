@@ -1,5 +1,6 @@
 import { createRoot, type Root } from "react-dom/client";
 import { PageController } from "@/src/pageController";
+import "@/src/zodConfig";
 import { RecordingDot } from "./RecordingDot";
 import "./recording.css";
 

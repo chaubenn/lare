@@ -13,6 +13,8 @@
 
 use std::sync::{Arc, RwLock};
 
+use lare_core::protocol::RecordingSnapshot;
+
 use crate::ws_server::WsHub;
 
 /// Everything the recorder needs from an interview `session.start` frame.
@@ -30,6 +32,10 @@ pub struct RecordingRequest {
 /// Pluggable recorder. All methods are fire-and-forget: report state asynchronously by
 /// broadcasting [`lare_core::protocol::AppToExt::RecordingState`] on the hub (it reaches every
 /// connected extension client).
+///
+/// `pause`, `resume`, `stop` and `cancel` must only touch the recording of the session they name.
+/// Anything else may be recording (a demo from the draft editor, or another interview), and a
+/// stale frame from the extension must not stop it.
 pub trait RecordingBackend: Send + Sync {
     /// Start recording for an interview session.
     fn start(&self, hub: &WsHub, req: RecordingRequest);
@@ -39,12 +45,18 @@ pub trait RecordingBackend: Send + Sync {
     fn resume(&self, hub: &WsHub, session_id: &str, at: u64);
     /// The session ended (`session.end`): finish the recording and hand it to the upload pipeline.
     fn stop(&self, hub: &WsHub, session_id: &str, at: u64);
-    /// The session was discarded (`session.cancel`): stop the recording and delete it.
+    /// The session was discarded (`session.cancel`): stop the recording and delete it. Also
+    /// covers a start that is still coming up: that recording must be thrown away once it lands.
     fn cancel(&self, hub: &WsHub, session_id: &str, at: u64);
     /// Whether screen recording permission is granted and devices are available right now.
     /// Reported to the extension as `hello.ack.recordingCapable`.
     fn capable(&self) -> bool {
         true
+    }
+    /// What is recording right now, as last reported to the extension. Sent as
+    /// `hello.ack.recording` so a reconnecting extension catches up on frames it missed.
+    fn snapshot(&self) -> Option<RecordingSnapshot> {
+        None
     }
 }
 

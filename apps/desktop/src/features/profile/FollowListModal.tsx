@@ -1,10 +1,20 @@
 import { Lock, Users } from "@lare/ui/icons";
+import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, Spinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
-import { useFollowStates } from "@/features/friends/queries";
-import { UserRow } from "@/features/friends/UserRow";
+import { FollowButton } from "@/features/friends/FollowButton";
+import {
+  type FollowState,
+  type PersonSummary,
+  useFollowStates,
+  useRemoveFollower,
+} from "@/features/friends/queries";
+import { personName, UserRow } from "@/features/friends/UserRow";
+import { useNotify } from "@/features/notifications/notices";
+import { confirm } from "@/lib/confirm";
+import { errorMessage } from "@/lib/supabase";
 import { type FollowListKind, useFollowList } from "./queries";
 
 const TABS: Array<{ key: FollowListKind; label: string }> = [
@@ -36,7 +46,9 @@ export function FollowListModal({
   const open = kind !== null;
   const list = useFollowList(handle, kind ?? "followers", open);
   const people = list.data?.people ?? [];
-  const { userId } = useUser();
+  const { userId, profile } = useUser();
+  // Only your own followers list lets you remove someone.
+  const ownFollowers = kind === "followers" && !!handle && profile?.handle === handle;
   // Drives Follow / Requested / Following on each row, exactly as the friends tab does.
   const states = useFollowStates(people.map((person) => person.id));
 
@@ -74,16 +86,65 @@ export function FollowListModal({
         </div>
       ) : (
         <div className="divide-y divide-zinc-900">
-          {people.map((person) => (
-            <UserRow
-              key={person.id}
-              person={person}
-              // No follow button against yourself.
-              state={person.id === userId ? undefined : (states.data?.[person.id] ?? "none")}
-            />
-          ))}
+          {people.map((person) => {
+            // No follow button against yourself.
+            const state = person.id === userId ? undefined : (states.data?.[person.id] ?? "none");
+            return (
+              <UserRow
+                key={person.id}
+                person={person}
+                state={state}
+                action={
+                  ownFollowers && state !== undefined ? (
+                    <FollowerActions person={person} state={state} />
+                  ) : undefined
+                }
+              />
+            );
+          })}
         </div>
       )}
     </Modal>
+  );
+}
+
+/** One of your own followers: follow them back as usual, or remove them. */
+function FollowerActions({ person, state }: { person: PersonSummary; state: FollowState }) {
+  const remove = useRemoveFollower();
+  const { notify } = useNotify();
+  const name = personName(person);
+
+  const doRemove = async () => {
+    const ok = await confirm({
+      title: "Remove follower",
+      message: `Remove ${name} from your followers? They aren't told. If your account is private, they'll have to request again to see your posts.`,
+      confirmLabel: "Remove",
+      cancelLabel: "Keep",
+      destructive: true,
+    });
+    if (!ok) return;
+    remove.mutate(person.id, {
+      onSuccess: () => notify({ title: `Removed ${name}`, variant: "success" }),
+      onError: (e) =>
+        notify({
+          title: "Couldn't remove follower",
+          description: errorMessage(e),
+          variant: "error",
+        }),
+    });
+  };
+
+  return (
+    <>
+      <FollowButton
+        targetId={person.id}
+        handle={person.handle}
+        state={state}
+        isPrivate={person.is_private}
+      />
+      <Button size="sm" variant="ghost" loading={remove.isPending} onClick={() => void doRemove()}>
+        Remove
+      </Button>
+    </>
   );
 }

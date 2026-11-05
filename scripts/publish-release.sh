@@ -2,7 +2,7 @@
 # Publish the current commit to the public repo as ONE release commit.
 #
 # Development happens in the private repo, where every commit is welcome. The public repo's
-# history is releases and nothing else: this takes the exact tree you are standing on, writes
+# history is releases and nothing else: this takes the tree you are standing on (minus CLAUDE.md, which is private), writes
 # a single "Release vX.Y.Z" commit on top of the public `main`, and pushes it. The push runs
 # the Prebuild there; the tag (with --tag) then publishes the installers it produced.
 #
@@ -42,11 +42,18 @@ want="${version#v}"
 have="$(python3 -c 'import json;print(json.load(open("apps/desktop/src-tauri/tauri.conf.json"))["version"])')"
 [ "$have" = "$want" ] || { echo "error: tauri.conf.json is at $have, not $want. Bump the version first." >&2; exit 1; }
 
+# Files that exist only in this private repo are dropped from the published tree.
+idx="$(mktemp)"
+GIT_INDEX_FILE="$idx" git read-tree HEAD
+GIT_INDEX_FILE="$idx" git rm --cached --quiet --ignore-unmatch CLAUDE.md
+tree="$(GIT_INDEX_FILE="$idx" git write-tree)"
+rm -f "$idx"
+
 git fetch --quiet "$remote" main || true
 parent=""
 if git rev-parse --verify --quiet "refs/remotes/$remote/main" >/dev/null; then
   parent="$(git rev-parse "refs/remotes/$remote/main")"
-  if [ "$(git rev-parse "HEAD^{tree}")" = "$(git rev-parse "$parent^{tree}")" ]; then
+  if [ "$tree" = "$(git rev-parse "$parent^{tree}")" ]; then
     echo "error: public main already has exactly this tree" >&2
     exit 1
   fi
@@ -60,7 +67,7 @@ msg="$(mktemp)"
 trap 'rm -f "$msg"' EXIT
 { echo "Release $version"; if [ -n "$notes" ]; then echo; cat "$notes"; fi; } > "$msg"
 
-commit="$(git commit-tree "HEAD^{tree}" ${parent:+-p "$parent"} -F "$msg")"
+commit="$(git commit-tree "$tree"${parent:+-p "$parent"} -F "$msg")"
 echo "release commit: $commit"
 
 git push "$remote" "$commit:refs/heads/main"

@@ -1,6 +1,8 @@
 import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
+import { invalidateGraph } from "@/features/friends/queries";
+import { whileOnline } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
 
 function requestsQuery(userId: string) {
@@ -27,7 +29,7 @@ export function useFollowRequests() {
       if (error) throw error;
       return data;
     },
-    refetchInterval: 60_000,
+    refetchInterval: whileOnline(60_000),
   });
 }
 
@@ -40,9 +42,11 @@ export function useRespondToRequest() {
         : await supabase.rpc("decline_follow", { follower });
       if (error) throw error;
     },
+    // Accepting adds a follower (lists, counts, the follow-back button); either answer clears the
+    // request from the inbox and from the notification that announced it.
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["follow-requests"] });
-      void queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
+      invalidateGraph(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

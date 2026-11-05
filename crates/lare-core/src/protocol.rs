@@ -138,16 +138,31 @@ pub enum ErrorCode {
     UnsupportedProtocol,
 }
 
+/// What the recorder is doing, as of the last `recording.state` it sent. Sent in `hello.ack` so an
+/// extension that reconnects mid-interview can catch up on frames it missed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingSnapshot {
+    /// `None` for a demo recording started from the app.
+    pub session_id: Option<String>,
+    pub state: RecordingState,
+    pub started_at: Option<u64>,
+}
+
 /// Messages sent by the desktop app to the extension.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AppToExt {
     #[serde(rename = "hello.ack", rename_all = "camelCase")]
     HelloAck {
+        /// The protocol both sides will speak: the lower of the two versions.
         protocol: u32,
         app_version: String,
         user_id: Option<String>,
         recording_capable: bool,
+        /// `None` when nothing is recording. Absent from apps older than protocol 3.
+        #[serde(default)]
+        recording: Option<RecordingSnapshot>,
     },
     #[serde(rename = "recording.state", rename_all = "camelCase")]
     RecordingState {
@@ -192,11 +207,34 @@ mod tests {
             app_version: "0.1.0".into(),
             user_id: None,
             recording_capable: true,
+            recording: None,
         };
         let s = serde_json::to_string(&m).unwrap();
         assert_eq!(
             s,
-            r#"{"type":"hello.ack","protocol":1,"appVersion":"0.1.0","userId":null,"recordingCapable":true}"#
+            r#"{"type":"hello.ack","protocol":1,"appVersion":"0.1.0","userId":null,"recordingCapable":true,"recording":null}"#
+        );
+        // An ack from an app that predates `recording` still parses.
+        let old: AppToExt = serde_json::from_str(
+            r#"{"type":"hello.ack","protocol":2,"appVersion":"0.1.0","userId":null,"recordingCapable":true}"#,
+        )
+        .unwrap();
+        assert!(matches!(old, AppToExt::HelloAck { recording: None, .. }));
+        let live = AppToExt::HelloAck {
+            protocol: 3,
+            app_version: "0.1.0".into(),
+            user_id: None,
+            recording_capable: true,
+            recording: Some(RecordingSnapshot {
+                session_id: Some("s1".into()),
+                state: RecordingState::Recording,
+                started_at: Some(42),
+            }),
+        };
+        assert!(
+            serde_json::to_string(&live)
+                .unwrap()
+                .contains(r#""recording":{"sessionId":"s1","state":"recording","startedAt":42}"#)
         );
         let e = AppToExt::Error {
             code: ErrorCode::NotSignedIn,

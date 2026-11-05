@@ -1,5 +1,9 @@
 # @lare/capture
 
+> **Currently unused.** Nothing in this repo imports this package. Interviews and demo videos are
+> recorded by the desktop app (see `docs/architecture.md`), not in the browser. It is kept for
+> reference and tests; the text below describes the browser capture it was written for.
+
 Shared browser MediaRecorder capture for the website and extension offscreen document.
 No Supabase dependency; the caller supplies authenticated Edge Function callbacks.
 

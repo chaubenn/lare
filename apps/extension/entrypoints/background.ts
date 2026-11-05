@@ -10,8 +10,9 @@ import {
   timerStatus,
 } from "@lare/shared";
 import { brand } from "@lare/ui/tokens";
+import "@/src/zodConfig";
 import { getAuthInfo, signInWithOtp, signInWithProvider, signOut, verifyOtp } from "@/src/auth";
-import { appendEvents } from "@/src/editsDb";
+import { appendEvents, deleteSessionEvents } from "@/src/editsDb";
 import {
   type CapturedSubmission,
   type QuestionDetails,
@@ -22,6 +23,17 @@ import {
   type RuntimeSnapshot,
   type StateBroadcast,
 } from "@/src/messages";
+import {
+  clearDesktopFrame,
+  enqueueSubmission,
+  hasDesktopOutbox,
+  loadSubmissionQueue,
+  nextSyncRetryDelay,
+  queueDesktopFrame,
+  removeQueuedSubmission,
+  resetSyncRetry,
+  takeDesktopOutbox,
+} from "@/src/queues";
 import { loadState, withState } from "@/src/storage";
 import { currentUserId, getSupabase } from "@/src/supabase";
 import {
@@ -37,11 +49,15 @@ import {
   syncTimerEvent,
   trackInboxProblem,
 } from "@/src/sync";
-import { DesktopClient } from "@/src/ws";
+import { DesktopClient, type HelloAck } from "@/src/ws";
 
 const TICK_ALARM = "lare-tick";
 /** Periodically drops tracked problems that were posted or cleared from another client. */
 const RECONCILE_ALARM = "lare-reconcile";
+/** Next attempt at saving mock interviews that ended but could not be saved (with backoff). */
+const RETRY_SYNC_ALARM = "lare-retry-sync";
+/** Delays between reconnect attempts while a live interview has lost the desktop app. */
+const RECONNECT_DELAYS_MS = [1000, 3000, 10_000, 30_000];
 const desktop = new DesktopClient();
 /**
  * In-flight `session_problems` upserts, keyed by slug. `submissions` has a
@@ -94,8 +110,22 @@ export default defineBackground(() => {
   });
 
   chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === TICK_ALARM) void refreshBadge();
-    if (alarm.name === RECONCILE_ALARM) void reconcileTracked().catch(console.warn);
+    if (alarm.name === TICK_ALARM) {
+      void refreshBadge();
+      // Backstop for the reconnect timer, which does not survive the worker going to sleep.
+      void reconnectIfLive().catch(console.warn);
+    }
+    if (alarm.name === RECONCILE_ALARM) {
+      void reconcileTracked().catch(console.warn);
+      void flushSubmissionQueue();
+      void deliverOutbox().catch(console.warn);
+    }
+    if (alarm.name === RETRY_SYNC_ALARM) void retryUnsaved();
+  });
+  // Back online: whatever failed for want of a network is worth trying straight away.
+  self.addEventListener("online", () => {
+    void retryUnsaved();
+    void flushSubmissionQueue();
   });
   // `create` resets the period, and the worker restarts far more often than every few minutes.
   void chrome.alarms.get(RECONCILE_ALARM).then((alarm) => {
@@ -129,7 +159,10 @@ export default defineBackground(() => {
   });
 
   desktop.onMessage((msg) => void onDesktopMessage(msg));
-  desktop.onClose(() => void broadcast());
+  desktop.onClose(() => {
+    void broadcast();
+    scheduleReconnect();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -197,6 +230,7 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
     case "SIGN_IN":
       await signInWithProvider(req.provider);
       await broadcast({ kind: "success", text: "Signed in to Lare" });
+      void afterSignIn();
       return { ok: true, ...(await snapshot()) };
 
     case "SIGN_IN_OTP":
@@ -206,13 +240,18 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
     case "VERIFY_OTP":
       await verifyOtp(req.email, req.token);
       await broadcast({ kind: "success", text: "Signed in to Lare" });
+      void afterSignIn();
       return { ok: true, ...(await snapshot()) };
 
     case "SIGN_OUT": {
       const state = await loadState();
+      // Only a live interview blocks this. Unsaved ones are dropped with the rest of the state;
+      // the side panel asks before it sends this when there are any.
       if (state.interview) throw new Error("End the mock interview before signing out");
       await signOut();
       desktop.close();
+      await chrome.alarms.clear(RETRY_SYNC_ALARM);
+      await resetSyncRetry();
       await chrome.storage.local.remove("lare:state");
       await refreshBadge();
       await broadcast();
@@ -236,7 +275,10 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
       return cancelStart();
 
     case "RETRY_SYNC":
-      return retrySync();
+      return retryUnsaved();
+
+    case "DISCARD_UNSAVED":
+      return discardUnsaved(req.sessionIds);
 
     case "START_INTERVIEW":
       return startInterview(req);
@@ -258,7 +300,13 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
       return edits(req.slug, req.language, req.events, sourceTabId);
 
     case "SUBMISSION":
-      return submission(req.slug, req.submission, sourceTabId);
+      return submission(
+        req.slug,
+        req.submission,
+        req.problem ?? null,
+        req.question ?? null,
+        sourceTabId,
+      );
   }
 }
 
@@ -361,7 +409,10 @@ async function startInterview(
     if (state.state === "error")
       throw new Error(state.message ?? "The desktop app could not start recording");
   } catch (e) {
-    if (desktopStarted) desktop.send({ type: "session.end", sessionId, at: Date.now() });
+    // Cancel, not end: a start that failed, timed out or was called off has no draft to attach a
+    // recording to, so one that is still coming up must be thrown away, never stopped and uploaded.
+    // The desktop only acts on this session, so a demo it happens to be recording carries on.
+    if (desktopStarted) await tellDesktop("cancel", sessionId);
     await chrome.tabs
       .sendMessage(tabId, { type: "LARE_RECORDING_INDICATOR", visible: false })
       .catch(() => undefined);
@@ -490,22 +541,18 @@ async function finishSession(): Promise<RuntimeResponse> {
   let postId: string | undefined;
   const endedAt = session.events.find((event) => event.type === "end")?.t ?? now;
   // The desktop stops recording, then transcribes and uploads on its own.
-  desktop.send({ type: "session.end", sessionId: session.sessionId, at: endedAt });
+  await tellDesktop("end", session.sessionId, endedAt);
+  if (session.tabId !== null)
+    await chrome.tabs
+      .sendMessage(session.tabId, { type: "LARE_RECORDING_INDICATOR", visible: false })
+      .catch(() => undefined);
   try {
-    if (session.tabId !== null)
-      await chrome.tabs
-        .sendMessage(session.tabId, { type: "LARE_RECORDING_INDICATOR", visible: false })
-        .catch(() => undefined);
     if (!userId) throw new Error("Signed out");
-    if (!session.synced) {
-      await syncSessionStart(session, userId, session.graded);
-      for (const tp of session.problems) await syncProblemOpen(session.sessionId, tp, null);
-    }
-    postId = await finalizeSession(session, userId, endedAt);
+    postId = await saveEndedSession(session, userId);
     await withState(async (s) => ({
       state: {
         ...s,
-        interview: null,
+        interview: s.interview?.sessionId === session.sessionId ? null : s.interview,
         pendingSync: s.pendingSync.filter((id) => id !== session.sessionId),
       },
       result: undefined,
@@ -515,26 +562,176 @@ async function finishSession(): Promise<RuntimeResponse> {
       text: "Session saved. The desktop app is processing the recording.",
     });
   } catch (e) {
-    if (session.tabId !== null)
-      await chrome.tabs
-        .sendMessage(session.tabId, { type: "LARE_RECORDING_INDICATOR", visible: false })
-        .catch(() => undefined);
     console.warn("[lare] finalize failed", e);
-    // Keep the ended session around so it can be retried from the side panel.
-    await withState(async (s) => ({
-      state: { ...s, pendingSync: [...new Set([...s.pendingSync, session.sessionId])] },
-      result: undefined,
-    }));
-    await broadcast({ kind: "error", text: "Could not save the session yet. Will retry." });
+    // Park it with the other unsaved interviews rather than leaving it as the live one, which
+    // would block starting another, signing out and discarding until the save went through.
+    await parkUnsaved(session);
+    await scheduleSyncRetry(true);
+    await setRecording("idle");
     await chrome.alarms.clear(TICK_ALARM);
     await refreshBadge();
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const text = "Couldn’t save the mock interview yet. Lare will keep retrying.";
+    await broadcast({ kind: "error", text });
+    return { ok: false, error: `${text} (${errorText(e)})` };
   }
 
   await setRecording("idle");
   await chrome.alarms.clear(TICK_ALARM);
   await refreshBadge();
   return { ok: true, postId, ...(await snapshot()) };
+}
+
+/** Write an ended interview to Supabase and create its draft. Returns the post id. */
+async function saveEndedSession(session: ActiveSession, userId: string): Promise<string> {
+  const endedAt = session.events.find((event) => event.type === "end")?.t ?? Date.now();
+  // Rows a flaky start or problem switch never managed to create are needed first: the finalize
+  // updates them by id, and an update of a missing row fails silently.
+  if (!session.synced) await syncSessionStart(session, userId, session.graded);
+  for (const tp of session.problems)
+    if (!session.synced || !tp.synced) await syncProblemOpen(session.sessionId, tp, null);
+  return finalizeSession(session, userId, endedAt);
+}
+
+/** Move an ended interview out of `interview` into `unsaved`, for the background retry. */
+async function parkUnsaved(session: ActiveSession): Promise<void> {
+  await withState(async (s) => ({
+    state: {
+      ...s,
+      interview: s.interview?.sessionId === session.sessionId ? null : s.interview,
+      pendingSync: s.pendingSync.filter((id) => id !== session.sessionId),
+      unsaved: [...s.unsaved.filter((u) => u.sessionId !== session.sessionId), session],
+    },
+    result: undefined,
+  }));
+}
+
+/**
+ * State from a build that kept a failed save in `interview` (or a worker that died mid-save): an
+ * ended interview that is not being saved right now belongs with the unsaved ones.
+ */
+async function parkStaleEndedInterview(): Promise<void> {
+  const { interview } = await loadState();
+  if (interview && timerStatus(interview.events) === "ended" && !ending)
+    await parkUnsaved(interview);
+}
+
+async function scheduleSyncRetry(reset: boolean): Promise<void> {
+  const delayInMinutes = await nextSyncRetryDelay(reset);
+  await chrome.alarms.create(RETRY_SYNC_ALARM, { delayInMinutes });
+}
+
+async function clearSyncRetry(): Promise<void> {
+  await chrome.alarms.clear(RETRY_SYNC_ALARM);
+  await resetSyncRetry();
+}
+
+let retrying: Promise<RuntimeResponse> | null = null;
+/** Try to save every unsaved interview now: the side panel's Retry, the alarm, back online. */
+function retryUnsaved(): Promise<RuntimeResponse> {
+  retrying ??= runRetryUnsaved().finally(() => {
+    retrying = null;
+  });
+  return retrying;
+}
+
+async function runRetryUnsaved(): Promise<RuntimeResponse> {
+  await parkStaleEndedInterview();
+  const { unsaved } = await loadState();
+  if (unsaved.length === 0) {
+    await clearSyncRetry();
+    return { ok: true, ...(await snapshot()) };
+  }
+  const userId = await currentUserId();
+  // Signing in triggers a retry, so there is no point waking up for one until then.
+  if (!userId) {
+    await clearSyncRetry();
+    return { ok: false, error: "Sign in to Lare to save your mock interviews." };
+  }
+  let saved = 0;
+  let failure: unknown = null;
+  for (const session of unsaved) {
+    try {
+      await saveEndedSession(session, userId);
+      saved++;
+      await withState(async (s) => ({
+        state: { ...s, unsaved: s.unsaved.filter((u) => u.sessionId !== session.sessionId) },
+        result: undefined,
+      }));
+    } catch (e) {
+      console.warn("[lare] retry save failed", session.sessionId, e);
+      failure = e;
+    }
+  }
+  await refreshBadge();
+  if (failure) {
+    await scheduleSyncRetry(false);
+    await broadcast();
+    return {
+      ok: false,
+      error: `Couldn’t save yet (${errorText(failure)}). Lare will keep retrying.`,
+    };
+  }
+  await clearSyncRetry();
+  await broadcast({
+    kind: "success",
+    text:
+      saved === 1
+        ? "Mock interview saved. The desktop app is processing the recording."
+        : `${saved} mock interviews saved.`,
+  });
+  return { ok: true, ...(await snapshot()) };
+}
+
+/**
+ * Give up on unsaved interviews: forget them here and close their rows so nothing waits on them.
+ * The recording was already stopped (not discarded), so the desktop app keeps its copy.
+ */
+async function discardUnsaved(sessionIds?: string[]): Promise<RuntimeResponse> {
+  const dropped = await withState(async (s) => {
+    const drop = s.unsaved.filter((u) => !sessionIds || sessionIds.includes(u.sessionId));
+    const ids = new Set(drop.map((u) => u.sessionId));
+    return {
+      state: {
+        ...s,
+        unsaved: s.unsaved.filter((u) => !ids.has(u.sessionId)),
+        pendingSync: s.pendingSync.filter((id) => !ids.has(id)),
+      },
+      result: drop,
+    };
+  });
+  for (const session of dropped) {
+    await deleteSessionEvents(session.sessionId).catch((e) =>
+      console.warn("[lare] drop local edits", e),
+    );
+    // Best effort: likely offline, which is how it got here.
+    if (session.synced) {
+      const endedAt = session.events.find((event) => event.type === "end")?.t ?? Date.now();
+      await getSupabase()
+        .from("sessions")
+        .update({ status: "ended", ended_at: new Date(endedAt).toISOString() })
+        .eq("id", session.sessionId)
+        .then(({ error }) => {
+          if (error) console.warn("[lare] close discarded session", error);
+        });
+    }
+  }
+  if ((await loadState()).unsaved.length === 0) await clearSyncRetry();
+  await refreshBadge();
+  await broadcast(
+    dropped.length > 0
+      ? {
+          kind: "success",
+          text: "Unsaved mock interview removed. The desktop app keeps its copy of the recording.",
+        }
+      : undefined,
+  );
+  return { ok: true, ...(await snapshot()) };
+}
+
+/** Retry whatever waited on a signed-in user. */
+async function afterSignIn(): Promise<void> {
+  await retryUnsaved().catch(console.warn);
+  await flushSubmissionQueue();
 }
 
 /**
@@ -800,8 +997,16 @@ async function edits(
 async function submission(
   slug: string,
   sub: CapturedSubmission,
+  problem: ProblemInfo | null,
+  question: QuestionDetails | null,
   sourceTabId?: number,
 ): Promise<RuntimeResponse> {
+  // A problem first opened offline or signed out, or tracked and since posted, has no local
+  // entry. Track it now so the tally below has somewhere to go and the save has a row.
+  await pendingTrack.get(slug)?.catch(() => undefined);
+  if (!(await loadState()).tracking.problems.some((p) => p.slug === slug))
+    await trackProblem(problem ?? fallbackProblem(slug, null, sub), question);
+
   type Target = {
     session: ActiveSession | null;
     tp: TrackedProblem | null;
@@ -849,41 +1054,154 @@ async function submission(
     };
   });
 
+  let outcome: SaveOutcome;
   if (target.session && target.tp) {
-    syncSubmission(target.tp.sessionProblemId, sub).catch((e) =>
-      console.warn("[lare] submission sync failed", e),
-    );
+    const sessionProblemId = target.tp.sessionProblemId;
+    // The interview keeps its own copy for the review, so the save can wait in the queue.
+    outcome = "saved";
+    syncSubmission(sessionProblemId, sub).catch(async (e) => {
+      console.warn("[lare] submission sync failed; queued", e);
+      const userId = await currentUserId();
+      if (userId)
+        await enqueueSubmission({
+          userId,
+          slug,
+          problem,
+          sessionProblemId,
+          submission: sub,
+          queuedAt: Date.now(),
+        });
+    });
   } else {
-    // Practice: attach to the inbox row, creating it first if this is the very
-    // first thing we have seen for the problem.
-    void (async () => {
-      try {
-        // The problem row is the submission's foreign key, so let any in-flight
-        // upsert finish before inserting against it.
-        await pendingTrack.get(slug)?.catch(() => undefined);
-        const state = await loadState();
-        const entry = state.tracking.problems.find((p) => p.slug === slug) ?? null;
-        if (!entry?.synced) {
-          console.warn("[lare] no tracked problem row for", slug, "- submission not stored");
-          return;
-        }
-        await syncSubmission(entry.sessionProblemId, sub);
-      } catch (e) {
-        console.warn("[lare] submission sync failed", e);
-      }
-    })();
+    outcome = await savePracticeSubmission(slug, problem, question, sub);
   }
 
   await refreshBadge();
+  const verdict = sub.accepted
+    ? `Accepted${sub.runtimeMs !== null ? ` · ${Math.round(sub.runtimeMs)} ms` : ""}${
+        sub.runtimePercentile !== null ? ` · beats ${sub.runtimePercentile.toFixed(2)}%` : ""
+      }`
+    : (sub.statusDisplay ?? "Submission");
+  // "Captured" only once it is actually stored; anything else says what happened instead.
+  const toast: NonNullable<StateBroadcast["toast"]> =
+    outcome === "saved"
+      ? { kind: sub.accepted ? "success" : "info", text: `${verdict} · captured` }
+      : outcome === "queued"
+        ? { kind: "error", text: `${verdict} · not saved yet. Lare will retry.` }
+        : { kind: "error", text: `${verdict} · not saved. Sign in to Lare to capture it.` };
+  await broadcast(toast);
+  if (outcome === "saved") return { ok: true };
+  return { ok: false, error: toast.text };
+}
+
+type SaveOutcome = "saved" | "queued" | "signed-out";
+
+/** A stand-in when the page did not say which problem it is (older content scripts). */
+function fallbackProblem(slug: string, title: string | null, sub: CapturedSubmission): ProblemInfo {
+  return {
+    slug,
+    frontendId: null,
+    title:
+      title ||
+      slug
+        .split("-")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" "),
+    difficulty: null,
+    url: `https://leetcode.com/problems/${slug}/`,
+    language: sub.lang,
+  };
+}
+
+/**
+ * The inbox row for `slug`, created on demand when tracking it on open did not get that far
+ * (offline, signed out, or the earlier row was posted and dropped). Throws while it cannot be.
+ */
+async function trackedRowId(
+  slug: string,
+  problem: ProblemInfo | null,
+  question: QuestionDetails | null,
+  sub: CapturedSubmission,
+): Promise<string> {
+  // The problem row is the submission's foreign key, so let any in-flight upsert land first.
+  await pendingTrack.get(slug)?.catch(() => undefined);
+  const find = async () =>
+    (await loadState()).tracking.problems.find((p) => p.slug === slug) ?? null;
+  let entry = await find();
+  if (!entry?.synced) {
+    await trackProblem(problem ?? fallbackProblem(slug, entry?.title ?? null, sub), question);
+    entry = await find();
+  }
+  if (!entry?.synced) throw new Error(`Could not add ${slug} to the practice inbox`);
+  return entry.sessionProblemId;
+}
+
+/** Store a practice submission now, or queue it for when that works again. */
+async function savePracticeSubmission(
+  slug: string,
+  problem: ProblemInfo | null,
+  question: QuestionDetails | null,
+  sub: CapturedSubmission,
+): Promise<SaveOutcome> {
+  const userId = await currentUserId();
+  if (!userId) return "signed-out";
+  try {
+    await syncSubmission(await trackedRowId(slug, problem, question, sub), sub);
+  } catch (e) {
+    console.warn("[lare] submission not saved; queued for retry", e);
+    await enqueueSubmission({
+      userId,
+      slug,
+      problem,
+      sessionProblemId: null,
+      submission: sub,
+      queuedAt: Date.now(),
+    });
+    return "queued";
+  }
+  // The network works again, so anything queued earlier can go too.
+  void flushSubmissionQueue();
+  return "saved";
+}
+
+let flushing: Promise<void> | null = null;
+/** Save queued submissions for the signed-in user, oldest first. */
+function flushSubmissionQueue(): Promise<void> {
+  flushing ??= runFlushSubmissionQueue()
+    .catch((e) => console.warn("[lare] flush submissions", e))
+    .finally(() => {
+      flushing = null;
+    });
+  return flushing;
+}
+
+async function runFlushSubmissionQueue(): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
+  const mine = (await loadSubmissionQueue()).filter((q) => q.userId === userId);
+  let saved = 0;
+  for (const q of mine) {
+    try {
+      const rowId =
+        q.sessionProblemId ?? (await trackedRowId(q.slug, q.problem, null, q.submission));
+      await syncSubmission(rowId, q.submission);
+      await removeQueuedSubmission(q.id);
+      saved++;
+    } catch (e) {
+      // Most likely still offline; the rest would fail the same way. Next trigger retries.
+      console.warn("[lare] queued submission still not saved", e);
+      break;
+    }
+  }
+  if (saved === 0) return;
+  await refreshBadge();
   await broadcast({
-    kind: sub.accepted ? "success" : "info",
-    text: sub.accepted
-      ? `Accepted${sub.runtimeMs !== null ? ` · ${Math.round(sub.runtimeMs)} ms` : ""}${
-          sub.runtimePercentile !== null ? ` · beats ${sub.runtimePercentile.toFixed(2)}%` : ""
-        } · captured`
-      : `${sub.statusDisplay ?? "Submission"} · captured`,
+    kind: "success",
+    text:
+      saved === 1
+        ? "Saved a submission that was waiting."
+        : `Saved ${saved} submissions that were waiting.`,
   });
-  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -902,8 +1220,100 @@ async function probeDesktop(userId: string | null): Promise<boolean> {
   }
 }
 
+/**
+ * Send `session.end`/`session.cancel` now, or keep it until the desktop app is back: a recording
+ * nobody tells to stop runs on, and a cancelled start would still record and upload.
+ */
+async function tellDesktop(
+  frame: "end" | "cancel",
+  sessionId: string,
+  at = Date.now(),
+): Promise<void> {
+  const sent = desktop.send({
+    type: frame === "end" ? "session.end" : "session.cancel",
+    sessionId,
+    at,
+  });
+  if (sent) await clearDesktopFrame(sessionId);
+  else await queueDesktopFrame(sessionId, frame);
+}
+
+/** Connect to the desktop app if frames are waiting for it (the handshake delivers them). */
+async function deliverOutbox(): Promise<void> {
+  if (desktop.connected || !(await hasDesktopOutbox())) return;
+  await probeDesktop(await currentUserId());
+}
+
+/**
+ * Catch up after a (re)connect, from the recorder state in `hello.ack`: deliver frames that could
+ * not be sent, and bring a live interview in line with what is really being recorded.
+ */
+async function syncFromAck(ack: HelloAck): Promise<void> {
+  const live = ack.recording ?? null;
+  const outbox = await takeDesktopOutbox();
+  for (const [sessionId, frame] of Object.entries(outbox)) {
+    // Only a recording still running for that session needs telling; otherwise it is moot.
+    if (live?.sessionId === sessionId)
+      desktop.send({
+        type: frame === "end" ? "session.end" : "session.cancel",
+        sessionId,
+        at: Date.now(),
+      });
+  }
+  const { interview } = await loadState();
+  if (!interview || startAbort || ending || discarding) return;
+  if (timerStatus(interview.events) === "ended") return;
+  // Every app that negotiates sends `recording`, null included; absent means it cannot say.
+  if (ack.recording === undefined) return;
+  if (live?.sessionId === interview.sessionId) {
+    // Exactly what the frames themselves would have done, had they arrived.
+    await onDesktopMessage({
+      type: "recording.state",
+      sessionId: live.sessionId,
+      state: live.state,
+      startedAt: live.startedAt,
+      message: null,
+    });
+    return;
+  }
+  // Probably restarted mid-interview. Say so rather than guess: ending keeps what was captured,
+  // discarding throws it away, and only the user knows which they want.
+  await setRecording(
+    "error",
+    "The desktop app is not recording this interview. End it to save what was captured, or discard it.",
+  );
+}
+
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+/** Keep trying to get the desktop app back while an interview is live. */
+function scheduleReconnect(attempt = 0): void {
+  if (reconnectTimer) return;
+  const delay = RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)];
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    void reconnectIfLive()
+      .then((retry) => {
+        if (retry) scheduleReconnect(attempt + 1);
+      })
+      .catch(console.warn);
+  }, delay);
+}
+
+/** Reconnect if a live interview has lost the desktop app. Resolves true if it is still lost. */
+async function reconnectIfLive(): Promise<boolean> {
+  if (desktop.connected) return false;
+  const { interview } = await loadState();
+  if (!interview || timerStatus(interview.events) === "ended" || startAbort) return false;
+  await probeDesktop(await currentUserId());
+  await broadcast();
+  return !desktop.connected;
+}
+
 async function onDesktopMessage(msg: AppToExt): Promise<void> {
-  if (msg.type === "hello.ack") return broadcast();
+  if (msg.type === "hello.ack") {
+    await syncFromAck(msg);
+    return broadcast();
+  }
   if (msg.type !== "recording.state") return;
   const { interview } = await loadState();
   if (!interview || msg.sessionId !== interview.sessionId || startAbort) return;
@@ -939,7 +1349,7 @@ function discardFromPanel(): Promise<RuntimeResponse> {
     if (!interview || timerStatus(interview.events) === "ended")
       throw new Error("No live interview");
     // The `idle` frame this answers with is ignored while `discarding` is set.
-    desktop.send({ type: "session.cancel", sessionId: interview.sessionId, at: Date.now() });
+    await tellDesktop("cancel", interview.sessionId);
     await discardSession(interview);
     return { ok: true, ...(await snapshot()) } satisfies RuntimeResponse;
   })().finally(() => {
@@ -987,17 +1397,17 @@ async function cancelStart(): Promise<RuntimeResponse> {
   return { ok: true, ...(await snapshot()) };
 }
 
-async function retrySync(): Promise<RuntimeResponse> {
-  return endSession();
-}
-
 async function resumeAfterRestart(): Promise<void> {
+  await parkStaleEndedInterview();
   const state = await loadState();
   if (state.interview) await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 0.5 });
   const userId = await currentUserId();
   await probeDesktop(userId);
   await refreshBadge();
   await broadcast();
+  // What waited for a network or a worker that was asleep.
+  if (state.unsaved.length > 0) void retryUnsaved();
+  void flushSubmissionQueue();
 }
 
 // ---------------------------------------------------------------------------

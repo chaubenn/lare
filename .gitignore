@@ -48,7 +48,6 @@ supabase/.branches/
 .superpowers/
 .context/
 AGENTS.md
-CLAUDE.md
 GEMINI.md
 design.md
 skills-lock.json

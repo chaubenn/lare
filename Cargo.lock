@@ -4349,7 +4349,7 @@ dependencies = [
 
 [[package]]
 name = "lare-desktop"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -4375,6 +4375,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-store",
  "tauri-plugin-updater",
+ "tauri-winrt-notification",
  "tokio",
  "tokio-tungstenite 0.30.0",
  "tracing",

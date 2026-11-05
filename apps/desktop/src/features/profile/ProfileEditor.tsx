@@ -16,6 +16,7 @@ import { FieldError, Input, Label, Textarea, Toggle } from "@/components/ui/Fiel
 import { profileQueryKey, useUser } from "@/features/auth/AuthProvider";
 import { useNotify } from "@/features/notifications/notices";
 import { errorMessage, supabase } from "@/lib/supabase";
+import { invalidateAuthorViews } from "./queries";
 
 /** `/profile/edit`: photo, name, handle, bio, website, privacy. Saving returns to the profile. */
 export function ProfileEditor() {
@@ -56,9 +57,9 @@ export function ProfileEditor() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
-      void queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
-      // Going private (or public) changes the lock shown beside you on the global board.
-      void queryClient.invalidateQueries({ queryKey: ["global-leaderboard"] });
+      // Your name and handle sit on every post, comment and list you appear in; going private
+      // (or public) changes the lock shown beside you on the global board.
+      invalidateAuthorViews(queryClient);
       notify({ title: "Profile saved", variant: "success" });
       navigate("/profile");
     },
@@ -216,6 +217,7 @@ function AvatarUploader() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
+      invalidateAuthorViews(queryClient);
       notify({ title: "Profile picture updated", variant: "success" });
     },
     onError: (err) => notify({ title: errorMessage(err), variant: "error" }),

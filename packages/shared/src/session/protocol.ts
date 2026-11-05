@@ -104,14 +104,29 @@ export const RecordingStateSchema = z.enum([
 ]);
 export type RecordingState = z.infer<typeof RecordingStateSchema>;
 
+/** The recorder's state as of its last `recording.state` frame (sent in `hello.ack`). */
+export const RecordingSnapshotSchema = z.object({
+  /** Null for a demo recording started from the app. */
+  sessionId: z.string().nullable(),
+  state: RecordingStateSchema,
+  startedAt: z.number().nullable(),
+});
+export type RecordingSnapshot = z.infer<typeof RecordingSnapshotSchema>;
+
 export const AppToExtSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hello.ack"),
-    protocol: z.number().int(),
-    appVersion: z.string(),
+    /**
+     * The protocol both sides will speak (the lower of the two). Optional so an app too old to
+     * send one still parses, and is then reported as needing an update.
+     */
+    protocol: z.number().int().optional(),
+    appVersion: z.string().optional(),
     userId: z.string().nullable(),
     /** True when screen recording permission is granted and devices are available. */
     recordingCapable: z.boolean(),
+    /** Null when nothing is recording; absent from apps older than protocol 3. */
+    recording: RecordingSnapshotSchema.nullable().optional(),
   }),
   z.object({
     type: z.literal("recording.state"),

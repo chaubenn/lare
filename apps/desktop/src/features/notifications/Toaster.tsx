@@ -90,6 +90,18 @@ function Toast({ notice }: { notice: Notice }) {
       ) : (
         <div className={row}>{body}</div>
       )}
+      {notice.action ? (
+        <button
+          type="button"
+          onClick={() => {
+            notice.action?.run();
+            dismissNotice(notice.id);
+          }}
+          className="my-2 ml-2 shrink-0 self-center rounded-[var(--lare-r-2)] border border-[var(--border)] px-2 py-1 text-xs text-[var(--text)] transition-colors hover:bg-[var(--surface-raised)]"
+        >
+          {notice.action.label}
+        </button>
+      ) : null}
       <button
         type="button"
         aria-label={`Dismiss: ${notice.title}`}

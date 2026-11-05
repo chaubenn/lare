@@ -37,7 +37,8 @@ export function useRecordingEvents(): void {
         .catch((e: unknown) => {
           notify({
             title: "Interview processing failed",
-            description: `${errorMessage(e)}. The local source has been kept.`,
+            description: `${errorMessage(e)}. The recording is still on this computer: retry it from Sessions.`,
+            href: "/sessions",
             variant: "error",
           });
         });

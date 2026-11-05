@@ -68,6 +68,7 @@ export function useToggleLike(postId: string) {
       void queryClient.invalidateQueries({ queryKey: ["post-likes"] });
       void queryClient.invalidateQueries({ queryKey: postKey(postId) });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
+      void queryClient.invalidateQueries({ queryKey: ["user-posts"] });
     },
   });
 }
@@ -120,6 +121,9 @@ function useCommentMutation<TVars>(postId: string, run: (vars: TVars) => Promise
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: commentsKey(postId) });
       void queryClient.invalidateQueries({ queryKey: postKey(postId) });
+      // Feed and profile cards carry the comment count and the first few comments inline.
+      void queryClient.invalidateQueries({ queryKey: ["feed"] });
+      void queryClient.invalidateQueries({ queryKey: ["user-posts"] });
     },
   });
 }

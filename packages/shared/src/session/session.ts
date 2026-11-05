@@ -91,8 +91,16 @@ export const ExtensionStateSchema = z.object({
   tracking: TrackingStateSchema.default(EMPTY_TRACKING_STATE),
   /** Last known desktop connection state (for UI only). */
   appConnected: z.boolean().default(false),
-  /** Interviews that ended but failed to fully sync; flushed on next start-up. */
+  /**
+   * Legacy: ids of ended interviews whose save failed, written by builds that kept the session in
+   * `interview` (blocking every other action) until it saved. Superseded by `unsaved`.
+   */
   pendingSync: z.array(z.string()).default([]),
+  /**
+   * Interviews that ended but could not be saved yet. Kept out of `interview` so a failed save
+   * never blocks a new interview, signing out or discarding; retried in the background.
+   */
+  unsaved: z.array(ActiveSessionSchema).default([]),
 });
 export type ExtensionState = z.infer<typeof ExtensionStateSchema>;
 
@@ -102,4 +110,5 @@ export const EMPTY_EXTENSION_STATE: ExtensionState = {
   tracking: EMPTY_TRACKING_STATE,
   appConnected: false,
   pendingSync: [],
+  unsaved: [],
 };

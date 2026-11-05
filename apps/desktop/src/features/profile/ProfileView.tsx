@@ -9,6 +9,7 @@ import { ExternalLink, Lock } from "@lare/ui/icons";
 import { type ReactNode, useState } from "react";
 import { ActivityGrid } from "@/components/ActivityGrid";
 import { Avatar } from "@/components/ui/Avatar";
+import { LoadMore } from "@/components/ui/LoadMore";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import type { ProfileStats } from "@/lib/json";
@@ -43,6 +44,7 @@ export function ProfileView({
   postsPending,
   postsError,
   onRetryPosts,
+  morePosts,
   likedIds,
   postsEmpty,
   locked,
@@ -68,6 +70,8 @@ export function ProfileView({
   postsPending: boolean;
   postsError: unknown;
   onRetryPosts: () => void;
+  /** The posts query, for its "Load more" footer. */
+  morePosts?: Parameters<typeof LoadMore>[0]["query"];
   likedIds: Set<string>;
   postsEmpty: ReactNode;
   locked?: boolean;
@@ -195,12 +199,15 @@ export function ProfileView({
           {shownTab === "posts" ? (
             postsPending ? (
               <PageSpinner />
-            ) : postsError ? (
+            ) : postsError && posts.length === 0 ? (
               <ErrorState error={postsError} onRetry={onRetryPosts} />
             ) : posts.length === 0 ? (
               postsEmpty
             ) : (
-              <ProfilePostGrid posts={posts} />
+              <>
+                <ProfilePostGrid posts={posts} />
+                {morePosts ? <LoadMore query={morePosts} /> : null}
+              </>
             )
           ) : (
             <div className="space-y-4">

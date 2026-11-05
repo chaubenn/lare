@@ -12,10 +12,10 @@ import {
   postStateOf,
   showsActiveTime,
 } from "@lare/shared";
-import { Lock, MoreHorizontal, Pencil, Trash2 } from "@lare/ui/icons";
+import { Copy, Lock, MoreHorizontal, Pencil, RotateCcw, Trash2 } from "@lare/ui/icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
 import { Avatar } from "@/components/ui/Avatar";
@@ -32,8 +32,11 @@ import { VideoSlide } from "@/features/feed/VideoSlide";
 import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { usePostMedia } from "@/features/publishing/posts/media";
+import { confirm } from "@/lib/confirm";
 import { formatDateTime, plural } from "@/lib/format";
+import { errorMessage } from "@/lib/supabase";
 import { CommentsSection, PostActions } from "./PostSocial";
+import { SHARE_LINKS, useCopyPostLink, useUnpublishPost } from "./postActions";
 import { type PostDetail, useInterviewReview, usePost } from "./queries";
 import { useDeletePostFlow } from "./useDeletePostFlow";
 
@@ -339,11 +342,43 @@ function HiddenNote({ postId }: { postId: string }) {
   );
 }
 
-/** Secondary actions. Deleting is the only one, and it is the owner's, so nobody else gets a menu. */
+/**
+ * Secondary actions. Anyone can copy a published post's link; taking it back to a draft and
+ * deleting it are the owner's.
+ */
 function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
   const { notify } = useNotify();
-  const remove = useDeletePostFlow(post.id);
+  const navigate = useNavigate();
+  const remove = useDeletePostFlow(post.id, post.sessions?.client);
+  const unpublish = useUnpublishPost();
+  const copyLink = useCopyPostLink();
   const [open, setOpen] = useState(false);
+  const published = post.status === "published";
+  // A draft has no public page yet, so there is no link worth sharing.
+  const shareable = SHARE_LINKS && published && Boolean(post.slug);
+
+  const doUnpublish = async () => {
+    const ok = await confirm({
+      title: "Move back to drafts",
+      message:
+        "Take this post off the feed and your profile and back to Drafts? Its likes and comments are kept, but stay hidden while it's a draft and come back when you publish it again.",
+      confirmLabel: "Move to drafts",
+      cancelLabel: "Keep published",
+    });
+    if (!ok) return;
+    unpublish.mutate(post.id, {
+      onSuccess: () => {
+        notify({ title: "Moved back to drafts", variant: "success" });
+        void navigate(`/drafts/${post.id}`, { replace: true });
+      },
+      onError: (e) =>
+        notify({
+          title: "Couldn't move it to drafts",
+          description: errorMessage(e),
+          variant: "error",
+        }),
+    });
+  };
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -371,7 +406,7 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
   const item =
     "flex w-full items-center gap-2 rounded-[var(--lare-r-2)] px-2.5 py-2 text-left text-sm outline-none hover:bg-[color-mix(in_oklab,var(--border)_70%,transparent)] focus-visible:bg-[color-mix(in_oklab,var(--border)_70%,transparent)] disabled:opacity-50";
 
-  if (!isMine) return null;
+  if (!isMine && !shareable) return null;
 
   return (
     <div ref={root} className="relative">
@@ -402,16 +437,41 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
             items[next]?.focus();
           }}
         >
-          <button
-            type="button"
-            role="menuitem"
-            disabled={remove.isPending}
-            className={`${item} text-[var(--lare-danger)]`}
-            onClick={choose(() => void remove.deletePost())}
-          >
-            <Trash2 className="size-4" aria-hidden />
-            Delete post
-          </button>
+          {shareable && post.slug ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={item}
+              onClick={choose(() => void copyLink(post.slug as string))}
+            >
+              <Copy className="size-4" aria-hidden />
+              Copy link
+            </button>
+          ) : null}
+          {isMine && published ? (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={unpublish.isPending}
+              className={item}
+              onClick={choose(() => void doUnpublish())}
+            >
+              <RotateCcw className="size-4" aria-hidden />
+              Move to drafts
+            </button>
+          ) : null}
+          {isMine ? (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={remove.isPending}
+              className={`${item} text-[var(--lare-danger)]`}
+              onClick={choose(() => void remove.deletePost())}
+            >
+              <Trash2 className="size-4" aria-hidden />
+              Delete post
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -299,7 +299,8 @@ export async function transcribeSession(opts: TranscribeOptions): Promise<string
       ).error,
       "transcripts upsert",
     );
-    if (opts.recordingId) await patchRecordingMeta(opts.recordingId, { transcribed: true });
+    if (opts.recordingId)
+      await patchRecordingMeta(opts.recordingId, { transcribed: true, transcribeError: null });
     return result.vtt;
   } finally {
     unlisten();
@@ -387,8 +388,10 @@ export async function processInterview(opts: InterviewOptions): Promise<void> {
         });
       } catch (e) {
         // A missing transcript must not block the video: mark the interview ungraded and carry on.
+        // The failure is remembered so the session page can offer to transcribe it again.
         console.warn("transcription failed", e);
         updateJob(job.id, { detail: `Transcription failed: ${errorMessage(e)}` });
+        await patchRecordingMeta(recording.recordingId, { transcribeError: errorMessage(e) });
         await supabase.from("sessions").update({ graded: false }).eq("id", sessionId);
       }
     }

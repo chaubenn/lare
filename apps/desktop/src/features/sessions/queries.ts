@@ -1,32 +1,49 @@
 import type { EditLog, TranscriptSegment } from "@lare/shared";
 import type { SessionProblem, Transcript, Video } from "@lare/supabase-types";
 import type { QueryData } from "@supabase/supabase-js";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
+import { type KeysetCursor, keysetFilter, nextCursor } from "@/lib/keyset";
+import { whileOnline } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
 import { fetchEditLog } from "./editLog";
 import { parseTranscriptSegments } from "./media";
 
-function sessionsQuery(userId: string) {
-  return supabase
+export const SESSIONS_PAGE_SIZE = 50;
+
+function sessionsQuery(userId: string, cursor?: KeysetCursor) {
+  let query = supabase
     .from("sessions")
     .select("*, session_problems(id, slug, title, difficulty), posts(id, status)")
-    .eq("user_id", userId)
+    .eq("user_id", userId);
+  if (cursor) query = query.or(keysetFilter("started_at", cursor));
+  return query
     .order("started_at", { ascending: false })
-    .limit(100);
+    .order("id", { ascending: false })
+    .limit(SESSIONS_PAGE_SIZE);
 }
 
 export type SessionRow = QueryData<ReturnType<typeof sessionsQuery>>[number];
 
+/** Newest first, a page at a time; `data` is every page loaded so far, flattened. */
 export function useSessions() {
   const { userId } = useUser();
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["sessions", userId],
-    queryFn: async () => {
-      const { data, error } = await sessionsQuery(userId);
+    initialPageParam: undefined as KeysetCursor | undefined,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await sessionsQuery(userId, pageParam);
       if (error) throw error;
-      return data;
+      return { items: data, next: nextCursor(data, SESSIONS_PAGE_SIZE, (row) => row.started_at) };
     },
+    getNextPageParam: (lastPage) => lastPage.next,
+    select: (data) => data.pages.flatMap((page) => page.items),
   });
 }
 
@@ -107,7 +124,7 @@ export function useSessionTranscript(sessionId: string) {
   return useQuery({
     queryKey: sessionTranscriptKey(sessionId),
     enabled: sessionId.length > 0,
-    refetchInterval: 5000,
+    refetchInterval: whileOnline(5000),
     queryFn: async (): Promise<SessionTranscript | null> => {
       const { data, error } = await supabase
         .from("transcripts")

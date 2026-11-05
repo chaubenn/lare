@@ -4,6 +4,7 @@ import "@fontsource/ibm-plex-mono/500.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { initTheme } from "@/src/theme";
+import "@/src/zodConfig";
 import { App } from "./App";
 
 initTheme();

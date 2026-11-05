@@ -183,7 +183,7 @@ jobs:
         env:
           WXT_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
           WXT_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
-          WXT_SITE_URL: https://lare-one.vercel.app
+          WXT_SITE_URL: https://lare.fyi
         # Two packages: the unpacked install pins the extension id with `key`; the Chrome Web Store
         # package must not carry one (the store assigns its own). wxt names both zips the same, so
         # each is copied out before the next build overwrites it.

@@ -32,8 +32,8 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use lare_core::{
-    AUTH_CALLBACK_PATH, PROTOCOL_VERSION, WS_PORT,
-    protocol::{AppToExt, ErrorCode, ExtToApp, RecordingState, SessionKind},
+    AUTH_CALLBACK_PATH, MIN_EXT_PROTOCOL_VERSION, PROTOCOL_VERSION, WS_PORT,
+    protocol::{AppToExt, ErrorCode, ExtToApp, RecordingSnapshot, RecordingState, SessionKind},
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -45,10 +45,20 @@ use crate::recording::{
     RECORDING_UNAVAILABLE_MESSAGE, RecordingBackend, RecordingRequest, SharedRecordingBackend,
 };
 
-/// Chrome extension id (pinned by the `key` in `apps/extension/wxt.config.ts`).
+/// Chrome extension id (pinned by the `key` in `apps/extension/wxt.config.ts`). Every build but the
+/// Chrome Web Store package carries that key.
 pub const EXTENSION_ID: &str = "koplffaeeahehnfikinmldhhmmldghhl";
-/// The only `Origin` accepted for WebSocket upgrades in release builds.
+/// `Origin` of the pinned-id extension, accepted for WebSocket upgrades in release builds.
 pub const EXTENSION_ORIGIN: &str = "chrome-extension://koplffaeeahehnfikinmldhhmmldghhl";
+/// Id the Chrome Web Store assigned to the published extension. The store package is built without
+/// the pinned `key` (`pnpm zip:store`), so the store gives it a different id, and without this a
+/// store install could never reach the app.
+///
+/// TODO(store-id): the id is not recorded anywhere in the repo yet. Replace this with
+/// `Some("<id from the developer dashboard>")` once the listing exists (and add the matching
+/// `chrome-extension://<id>/` redirect in Supabase). Until then it can be set at build time with
+/// the `LARE_STORE_EXTENSION_ID` environment variable.
+pub const STORE_EXTENSION_ID: Option<&str> = option_env!("LARE_STORE_EXTENSION_ID");
 
 /// Something the frontend should hear about. Forwarded as Tauri events by `lib.rs`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,8 +157,11 @@ pub struct ServerContext {
     pub recording: SharedRecordingBackend,
     pub app_version: String,
     /// Debug builds accept any `chrome-extension://*` origin and requests without an `Origin`
-    /// header (local test clients). Release builds only accept [`EXTENSION_ORIGIN`].
+    /// header (local test clients). Release builds only accept [`Self::extension_ids`].
     pub allow_any_extension_origin: bool,
+    /// Extension ids whose `chrome-extension://<id>` origin may open the WebSocket: the pinned id
+    /// and, when known, the Chrome Web Store one.
+    pub extension_ids: Vec<String>,
     /// Recordings this process has agreed to serve over `/preview/{token}`.
     pub previews: PreviewFiles,
 }
@@ -166,6 +179,10 @@ impl ServerContext {
             recording: Arc::new(std::sync::RwLock::new(None)),
             app_version: app_version.into(),
             allow_any_extension_origin: cfg!(debug_assertions),
+            extension_ids: std::iter::once(EXTENSION_ID)
+                .chain(STORE_EXTENSION_ID.filter(|id| !id.trim().is_empty()))
+                .map(|id| id.trim().to_string())
+                .collect(),
             previews,
         }
     }
@@ -189,13 +206,37 @@ impl ServerContext {
         self.recording_backend().is_some_and(|b| b.capable())
     }
 
+    fn recording_snapshot(&self) -> Option<RecordingSnapshot> {
+        self.recording_backend().and_then(|b| b.snapshot())
+    }
+
+    /// The `hello.ack` for an extension that said it speaks `ext_protocol`.
+    fn hello_ack(&self, ext_protocol: u32) -> AppToExt {
+        AppToExt::HelloAck {
+            // The lower of the two: an extension from before negotiation (v2) rejects any number
+            // but its own, and a newer one decides for itself whether this app is new enough.
+            protocol: ext_protocol.min(PROTOCOL_VERSION),
+            app_version: self.app_version.clone(),
+            user_id: self.current_user(),
+            recording_capable: self.recording_capable(),
+            recording: self.recording_snapshot(),
+        }
+    }
+
     fn origin_allowed(&self, headers: &HeaderMap) -> bool {
         match headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) {
             None => self.allow_any_extension_origin,
             Some(origin) => {
-                origin == EXTENSION_ORIGIN
-                    || (self.allow_any_extension_origin
-                        && origin.starts_with("chrome-extension://"))
+                let id = origin
+                    .strip_prefix("chrome-extension://")
+                    .map(|rest| rest.trim_end_matches('/'));
+                match id {
+                    Some(id) => {
+                        self.allow_any_extension_origin
+                            || self.extension_ids.iter().any(|allowed| allowed == id)
+                    }
+                    None => false,
+                }
             }
         }
     }
@@ -412,14 +453,18 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
         }
     };
 
-    if protocol != PROTOCOL_VERSION {
+    // Newer extensions are accepted: the ack carries the lower version and the extension decides
+    // whether this app is new enough. Only an extension older than anything still served is
+    // turned away. The message keeps the wording v2 apps used ("desktop app speaks protocol vN"),
+    // which the extension reads to tell "update the app" from "update the extension".
+    if protocol < MIN_EXT_PROTOCOL_VERSION {
         warn!(protocol, "extension uses an unsupported protocol version");
         let _ = send_frame(
             &mut socket,
             &error_frame(
                 ErrorCode::UnsupportedProtocol,
                 format!(
-                    "desktop app speaks protocol v{PROTOCOL_VERSION}, extension sent v{protocol}"
+                    "desktop app speaks protocol v{PROTOCOL_VERSION}, extension sent v{protocol}. Update the Lare extension."
                 ),
             ),
         )
@@ -433,16 +478,11 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
             warn!("extension user differs from desktop user");
         }
     }
-    let ack = AppToExt::HelloAck {
-        protocol: PROTOCOL_VERSION,
-        app_version: ctx.app_version.clone(),
-        user_id: current_user,
-        recording_capable: ctx.recording_capable(),
-    };
+    let ack = ctx.hello_ack(protocol);
     if send_frame(&mut socket, &ack).await.is_err() {
         return;
     }
-    info!(ext_version, "extension connected");
+    info!(ext_version, protocol, "extension connected");
 
     // 2. Register with the hub and split the socket: a writer task drains the per-client
     //    channel, the loop below reads frames.
@@ -518,14 +558,9 @@ fn handle_frame(ctx: &ServerContext, tx: &mpsc::UnboundedSender<AppToExt>, raw: 
         ExtToApp::Ping { at } => {
             let _ = tx.send(AppToExt::Pong { at });
         }
-        ExtToApp::Hello { .. } => {
+        ExtToApp::Hello { protocol, .. } => {
             // A repeated hello is harmless: answer it again so the client can re-sync.
-            let _ = tx.send(AppToExt::HelloAck {
-                protocol: PROTOCOL_VERSION,
-                app_version: ctx.app_version.clone(),
-                user_id: ctx.current_user(),
-                recording_capable: ctx.recording_capable(),
-            });
+            let _ = tx.send(ctx.hello_ack(protocol.max(MIN_EXT_PROTOCOL_VERSION)));
         }
         ExtToApp::SessionStart {
             session_id,
@@ -608,6 +643,10 @@ mod tests {
     }
 
     async fn start(allow_any_origin: bool) -> TestServer {
+        start_with(allow_any_origin, &[]).await
+    }
+
+    async fn start_with(allow_any_origin: bool, extra_extension_ids: &[&str]) -> TestServer {
         let (hub, events) = WsHub::new();
         let mut ctx = ServerContext::new(
             hub,
@@ -616,6 +655,8 @@ mod tests {
             PreviewFiles::new(),
         );
         ctx.allow_any_extension_origin = allow_any_origin;
+        ctx.extension_ids
+            .extend(extra_extension_ids.iter().map(|id| id.to_string()));
         let (listener, addr) = bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
         tokio::spawn(serve(listener, ctx.clone()));
         TestServer { addr, ctx, events }
@@ -702,6 +743,7 @@ mod tests {
         assert_eq!(ack["appVersion"], "0.0.0-test");
         assert_eq!(ack["userId"], serde_json::Value::Null);
         assert_eq!(ack["recordingCapable"], false);
+        assert_eq!(ack["recording"], serde_json::Value::Null);
         assert_eq!(
             next_event(&mut server.events).await,
             ServerEvent::ExtConnected(true)
@@ -727,6 +769,31 @@ mod tests {
         )
         .await;
         assert_eq!(recv_json(&mut client).await["type"], "hello.ack");
+    }
+
+    #[tokio::test]
+    async fn store_extension_origin_is_accepted_and_others_rejected_in_release_mode() {
+        let server = start_with(false, &["storeextensionidstoreextensionid"]).await;
+        let mut client = connect(
+            server.addr,
+            Some("chrome-extension://storeextensionidstoreextensionid"),
+        )
+        .await
+        .unwrap();
+        send_json(
+            &mut client,
+            json!({ "type": "hello", "protocol": PROTOCOL_VERSION, "extVersion": "0.1.0", "userId": null }),
+        )
+        .await;
+        assert_eq!(recv_json(&mut client).await["type"], "hello.ack");
+
+        let err = connect(server.addr, Some("chrome-extension://someotherextensionidxxxxxxxxxxx"))
+            .await
+            .expect_err("upgrade should fail");
+        match err {
+            tungstenite::Error::Http(response) => assert_eq!(response.status().as_u16(), 403),
+            other => panic!("expected an HTTP 403, got {other:?}"),
+        }
     }
 
     #[tokio::test]
@@ -809,6 +876,7 @@ mod tests {
         started: Mutex<Vec<RecordingRequest>>,
         stopped: Mutex<Vec<String>>,
         cancelled: Mutex<Vec<String>>,
+        snapshot: Mutex<Option<RecordingSnapshot>>,
     }
 
     impl RecordingBackend for FakeRecorder {
@@ -823,6 +891,26 @@ mod tests {
         fn cancel(&self, _hub: &WsHub, session_id: &str, _at: u64) {
             self.cancelled.lock().unwrap().push(session_id.to_string());
         }
+        fn snapshot(&self) -> Option<RecordingSnapshot> {
+            self.snapshot.lock().unwrap().clone()
+        }
+    }
+
+    #[tokio::test]
+    async fn hello_ack_carries_the_recording_in_progress() {
+        let server = start(true).await;
+        let recorder = Arc::new(FakeRecorder::default());
+        *recorder.snapshot.lock().unwrap() = Some(RecordingSnapshot {
+            session_id: Some("s7".into()),
+            state: RecordingState::Paused,
+            started_at: Some(42),
+        });
+        server.ctx.set_recording_backend(Some(recorder.clone()));
+        let (_client, ack) = handshake(server.addr).await;
+        assert_eq!(
+            ack["recording"],
+            json!({ "sessionId": "s7", "state": "paused", "startedAt": 42u64 })
+        );
     }
 
     #[tokio::test]
@@ -962,17 +1050,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ack_carries_the_lower_protocol_version() {
+        let server = start(true).await;
+        for (sent, expected) in [
+            (MIN_EXT_PROTOCOL_VERSION, MIN_EXT_PROTOCOL_VERSION),
+            (PROTOCOL_VERSION, PROTOCOL_VERSION),
+            (PROTOCOL_VERSION + 5, PROTOCOL_VERSION),
+        ] {
+            let mut client = connect(server.addr, None).await.unwrap();
+            send_json(
+                &mut client,
+                json!({ "type": "hello", "protocol": sent, "extVersion": "9.9.9", "userId": null }),
+            )
+            .await;
+            let ack = recv_json(&mut client).await;
+            assert_eq!(ack["type"], "hello.ack");
+            assert_eq!(ack["protocol"], expected);
+        }
+    }
+
+    #[tokio::test]
     async fn protocol_mismatch_is_rejected_and_closed() {
         let server = start(true).await;
         let mut client = connect(server.addr, None).await.unwrap();
         send_json(
             &mut client,
-            json!({ "type": "hello", "protocol": 99, "extVersion": "9.9.9", "userId": null }),
+            json!({ "type": "hello", "protocol": MIN_EXT_PROTOCOL_VERSION - 1, "extVersion": "0.0.1", "userId": null }),
         )
         .await;
         let err = recv_json(&mut client).await;
         assert_eq!(err["type"], "error");
         assert_eq!(err["code"], "unsupported_protocol");
+        assert!(
+            err["message"]
+                .as_str()
+                .unwrap()
+                .starts_with(&format!("desktop app speaks protocol v{PROTOCOL_VERSION}"))
+        );
         // Server closes: the next item is a Close frame or the end of the stream.
         let next = tokio::time::timeout(Duration::from_secs(5), client.next())
             .await

@@ -105,6 +105,11 @@ function subscribe(listener: Listener) {
   };
 }
 
+/** Current jobs outside React, e.g. to check nothing is uploading before the app relaunches. */
+export function getJobs(): Job[] {
+  return jobs;
+}
+
 export function useJobs(): Job[] {
   return useSyncExternalStore(
     subscribe,

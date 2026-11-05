@@ -72,6 +72,12 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
     type: z.literal("SUBMISSION"),
     slug: z.string(),
     submission: CapturedSubmissionSchema,
+    /**
+     * The page's problem, so a submission on a problem that was never tracked (opened offline or
+     * signed out, or already posted) can create its inbox row. Absent from older content scripts.
+     */
+    problem: ProblemInfoSchema.nullable().optional(),
+    question: QuestionDetailsSchema.nullable().optional(),
   }),
   z.object({ type: z.literal("SIGN_IN"), provider: z.enum(["github", "google"]) }),
   z.object({ type: z.literal("SIGN_IN_OTP"), email: z.string().email() }),
@@ -80,7 +86,10 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("PROBE_APP") }),
   z.object({ type: z.literal("OPEN_APP"), path: z.string().optional() }),
   z.object({ type: z.literal("CANCEL_START") }),
+  /** Retry saving every mock interview that ended but could not be saved. */
   z.object({ type: z.literal("RETRY_SYNC") }),
+  /** Stop retrying unsaved mock interviews and forget them here (all of them when omitted). */
+  z.object({ type: z.literal("DISCARD_UNSAVED"), sessionIds: z.array(z.string()).optional() }),
   z.object({ type: z.literal("PUBLISH_PROBLEMS"), ids: z.array(z.string().uuid()).min(1) }),
   /** Remove tracked problems from the inbox without posting them (all of them when omitted). */
   z.object({ type: z.literal("CLEAR_TRACKED"), ids: z.array(z.string().uuid()).optional() }),

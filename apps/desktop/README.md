@@ -1,4 +1,4 @@
-# Desktop V1 Validation
+# Desktop validation
 
 Run frontend checks from the repository root:
 
@@ -21,7 +21,7 @@ downloaded model, or a live Bunny/Supabase account. Full native validation uses
 `cargo test -p lare-desktop --lib` and requires the native dependencies described
 in the repository's setup instructions.
 
-## V1 Integration Status
+## Integration status
 
 - **Mock interviews are recorded here.** The extension's `session.start` reaches
   the registered recorder, which records in instant mode; after stop the
@@ -38,7 +38,9 @@ in the repository's setup instructions.
 - Recordings stay on disk after upload and play as a local preview until their
   video is `ready`; `features/media/localCopies.ts` then deletes them (on launch,
   on the Realtime ready event, and every five minutes). Failed uploads stay
-  available in their draft's Media step.
+  available in their draft's Media step. Interviews that never finished
+  uploading (a quit or crash mid-interview, an expired upload) are listed on the
+  Sessions page with Retry and Discard (`features/media/recovery.ts`).
 
 ## Still Needs A Machine
 

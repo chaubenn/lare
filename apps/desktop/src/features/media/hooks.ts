@@ -87,6 +87,8 @@ export interface RecordingWithMeta extends CompletedRecording {
   videoId: string | null;
   uploaded: boolean;
   transcribed: boolean;
+  /** Why the last transcription failed, while it can still be retried. */
+  transcribeError: string | null;
   error: string | null;
 }
 
@@ -105,6 +107,7 @@ export function useRecordings() {
           videoId: m?.videoId ?? null,
           uploaded: m?.uploaded ?? false,
           transcribed: m?.transcribed ?? false,
+          transcribeError: m?.transcribeError ?? null,
           error: m?.error ?? null,
         };
       });

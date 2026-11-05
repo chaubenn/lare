@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_review_usage: {
+        Row: {
+          created_at: string
+          id: number
+          session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          session_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_review_usage_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_review_usage_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       follows: {
         Row: {
           created_at: string
@@ -875,8 +911,16 @@ export type Database = {
       }
       accept_follow: { Args: { follower: string }; Returns: undefined }
       decline_follow: { Args: { follower: string }; Returns: undefined }
+      remove_follower: { Args: { p_follower_id: string }; Returns: undefined }
+      unpublish_post: { Args: { p_post_id: string }; Returns: undefined }
+      delete_practice_post: { Args: { p_post_id: string }; Returns: undefined }
+      create_session_draft: { Args: { p_session_id: string }; Returns: string }
+      claim_ai_review_slot: {
+        Args: { p_user_id: string; p_session_id: string; p_daily_limit: number }
+        Returns: boolean
+      }
       feed: {
-        Args: { before?: string; page_size?: number; scope?: string }
+        Args: { before?: string; page_size?: number; scope?: string; before_id?: string }
         Returns: {
           body: string | null
           comment_count: number

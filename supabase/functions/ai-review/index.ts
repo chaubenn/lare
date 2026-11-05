@@ -54,6 +54,22 @@ function stripHtml(html: string | null | undefined, max = 1500): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+/**
+ * Edit logs live at `{owner}/{session}/{problem}.json.gz` in `session-data`. The download below
+ * uses the service role, which ignores storage policies, so the path (user-writable on their own
+ * `session_problems` rows) must be confined to the caller's folder here; 0025 also rejects such
+ * paths in the database.
+ */
+function isOwnEditsPath(path: string, userId: string): boolean {
+  if (path.includes("\\")) return false;
+  const parts = path.split("/");
+  return (
+    parts.length >= 2 &&
+    parts[0] === userId &&
+    parts.every((part) => part !== "" && part !== "." && part !== "..")
+  );
+}
+
 Deno.serve(
   handler(async (req) => {
     if (req.method !== "POST") throw new HttpError("Method not allowed", 405);
@@ -80,14 +96,20 @@ Deno.serve(
       if (existing) return json({ review: existing, cached: true });
     }
 
-    // Rate limit: N reviews per rolling 24h per user.
-    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    const { count } = await admin
-      .from("interview_reviews")
-      .select("id, sessions!inner(user_id)", { count: "exact", head: true })
-      .eq("sessions.user_id", userId)
-      .gte("created_at", since);
-    if ((count ?? 0) >= DAILY_LIMIT) {
+    // Rate limit: N generations per rolling 24h per user, counted in an append-only ledger
+    // (0025). `interview_reviews` cannot be the counter: regenerating overwrites the same row and
+    // owners can delete theirs. The slot is taken before any OpenAI call and is not refunded if
+    // the call fails, because a failed call can still be billed.
+    const { data: claimed, error: claimError } = await admin.rpc("claim_ai_review_slot", {
+      p_user_id: userId,
+      p_session_id: session.id,
+      p_daily_limit: DAILY_LIMIT,
+    });
+    if (claimError) {
+      console.error("claim_ai_review_slot failed", claimError);
+      throw new HttpError("Could not check the review limit", 500);
+    }
+    if (claimed !== true) {
       throw new HttpError(`Review limit reached (${DAILY_LIMIT} per day). Try again later.`, 429);
     }
 
@@ -136,7 +158,9 @@ Deno.serve(
       problemBlocks.push(
         `PROBLEM: ${p.title} (${p.difficulty ?? "unknown"}) https://leetcode.com/problems/${p.slug}/\n${stripHtml(p.description_html)}`,
       );
-      if (p.edits_path) {
+      if (p.edits_path && !isOwnEditsPath(p.edits_path, userId)) {
+        console.warn("ai-review: skipping edits_path outside the caller's folder", p.id);
+      } else if (p.edits_path) {
         const { data: blob } = await admin.storage.from("session-data").download(p.edits_path);
         if (blob) {
           const log = await gunzipJson<EditLog>(new Uint8Array(await blob.arrayBuffer()));

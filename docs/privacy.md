@@ -14,17 +14,21 @@ Lare records people's screens, voices and faces. These are the rules the product
 
 ## What is uploaded, and when
 
-- **Video is uploaded while it records, not after you stop.** Chunks are sent to Bunny Stream as
-  they are produced, so at stop only the last few seconds are still in flight. The practical
-  consequence for privacy: the bytes are already leaving the machine during the recording, not at
-  the moment you decide to keep it. Stopping early does not keep what was already sent — discard
-  the video if you do not want it kept.
+- **Demo and summary videos are uploaded while they record, not after you stop.** Chunks are sent
+  to Bunny Stream as they are produced, so at stop only the last few seconds are still in flight.
+  The practical consequence for privacy: the bytes are already leaving the machine during the
+  recording, not at the moment you decide to keep it. Stopping early does not keep what was
+  already sent — discard the video if you do not want it kept.
+- **A mock interview is uploaded after it ends.** The recording stays on the machine while it is
+  transcribed, then the video is uploaded. Discarding the interview (from the desktop pill or the
+  side panel) throws the recording away before anything is sent.
 - **The local copy lasts until the cloud copy has processed.** A desktop recording stays in the
   app data folder (`Lare/recordings`) after upload so the author can watch it immediately, and is
   deleted once its video is `ready` (or the video was removed). A failed upload or a video that
-  failed to process keeps its source so it can be retried. A browser recording's preview lives
-  only in that tab's memory. There is no Recordings page, because there is no local library to
-  manage.
+  failed to process keeps its source so it can be retried. An interview whose upload never
+  finished (the app quit mid-interview, or the upload failed) also stays on the machine until the
+  author retries or discards it from the Sessions page. There is no general Recordings page,
+  because there is no local library to manage.
 - **Practice is captured automatically**, with no start button: while the extension is installed
   and signed in, every LeetCode problem opened and every submission judged is saved (problem,
   code, verdict, runtime and memory). It is private to the account — it stays in the user's

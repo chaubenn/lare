@@ -7,7 +7,7 @@ import { SetupGate } from "./SetupPage";
 
 /** Gate: restores the session, forces onboarding until a handle exists, then renders children. */
 export function RequireAuth() {
-  const { session, profile, profileLoading, profileError } = useAuth();
+  const { session, profile, profileLoading, profileError, retryProfile } = useAuth();
   // These render without the shell, so they carry their own drag region: a window that cannot be
   // moved while the session is being restored is the worst place to leave someone.
   if (session === undefined)
@@ -23,10 +23,16 @@ export function RequireAuth() {
         <PageSpinner label="Loading your profile…" />
       </WindowScreen>
     );
-  if (profileError) {
+  // Only when there is no profile to show: a background refresh that fails (offline, say) must not
+  // throw someone out of the app they were using.
+  if (profileError && profile === undefined) {
     return (
       <WindowScreen className="max-w-md">
-        <ErrorState error={profileError} title="Couldn't load your profile" />
+        <ErrorState
+          error={profileError}
+          title="Couldn't load your profile"
+          onRetry={retryProfile}
+        />
       </WindowScreen>
     );
   }

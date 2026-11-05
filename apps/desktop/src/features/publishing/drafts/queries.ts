@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useUser } from "@/features/auth/AuthProvider";
 import { postMediaKey } from "@/features/publishing/posts/media";
+import { postKey } from "@/features/publishing/posts/queries";
+import { whileOnline } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
 
 /** Post + the whole session it summarises (problems and their submissions). */
@@ -55,6 +57,10 @@ export function useTrackedProblems() {
       if (error) throw error;
       return data;
     },
+    // `session_problems` is not in the realtime publication, so a problem the extension tracks
+    // while this page is open only shows up on a poll. Focus refetches cover switching back from
+    // Chrome; this covers Lare sitting visible beside it. Polling stops while the window is hidden.
+    refetchInterval: whileOnline(20_000),
   });
 }
 
@@ -207,21 +213,23 @@ export function usePublishDraft() {
     mutationFn: async (edit: PublishInput) => {
       const { data, error } = await supabase
         .from("posts")
-        .update({
-          status: "published",
-          published_at: new Date().toISOString(),
-          ...postPatch(edit),
-        })
+        // `published_at` is stamped by the server on publish; a client value would be ignored.
+        .update({ status: "published", ...postPatch(edit) })
         .eq("id", edit.id)
         .select("id, slug")
         .single();
       if (error) throw error;
       return data;
     },
-    onSuccess: (_data) => {
+    onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: ["drafts"] });
+      void queryClient.invalidateQueries({ queryKey: draftKey(vars.id) });
+      void queryClient.invalidateQueries({ queryKey: postKey(vars.id) });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
       void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      // The new post goes on the profile grid and into its post count.
+      void queryClient.invalidateQueries({ queryKey: ["user-posts"] });
+      void queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
     },
   });
 }

@@ -38,7 +38,7 @@ env:
   # not a separate backend. QA runs against the real Supabase project and site.
   VITE_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
   VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
-  VITE_SITE_URL: https://lare-one.vercel.app
+  VITE_SITE_URL: https://lare.fyi
   VITE_BUNNY_LIBRARY_ID: "743884"
 
 jobs:
@@ -228,7 +228,7 @@ jobs:
         env:
           WXT_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
           WXT_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
-          WXT_SITE_URL: https://lare-one.vercel.app
+          WXT_SITE_URL: https://lare.fyi
         run: pnpm build && pnpm zip
       - name: Attach to release
         env:

@@ -5,9 +5,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { useAuth, useUser } from "@/features/auth/AuthProvider";
+import { getJobs, isActive } from "@/features/media/jobs";
 import { useNotify } from "@/features/notifications/notices";
 import { useExtensionStatus } from "@/features/shell/useExtensionStatus";
 import { copyText } from "@/lib/clipboard";
+import { confirm } from "@/lib/confirm";
+import { recorder } from "@/lib/recorder";
 import { errorMessage } from "@/lib/supabase";
 import { appVersion, inTauri } from "@/lib/tauri";
 import { checkForUpdate, installUpdate, useUpdateState } from "@/lib/updater";
@@ -125,14 +128,49 @@ function AccountPanel() {
   );
 }
 
+/**
+ * Installing relaunches Lare, which would cut off a recording in progress and stop any upload or
+ * processing partway. Refuse while recording; ask first while something is still uploading.
+ */
+function useInstallUpdate() {
+  const { notify } = useNotify();
+  return async () => {
+    const status = await recorder.status().catch(() => null);
+    if (status && status.state !== "idle" && status.state !== "error") {
+      notify({
+        title: "Finish your recording first",
+        description: "Installing the update relaunches Lare, which would stop the recording.",
+        variant: "error",
+      });
+      return;
+    }
+    const running = getJobs().filter(isActive);
+    if (running.length > 0) {
+      const ok = await confirm({
+        title: "Install the update now?",
+        message: `Lare is still busy with ${running
+          .map((job) => job.label.charAt(0).toLowerCase() + job.label.slice(1))
+          .join(
+            ", ",
+          )}. Updating now relaunches Lare and interrupts that work; you may need to retry it from the draft afterwards.`,
+        confirmLabel: "Install and relaunch",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    await installUpdate();
+  };
+}
+
 function UpdateButton() {
   const state = useUpdateState();
+  const install = useInstallUpdate();
   if (!inTauri) return null;
   const busy =
     state.status === "checking" || state.status === "downloading" || state.status === "installing";
   if (state.status === "available") {
     return (
-      <Button variant="primary" size="sm" onClick={() => void installUpdate()}>
+      <Button variant="primary" size="sm" onClick={() => void install()}>
         Install v{state.version}
       </Button>
     );

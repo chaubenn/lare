@@ -1,8 +1,8 @@
 import { formatDurationHuman, showsActiveTime } from "@lare/shared";
-import { RefreshCw, Sparkles, Video as VideoIcon } from "@lare/ui/icons";
+import { RefreshCw, Sparkles, SquarePen, Video as VideoIcon } from "@lare/ui/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
 import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
@@ -11,12 +11,15 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner, Spinner } from "@/components/ui/States";
 import { VideoEmbed } from "@/components/VideoEmbed";
 import { useVideo } from "@/features/media/hooks";
+import { isActive, useJobs } from "@/features/media/jobs";
+import { useFailedTranscription, useUnfinishedInterviews } from "@/features/media/recovery";
 import { useNotify } from "@/features/notifications/notices";
 import { useInterviewReview } from "@/features/publishing/posts/queries";
 import { formatDateTime, plural } from "@/lib/format";
 import { errorMessage, invokeFunction } from "@/lib/supabase";
 import { CodeTimeline } from "./CodeTimeline";
 import { lastEditAt } from "./editLog";
+import { TranscriptionRetry, UnfinishedInterviewRow } from "./InterviewRecovery";
 import {
   clampTime,
   epochToMedia,
@@ -36,6 +39,7 @@ import {
 import { ReviewCriteria } from "./ReviewCriteria";
 import { Timeline, type TimelineMarker } from "./Timeline";
 import { TranscriptList } from "./TranscriptList";
+import { useCreateSessionDraft } from "./useCreateSessionDraft";
 
 export function SessionReviewPage() {
   const { id = "" } = useParams();
@@ -64,7 +68,15 @@ export function SessionReviewPage() {
 function SessionReview({ session }: { session: SessionDetail }) {
   const queryClient = useQueryClient();
   const { notify } = useNotify();
+  const navigate = useNavigate();
   const isInterview = session.kind === "interview";
+  // A take of this session still on this computer: one that never uploaded, or one whose
+  // transcription failed (the only way to tell that apart from choosing "video only").
+  const [unfinishedTake] = useUnfinishedInterviews(session.id).list;
+  const failedTake = useFailedTranscription(session.id);
+  const transcriptionFailed = isInterview && !session.graded && failedTake !== null;
+  const processing = useJobs().some((job) => isActive(job) && job.sessionId === session.id);
+  const createDraft = useCreateSessionDraft();
 
   const post = useSessionPost(session.id);
   const transcript = useSessionTranscript(session.id);
@@ -177,6 +189,23 @@ function SessionReview({ session }: { session: SessionDetail }) {
       ? { to: `/drafts/${post.data.id}`, label: "Open draft" }
       : { to: `/posts/${post.data.id}`, label: "View post" }
     : null;
+  // An ended session the extension never made a post for (or whose post was deleted).
+  const canCreateDraft =
+    !post.isPending &&
+    !post.isError &&
+    !post.data &&
+    session.status === "ended" &&
+    !session.is_practice_inbox;
+  const doCreateDraft = () =>
+    createDraft.mutate(session.id, {
+      onSuccess: (postId) => void navigate(`/drafts/${postId}`),
+      onError: (e) =>
+        notify({
+          title: "Couldn't create a draft",
+          description: errorMessage(e),
+          variant: "error",
+        }),
+    });
 
   return (
     <div className="space-y-5">
@@ -187,6 +216,16 @@ function SessionReview({ session }: { session: SessionDetail }) {
             <Link to={postLink.to} className={buttonClass("secondary", "sm")}>
               {postLink.label}
             </Link>
+          ) : canCreateDraft ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<SquarePen className="size-3.5" aria-hidden />}
+              loading={createDraft.isPending}
+              onClick={doCreateDraft}
+            >
+              Create draft
+            </Button>
           ) : null}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
@@ -194,7 +233,11 @@ function SessionReview({ session }: { session: SessionDetail }) {
           <SessionStatusBadge status={session.status} />
           {isInterview && (
             <span>
-              {session.graded ? "Local transcript & AI review" : "No transcript: video only"}
+              {session.graded
+                ? "Local transcript & AI review"
+                : transcriptionFailed
+                  ? "Transcription failed"
+                  : "No transcript: video only"}
             </span>
           )}
           {showsActiveTime(session.kind, session.active_ms) ? (
@@ -238,19 +281,24 @@ function SessionReview({ session }: { session: SessionDetail }) {
                 onRetry={() => void (video.isError ? video.refetch() : latestVideo.refetch())}
                 title="Couldn't load the video"
               />
+            ) : isInterview && unfinishedTake ? (
+              <Card>
+                <SectionTitle>Not uploaded yet</SectionTitle>
+                <p className="mb-3 text-sm text-[var(--text-secondary)]">
+                  The recording is on this computer but didn't finish uploading.
+                </p>
+                <UnfinishedInterviewRow recording={unfinishedTake} />
+              </Card>
             ) : (
               <EmptyState
                 icon={<VideoIcon className="size-6" aria-hidden />}
                 title="No video"
                 description={
-                  isInterview ? (
-                    <>
-                      The desktop app uploads the interview after it stops recording. Check the jobs
-                      tray for progress or retry from the draft.
-                    </>
-                  ) : (
-                    "No recording was made for this session."
-                  )
+                  !isInterview
+                    ? "No recording was made for this session."
+                    : processing
+                      ? "Lare is processing this interview now. It shows here once it's uploaded."
+                      : "The desktop app uploads the interview after it stops recording. If it was recorded on another computer, open Lare there to finish the upload."
                 }
               />
             )}
@@ -292,7 +340,12 @@ function SessionReview({ session }: { session: SessionDetail }) {
       {/* Full width, below the recording and the code: the review is a dashboard of its own, and
           beside the video it left the other column empty as it grew. */}
       <section aria-label="AI review" className="space-y-4">
-        {!isInterview || !session.graded ? (
+        {transcriptionFailed && failedTake ? (
+          <Card>
+            <SectionTitle>AI review</SectionTitle>
+            <TranscriptionRetry recording={failedTake} />
+          </Card>
+        ) : !isInterview || !session.graded ? (
           <Card>
             <SectionTitle>AI review</SectionTitle>
             <p className="text-sm text-zinc-400">{generateBlocked}</p>

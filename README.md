@@ -31,7 +31,7 @@ Share posts with followers, attach demo videos, and run AI-graded mock interview
 | --- | --- |
 | **Chrome extension** | Captures problems, your Monaco edits and judge results on its own — nothing to start or stop. Starts mock interviews from a side panel. |
 | **Desktop app** (Tauri) | Records your screen natively with Cap's recording stack and **transcribes interviews locally with whisper.cpp**. |
-| **Website** | A landing page with the downloads. Lare is the app and the extension; there is nothing to sign in to on the web. |
+| **Website** | A landing page with the downloads, and the public page for each shared post (`lare.fyi/p/<slug>`). Lare is the app and the extension; there is nothing to sign in to on the web. |
 
 **Mock interviews need the desktop app.** Start one from the extension's side panel while the app
 is open: the app records your screen, microphone and camera bubble, whisper.cpp transcribes the

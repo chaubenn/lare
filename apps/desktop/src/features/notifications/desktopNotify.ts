@@ -1,13 +1,14 @@
 /**
  * Native OS notifications for new in-app notifications, shown only while the Lare window is not
  * focused. The in-app list is the source of truth; anything that fails here is logged and dropped.
+ *
+ * Shown by the `show_desktop_notification` command rather than the plugin's `sendNotification`,
+ * because the plugin cannot report a click on desktop: the command opens `route` when the
+ * notification is clicked (on Windows; elsewhere a click does what the OS does by default).
  */
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification,
-} from "@tauri-apps/plugin-notification";
+import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import { inTauri } from "@/lib/tauri";
 
@@ -39,7 +40,8 @@ export async function setDesktopNotificationsEnabled(on: boolean): Promise<boole
   return next;
 }
 
-export async function notifyDesktop(body: string): Promise<void> {
+/** `route` is the in-app page the notification is about, opened when it is clicked. */
+export async function notifyDesktop(body: string, route?: string | null): Promise<void> {
   if (!inTauri) return;
   try {
     if (await getCurrentWindow().isFocused()) return;
@@ -49,7 +51,8 @@ export async function notifyDesktop(body: string): Promise<void> {
       askedThisSession = true;
       granted = (await requestPermission()) === "granted";
     }
-    if (granted) sendNotification({ title: "Lare", body });
+    if (granted)
+      await invoke("show_desktop_notification", { title: "Lare", body, route: route ?? null });
   } catch (err) {
     console.warn("[notifications] desktop notification failed", err);
   }

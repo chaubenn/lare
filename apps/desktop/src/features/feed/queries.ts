@@ -17,9 +17,22 @@ const FEED_SELECT =
 /** "all" is every post the viewer may see; "following" narrows it to accepted followees. */
 export type FeedScope = "all" | "following";
 
-function feedQuery(scope: FeedScope, before?: string) {
+/**
+ * Where the next page starts. `feed()` orders by `published_at desc, id desc`, so the id breaks
+ * ties between posts published in the same instant, which a timestamp alone would skip.
+ */
+interface FeedCursor {
+  before: string;
+  beforeId: string;
+}
+
+function feedQuery(scope: FeedScope, cursor?: FeedCursor) {
   return supabase
-    .rpc("feed", { ...(before ? { before } : {}), page_size: FEED_PAGE_SIZE, scope })
+    .rpc("feed", {
+      ...(cursor ? { before: cursor.before, before_id: cursor.beforeId } : {}),
+      page_size: FEED_PAGE_SIZE,
+      scope,
+    })
     .select(FEED_SELECT);
 }
 
@@ -29,7 +42,7 @@ export type FeedPost = QueryData<ReturnType<typeof feedQuery>>[number] &
 export function useFeed(scope: FeedScope = "all") {
   return useInfiniteQuery({
     queryKey: ["feed", scope],
-    initialPageParam: undefined as string | undefined,
+    initialPageParam: undefined as FeedCursor | undefined,
     queryFn: async ({ pageParam }) => {
       const { data, error } = await feedQuery(scope, pageParam);
       if (error) throw error;
@@ -40,9 +53,10 @@ export function useFeed(scope: FeedScope = "all") {
       ]);
       return decorated.map((row) => ({ ...row, top_comments: comments.get(row.id) ?? [] }));
     },
-    getNextPageParam: (lastPage) => {
+    getNextPageParam: (lastPage): FeedCursor | undefined => {
       if (lastPage.length < FEED_PAGE_SIZE) return undefined;
-      return lastPage[lastPage.length - 1]?.published_at ?? undefined;
+      const last = lastPage[lastPage.length - 1];
+      return last?.published_at ? { before: last.published_at, beforeId: last.id } : undefined;
     },
   });
 }

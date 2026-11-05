@@ -5,6 +5,7 @@ import { KindBadge } from "@/components/ui/Badge";
 import { SectionTitle, StackedList, StackedListItem } from "@/components/ui/Card";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { useNotify } from "@/features/notifications/notices";
+import { isPracticePost, useDeletePracticePost } from "@/features/publishing/posts/postActions";
 import { PageBlurb } from "@/features/shell/PageBlurb";
 import { confirm } from "@/lib/confirm";
 import { formatListWhen, plural } from "@/lib/format";
@@ -135,7 +136,7 @@ function DraftRow({ draft }: { draft: Draft }) {
       </p>
       <div className="hidden justify-self-end sm:block">
         {problems.length === 0 ? (
-          <DeleteEmptyDraft id={draft.id} />
+          <DeleteEmptyDraft id={draft.id} practice={isPracticePost(session?.client)} />
         ) : (
           <span
             aria-hidden
@@ -195,9 +196,14 @@ function ProblemSummary({ draft }: { draft: Draft }) {
   );
 }
 
-/** A draft with nothing in it can only be deleted, so offer that on the row itself. */
-function DeleteEmptyDraft({ id }: { id: string }) {
-  const remove = useDeleteDraft();
+/**
+ * A draft with nothing in it can only be deleted, so offer that on the row itself. One made from
+ * Tracked problems goes through `delete_practice_post` so the session minted for it goes too.
+ */
+function DeleteEmptyDraft({ id, practice }: { id: string; practice: boolean }) {
+  const removeDraft = useDeleteDraft();
+  const removePractice = useDeletePracticePost();
+  const remove = practice ? removePractice : removeDraft;
   const { notify } = useNotify();
 
   async function doDelete() {
@@ -210,7 +216,8 @@ function DeleteEmptyDraft({ id }: { id: string }) {
     });
     if (!ok) return;
     try {
-      await remove.mutateAsync(id);
+      if (practice) await removePractice.mutateAsync(id);
+      else await removeDraft.mutateAsync(id);
       notify({ title: "Draft deleted" });
     } catch (err) {
       notify({ title: "Couldn't delete", description: errorMessage(err), variant: "error" });

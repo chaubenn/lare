@@ -260,6 +260,7 @@ pub fn run() {
             commands::hide_camera_window,
             commands::resize_camera_window,
             commands::focus_main,
+            commands::show_desktop_notification,
             commands::media_info,
             commands::make_thumbnail,
             commands::upload_to_bunny,

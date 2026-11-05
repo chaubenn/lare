@@ -1,6 +1,7 @@
 import { formatDurationHuman, showsActiveTime } from "@lare/shared";
 import type { Post } from "@lare/supabase-types";
 import { ArrowLeft, ArrowRight, Check, Eye, Send, Trash2 } from "@lare/ui/icons";
+import { onlineManager } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ProblemSection } from "@/components/ProblemSection";
@@ -15,7 +16,14 @@ import { isActive, useJobs } from "@/features/media/jobs";
 import { useNotify } from "@/features/notifications/notices";
 import { PostMediaPanel } from "@/features/publishing/posts/PostMediaPanel";
 import { PostPreview, usePreviewSlides } from "@/features/publishing/posts/PostPreview";
+import {
+  isPracticePost,
+  postUrl,
+  SHARE_LINKS,
+  useDeletePracticePost,
+} from "@/features/publishing/posts/postActions";
 import { PageActions } from "@/features/shell/PageActions";
+import { copyText } from "@/lib/clipboard";
 import { confirm } from "@/lib/confirm";
 import { formatDateTime, plural } from "@/lib/format";
 import { useHotkey } from "@/lib/hotkeys";
@@ -88,10 +96,12 @@ function defaultTitle(draft: Draft): string {
   return `${kind}: ${titles.join(", ")}${more}`;
 }
 
-function confirmDelete(): Promise<boolean> {
+function confirmDelete(practice: boolean): Promise<boolean> {
   return confirm({
     title: "Delete draft",
-    message: "Delete this draft? The session data stays; only the post is removed.",
+    message: practice
+      ? "Delete this draft? Its problems go back to Tracked problems, so you can post them later."
+      : "Delete this draft? The session data stays; only the post is removed.",
     confirmLabel: "Delete",
     cancelLabel: "Keep",
     destructive: true,
@@ -105,6 +115,9 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const publish = usePublishDraft();
   const save = useSaveDraft();
   const remove = useDeleteDraft();
+  const removePractice = useDeletePracticePost();
+  // A draft made from Tracked problems owns its session; deleting it returns the problems.
+  const practice = isPracticePost(draft.sessions?.client);
   const recording = useRecorderStatus();
   const jobs = useJobs();
 
@@ -145,7 +158,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
 
   const session = draft.sessions;
   const problems = session?.session_problems ?? [];
-  const busy = publish.isPending || save.isPending || remove.isPending;
+  const busy = publish.isPending || save.isPending || remove.isPending || removePractice.isPending;
   const hasVideo = Boolean(draft.video_id) && draft.video_kind !== "none";
   const hasDemoVideo = Boolean(draft.demo_video_id);
   // Photos are written as soon as they are uploaded; the rest of the post is saved by the form.
@@ -191,6 +204,28 @@ function DraftEditor({ draft }: { draft: Draft }) {
     }, 600);
     return () => window.clearTimeout(timer);
   }, [snapshot, recoveryKey, saveDraft]);
+
+  // A save that failed while offline goes again as soon as the connection is back, instead of
+  // waiting for the next keystroke or a click on Save draft.
+  useEffect(() => {
+    if (!saveError) return;
+    return onlineManager.subscribe((online) => {
+      if (!online || leaving.current) return;
+      const pending = latestSnapshot.current;
+      void saveDraft(JSON.parse(pending) as PublishInput)
+        .then(() => {
+          if (latestSnapshot.current !== pending) return;
+          setSaveError(null);
+          setSaved(true);
+          try {
+            if (localStorage.getItem(recoveryKey) === pending) localStorage.removeItem(recoveryKey);
+          } catch {
+            /* Cloud save succeeded. */
+          }
+        })
+        .catch(() => undefined);
+    });
+  }, [saveError, recoveryKey, saveDraft]);
 
   const uploading = jobs.some(
     (job) =>
@@ -242,7 +277,14 @@ function DraftEditor({ draft }: { draft: Draft }) {
       } catch {
         /* Publication already succeeded. */
       }
-      notify({ title: "Published", variant: "success" });
+      notify({
+        title: "Published",
+        variant: "success",
+        action:
+          SHARE_LINKS && slug
+            ? { label: "Copy link", run: () => void copyText(postUrl(slug)) }
+            : undefined,
+      });
       void navigate(`/posts/${id}`, { replace: true });
     } catch (err) {
       leaving.current = false;
@@ -260,17 +302,21 @@ function DraftEditor({ draft }: { draft: Draft }) {
   };
 
   const doDelete = async () => {
-    if (!(await confirmDelete())) return;
+    if (!(await confirmDelete(practice))) return;
     try {
       leaving.current = true;
       await saveDraft(edit);
-      await remove.mutateAsync(draft.id);
+      if (practice) await removePractice.mutateAsync(draft.id);
+      else await remove.mutateAsync(draft.id);
       try {
         localStorage.removeItem(recoveryKey);
       } catch {
         /* Deletion already succeeded. */
       }
-      notify({ title: "Draft deleted" });
+      notify({
+        title: "Draft deleted",
+        description: practice ? "Its problems are back in Tracked problems." : undefined,
+      });
       void navigate("/drafts", { replace: true });
     } catch (err) {
       leaving.current = false;
@@ -389,7 +435,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
               }`}
             />
             {saveState === "error"
-              ? `Cloud save failed: ${saveError}. Changes are kept on this device; use Save draft to retry.`
+              ? `Cloud save failed: ${saveError?.replace(/\.$/, "")}. Changes are kept on this device; use Save draft to retry.`
               : saveState === "saved"
                 ? "Saved to cloud"
                 : "Saving…"}

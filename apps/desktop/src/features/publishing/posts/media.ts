@@ -1,6 +1,6 @@
 import { MAX_POST_IMAGES, POST_MEDIA_BUCKET, postMediaPath, rejectPostImage } from "@lare/shared";
 import type { PostMedia } from "@lare/supabase-types";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
 export interface PostImage extends PostMedia {
@@ -9,6 +9,18 @@ export interface PostImage extends PostMedia {
 }
 
 export const postMediaKey = (postId: string) => ["post-media", postId] as const;
+
+/**
+ * After a photo is added, removed, reordered or captioned. Feed and profile cards embed the
+ * carousel themselves, so a published post's cards go stale without these too.
+ */
+function invalidatePostMedia(queryClient: QueryClient, postId: string) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
+    queryClient.invalidateQueries({ queryKey: ["feed"] }),
+    queryClient.invalidateQueries({ queryKey: ["user-posts"] }),
+  ]);
+}
 
 /** One carousel photo with a signed, ready-to-render URL. */
 export interface FeedImage {
@@ -187,7 +199,7 @@ export function useUploadPostImages(postId: string, userId: string) {
         }
       }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
+    onSuccess: () => invalidatePostMedia(queryClient, postId),
   });
 }
 
@@ -199,7 +211,7 @@ export function useRemovePostImage(postId: string) {
       if (error) throw error;
       await supabase.storage.from(POST_MEDIA_BUCKET).remove([image.storage_path]);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
+    onSuccess: () => invalidatePostMedia(queryClient, postId),
   });
 }
 
@@ -216,7 +228,7 @@ export function useReorderPostImages(postId: string) {
         if (error) throw error;
       }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
+    onSuccess: () => invalidatePostMedia(queryClient, postId),
   });
 }
 
@@ -232,6 +244,6 @@ export function useSetImageCaption(postId: string) {
         .eq("post_id", postId);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
+    onSuccess: () => invalidatePostMedia(queryClient, postId),
   });
 }

@@ -122,14 +122,18 @@ export function useFollowStates(ids: string[]) {
 // ---------------------------------------------------------------------------
 // Follow / unfollow
 // ---------------------------------------------------------------------------
-/** Invalidate every list that shows an edge or a count after the graph changes. */
-function invalidateGraph(queryClient: ReturnType<typeof useQueryClient>) {
+/**
+ * Invalidate every list that shows an edge or a count after the graph changes: following,
+ * unfollowing, and accepting or declining a request.
+ */
+export function invalidateGraph(queryClient: ReturnType<typeof useQueryClient>) {
   for (const key of [
     "following",
     "followers",
     "follow-state",
     "follow-states",
     "follow-requests",
+    "follow-list",
     "profile-stats",
     "solved-activity",
     "public-profile",
@@ -167,5 +171,22 @@ export function useUnfollow() {
       if (error) throw error;
     },
     onSuccess: () => invalidateGraph(queryClient),
+  });
+}
+
+/**
+ * Stop someone following you: how a private account takes back access it granted.
+ */
+export function useRemoveFollower() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (followerId: string) => {
+      const { error } = await supabase.rpc("remove_follower", { p_follower_id: followerId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateGraph(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ["follow-list"] });
+    },
   });
 }

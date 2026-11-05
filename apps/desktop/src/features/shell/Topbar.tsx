@@ -1,5 +1,6 @@
 import { ArrowLeft, Command, Search } from "@lare/ui/icons";
 import { useLocation } from "react-router";
+import { useOnline } from "@/lib/queryClient";
 import { useGoBack } from "@/lib/useGoBack";
 import { navItemForPath } from "./nav";
 import { TopbarBlurbSlot } from "./PageBlurb";
@@ -43,6 +44,7 @@ export function Topbar({ onOpenSearch }: { onOpenSearch: () => void }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-3">
+        <OfflineBadge />
         <button
           type="button"
           onClick={onOpenSearch}
@@ -63,5 +65,23 @@ export function Topbar({ onOpenSearch }: { onOpenSearch: () => void }) {
         {drawsWindowControls ? <WindowControls /> : null}
       </div>
     </header>
+  );
+}
+
+/**
+ * Shown only while the OS reports no connection, so a failed save or an error panel has an obvious
+ * cause. Lists keep what they last loaded and refresh by themselves once the network is back.
+ */
+function OfflineBadge() {
+  const online = useOnline();
+  if (online) return null;
+  return (
+    <output
+      title="Showing what was last loaded. Lare refreshes once you're back online."
+      className="inline-flex h-7 items-center gap-2 rounded-full bg-[var(--surface-sunken)] px-3 text-xs text-[var(--text-secondary)]"
+    >
+      <span aria-hidden className="size-1.5 rounded-full bg-[var(--lare-status-stop)]" />
+      Offline
+    </output>
   );
 }

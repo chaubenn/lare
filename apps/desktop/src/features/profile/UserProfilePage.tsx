@@ -77,6 +77,7 @@ export function UserProfilePage() {
       postsPending={posts.isPending}
       postsError={posts.isError ? posts.error : undefined}
       onRetryPosts={() => void posts.refetch()}
+      morePosts={posts}
       likedIds={likedIds}
       postsEmpty={
         <EmptyState

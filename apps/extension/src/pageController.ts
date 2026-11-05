@@ -365,7 +365,14 @@ export class PageController {
       runtimeDistribution,
       memoryDistribution,
     };
-    const res = await sendRuntime({ type: "SUBMISSION", slug, submission });
+    const onPage = this.state.problem?.slug === slug;
+    const res = await sendRuntime({
+      type: "SUBMISSION",
+      slug,
+      submission,
+      problem: onPage ? this.state.problem : null,
+      question: onPage ? this.state.question : null,
+    });
     if (!res.ok) {
       // Nothing renders on the page any more; the popup surfaces sync failures.
       console.warn("[lare] could not save submission:", res.error);

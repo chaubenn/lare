@@ -52,7 +52,7 @@ comments are stored so that the people you share them with can see them.
 | OpenAI | Interview transcripts, code and submissions, only while an AI review is being written |
 | GitHub / Google | Sign-in only |
 
-Videos are uploaded while they record. A copy stays on your computer until the uploaded video has
+Demo videos are uploaded while they record. A mock interview is transcribed on your computer first, and its video is uploaded when the interview ends. A copy stays on your computer until the uploaded video has
 finished processing, then it is deleted. A video is only playable by people allowed to see the post
 it belongs to, but someone who was allowed to watch it can keep a direct link to it; deleting the
 video is what removes it for good.

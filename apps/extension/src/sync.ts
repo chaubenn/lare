@@ -312,24 +312,28 @@ export async function finalizeSession(
           ? "Mock interview"
           : "Practice session";
 
+  // Insert only: a retry after the post already exists must leave it alone. Posts refuse a client
+  // move from published back to draft, so overwriting `status` would fail that retry forever, and
+  // the desktop app attaches the interview video to the row when its upload lands.
+  const { error: insertErr } = await supabase.from("posts").upsert(
+    {
+      user_id: userId,
+      session_id: session.sessionId,
+      status: "draft",
+      visibility: "public",
+      title,
+      include_ai_insights: false,
+    },
+    { onConflict: "session_id", ignoreDuplicates: true },
+  );
+  if (insertErr) throw new Error(`posts upsert: ${insertErr.message}`);
+  // An ignored duplicate returns no row, so read the id back separately.
   const { data: post, error: postErr } = await supabase
     .from("posts")
-    .upsert(
-      {
-        user_id: userId,
-        session_id: session.sessionId,
-        status: "draft",
-        visibility: "public",
-        title,
-        // The desktop app attaches the interview video when its upload lands; a retried sync must
-        // not detach it, so the video columns are left to their defaults here.
-        include_ai_insights: false,
-      },
-      { onConflict: "session_id" },
-    )
     .select("id")
+    .eq("session_id", session.sessionId)
     .single();
-  if (postErr || !post) throw new Error(`posts upsert: ${postErr?.message ?? "no row"}`);
+  if (postErr || !post) throw new Error(`posts select: ${postErr?.message ?? "no row"}`);
 
   await deleteSessionEvents(session.sessionId);
   return post.id;

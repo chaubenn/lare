@@ -1,13 +1,40 @@
 import { parseSolvedActivity, parseSolvedSkills } from "@lare/shared";
 import type { Profile } from "@lare/supabase-types";
 import type { QueryData } from "@supabase/supabase-js";
-import { useQuery } from "@tanstack/react-query";
+import { type QueryClient, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
 import type { FollowState } from "@/features/friends/queries";
 import { decoratePosts, type PostDecoration } from "@/features/publishing/posts/media";
 import { fetchTopComments, type PostComment } from "@/features/publishing/posts/social";
 import { parseFollowList, parseProfileStats } from "@/lib/json";
+import { type KeysetCursor, keysetFilter, nextCursor } from "@/lib/keyset";
 import { supabase } from "@/lib/supabase";
+
+/**
+ * After the signed-in user changes their name, handle, avatar or privacy. Posts, comments, people
+ * lists, notifications and the boards all embed the author's profile columns, so each goes stale.
+ */
+export function invalidateAuthorViews(queryClient: QueryClient) {
+  for (const key of [
+    "feed",
+    "user-posts",
+    "post",
+    "post-comments",
+    "public-profile",
+    "profile-stats",
+    "follow-list",
+    "following",
+    "followers",
+    "follow-requests",
+    "notifications",
+    "weekly-leaderboard",
+    "global-leaderboard",
+    "profile-search",
+    "mention-suggestions",
+  ]) {
+    void queryClient.invalidateQueries({ queryKey: [key] });
+  }
+}
 
 export function useProfileStats(handle: string | null | undefined) {
   return useQuery({
@@ -133,32 +160,44 @@ export function useFollowState(targetId: string | null | undefined) {
 const userPostsSelect =
   "*, profiles!posts_user_id_fkey(handle, display_name, avatar_url, is_private), sessions!posts_session_id_fkey(id, kind, scope, status, active_ms, started_at, ended_at, session_problems(id, slug, title, difficulty)), videos!posts_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id, width, height), demo_videos:videos!posts_demo_video_id_fkey(id, status, thumbnail_path, duration_ms, bunny_video_id, library_id, width, height), post_media!post_media_post_id_fkey(id, storage_path, kind, width, height, caption, position, created_at)" as const;
 
-function userPostsQuery(userId: string) {
-  return supabase
+export const USER_POSTS_PAGE_SIZE = 24;
+
+function userPostsQuery(userId: string, cursor?: KeysetCursor) {
+  let query = supabase
     .from("posts")
     .select(userPostsSelect)
     .eq("user_id", userId)
-    .eq("status", "published")
+    .eq("status", "published");
+  if (cursor) query = query.or(keysetFilter("published_at", cursor));
+  return query
     .order("published_at", { ascending: false })
-    .limit(50);
+    .order("id", { ascending: false })
+    .limit(USER_POSTS_PAGE_SIZE);
 }
 
 export type UserPost = QueryData<ReturnType<typeof userPostsQuery>>[number] &
   PostDecoration & { top_comments: PostComment[] };
 
+/** Newest first, a page at a time; `data` is every page loaded so far, flattened. */
 export function useUserPosts(userId: string | null | undefined) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["user-posts", userId],
     enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await userPostsQuery(userId ?? "");
+    initialPageParam: undefined as KeysetCursor | undefined,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await userPostsQuery(userId ?? "", pageParam);
       if (error) throw error;
       const rows = data ?? [];
       const [decorated, comments] = await Promise.all([
         decoratePosts(rows),
         fetchTopComments(rows.map((r) => r.id)),
       ]);
-      return decorated.map((row) => ({ ...row, top_comments: comments.get(row.id) ?? [] }));
+      return {
+        items: decorated.map((row) => ({ ...row, top_comments: comments.get(row.id) ?? [] })),
+        next: nextCursor(rows, USER_POSTS_PAGE_SIZE, (row) => row.published_at),
+      };
     },
+    getNextPageParam: (lastPage) => lastPage.next,
+    select: (data) => data.pages.flatMap((page) => page.items),
   });
 }

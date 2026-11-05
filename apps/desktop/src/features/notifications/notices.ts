@@ -13,6 +13,12 @@ import { useCallback, useSyncExternalStore } from "react";
 
 export type NoticeTone = "info" | "success" | "error";
 
+/** A button on the toast for the obvious next step, such as copying the link to a new post. */
+export interface NoticeAction {
+  label: string;
+  run: () => void;
+}
+
 export interface Notice {
   id: string;
   title: string;
@@ -20,6 +26,7 @@ export interface Notice {
   tone: NoticeTone;
   /** Where clicking the notice goes, when there is somewhere useful. */
   href: string | null;
+  action: NoticeAction | null;
   /** When it was last raised; a repeat resets it, which restarts the toast's timer. */
   createdAt: number;
 }
@@ -30,6 +37,7 @@ export interface NoticeOptions {
   description?: string;
   variant?: NoticeTone;
   href?: string;
+  action?: NoticeAction;
   /**
    * Collapses repeats: a second notice with the same key replaces the first instead of stacking.
    * Permission checks and connection state re-report the same fact on every poll.
@@ -72,12 +80,14 @@ export function notify(options: NoticeOptions): string {
   const description = options.description ?? null;
   const tone = options.variant ?? "info";
   const href = options.href ?? null;
+  const action = options.action ?? null;
   const same = notices.find(
     (n) =>
       n.title === options.title &&
       n.description === description &&
       n.tone === tone &&
-      n.href === href,
+      n.href === href &&
+      n.action?.label === action?.label,
   );
   const previous = (options.key ? keyed.get(options.key) : undefined) ?? same?.id;
   const id = previous ?? `notice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -87,6 +97,7 @@ export function notify(options: NoticeOptions): string {
     description,
     tone,
     href,
+    action,
     createdAt: Date.now(),
   };
   if (options.key) keyed.set(options.key, id);

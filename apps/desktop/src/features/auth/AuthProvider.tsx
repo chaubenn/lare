@@ -1,7 +1,15 @@
 import type { Profile } from "@lare/supabase-types";
 import type { Session } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNotify } from "@/features/notifications/notices";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { setCurrentUser, useTauriEvent } from "@/lib/tauri";
@@ -25,6 +33,8 @@ interface AuthContextValue {
   profile: Profile | null | undefined;
   profileLoading: boolean;
   profileError: unknown;
+  /** Try loading the profile again after it failed (offline at launch, say). */
+  retryProfile: () => void;
   signOut: () => Promise<void>;
 }
 
@@ -51,29 +61,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const queryClient = useQueryClient();
   const { notify } = useNotify();
+  // Whose data the query cache currently holds; `undefined` until the session is restored.
+  const cacheOwner = useRef<string | null | undefined>(undefined);
 
   // Restore the persisted session and follow auth changes.
   useEffect(() => {
     let active = true;
+    // Every cached query belongs to whoever was signed in when it ran, and most keys do not carry
+    // the user id. Drop the lot whenever the account changes (signed out, expired, or a different
+    // person signed in) before the next render, so nobody ever sees the previous account's data.
+    const adopt = (next: Session | null) => {
+      const nextId = next?.user.id ?? null;
+      if (cacheOwner.current && cacheOwner.current !== nextId) queryClient.clear();
+      cacheOwner.current = nextId;
+      setSession(next);
+    };
     supabase.auth
       .getSession()
       .then(({ data }) => {
-        if (active) setSession(data.session);
+        if (active) adopt(data.session);
       })
       .catch(() => {
-        if (active) setSession(null);
+        if (active) adopt(null);
       });
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, next) => {
       // Do not call other supabase methods synchronously in here (see supabase-js docs).
-      setSession(next);
+      adopt(next);
     });
     return () => {
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [queryClient]);
 
   // Mirror the signed-in user into the Rust side (hello.ack.userId, /health).
   const userId = session?.user.id ?? null;
@@ -112,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile: userId ? profileQuery.data : null,
       profileLoading: userId !== null && profileQuery.isPending,
       profileError: profileQuery.error,
+      retryProfile: () => void profileQuery.refetch(),
       signOut: async () => {
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
@@ -119,7 +141,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.clear();
       },
     }),
-    [session, userId, profileQuery.data, profileQuery.isPending, profileQuery.error, queryClient],
+    [
+      session,
+      userId,
+      profileQuery.data,
+      profileQuery.isPending,
+      profileQuery.error,
+      profileQuery.refetch,
+      queryClient,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -4,6 +4,7 @@ import { Progress } from "@lare/ui/primitives";
 import { useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
+import { LoadMore } from "@/components/ui/LoadMore";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { isActive, type Job, STAGE_LABEL, useJobs } from "@/features/media/jobs";
 import { PageBlurb } from "@/features/shell/PageBlurb";
@@ -57,6 +58,7 @@ export function NotificationsPage() {
         onRetry={() => void list.refetch()}
         isUnread={(n) => !n.read_at || (unreadOnOpen.current?.has(n.id) ?? false)}
       />
+      {items && items.length > 0 ? <LoadMore query={list} /> : null}
     </>
   );
 }
@@ -94,7 +96,8 @@ function NotificationsBody({
   isUnread: (n: AppNotification) => boolean;
 }) {
   if (isPending) return <ListSkeleton />;
-  if (error) return <ErrorState error={error} onRetry={onRetry} />;
+  // Keep what loaded on screen when a refresh or the next page fails.
+  if (error && !items) return <ErrorState error={error} onRetry={onRetry} />;
   if (!items || items.length === 0) {
     return (
       <EmptyState

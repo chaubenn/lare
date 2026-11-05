@@ -47,7 +47,7 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
   const { notify } = useNotify();
   const _navigate = useNavigate();
   const update = useUpdatePost();
-  const remove = useDeletePostFlow(post.id);
+  const remove = useDeletePostFlow(post.id, post.sessions?.client);
   const busy = update.isPending || remove.isPending;
   const postHref = `/posts/${post.id}`;
   const goBack = useGoBack(postHref);

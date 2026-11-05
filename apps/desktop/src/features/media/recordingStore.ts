@@ -24,6 +24,11 @@ export interface RecordingMeta {
   uploadUrl?: string;
   uploaded: boolean;
   transcribed: boolean;
+  /**
+   * Why the last transcription failed, cleared once one succeeds or the author settles for video
+   * only. While it is set the take is kept on disk, since transcribing needs the local file.
+   */
+  transcribeError?: string | null;
   /** Last pipeline error, cleared on success. */
   error: string | null;
   updatedAt: number;

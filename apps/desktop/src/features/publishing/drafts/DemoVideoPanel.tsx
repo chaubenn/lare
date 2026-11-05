@@ -13,6 +13,7 @@ import { isActive, useJobs } from "@/features/media/jobs";
 import { publishInstantDemo, type VideoSlot } from "@/features/media/pipeline";
 import { patchRecordingMeta } from "@/features/media/recordingStore";
 import { useNotify } from "@/features/notifications/notices";
+import { confirm } from "@/lib/confirm";
 import { type CreateUploadResponse, recorder } from "@/lib/recorder";
 import { errorMessage, invokeFunction } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
@@ -164,6 +165,27 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
         variant: "error",
       }),
   });
+  // The interview take is recorded live during the session: once it is gone there is no second
+  // attempt, unlike a demo you can simply record again.
+  const confirmRemove = async () => {
+    const ok = await confirm(
+      isInterview
+        ? {
+            title: "Remove interview video",
+            message:
+              "Remove the recording of this interview from the draft? It can't be recorded again, so the post will have no interview video.",
+            confirmLabel: "Remove",
+            destructive: true,
+          }
+        : {
+            title: "Remove demo video",
+            message: "Remove this demo video from the draft? You can record a new one afterwards.",
+            confirmLabel: "Remove",
+            destructive: true,
+          },
+    );
+    if (ok) removeVideo.mutate();
+  };
 
   return (
     <Card>
@@ -191,7 +213,7 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
               loading={removeVideo.isPending}
               // Deleting a video mid-upload would pull it out from under its own pipeline.
               disabled={!!activeJob}
-              onClick={() => removeVideo.mutate()}
+              onClick={() => void confirmRemove()}
             >
               Remove
             </Button>
@@ -250,6 +272,15 @@ function SummaryVideoPanel({ draft }: { draft: Draft }) {
         variant: "error",
       }),
   });
+  const confirmRemove = async () => {
+    const ok = await confirm({
+      title: "Remove summary video",
+      message: "Remove the summary video from this draft? You can record a new one afterwards.",
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (ok) removeVideo.mutate();
+  };
 
   return (
     <Card>
@@ -275,7 +306,7 @@ function SummaryVideoPanel({ draft }: { draft: Draft }) {
             icon={<Trash2 className="size-3.5" aria-hidden />}
             loading={removeVideo.isPending}
             disabled={!!activeJob}
-            onClick={() => removeVideo.mutate()}
+            onClick={() => void confirmRemove()}
           >
             Remove
           </Button>

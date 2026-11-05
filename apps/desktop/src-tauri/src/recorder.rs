@@ -7,11 +7,12 @@
 //! State changes are broadcast to the extension (`recording.state` frames) and to the webview
 //! (`recording:state` / `recording:completed` events).
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use futures::FutureExt;
-use lare_core::protocol::{AppToExt, RecordingState};
+use lare_core::protocol::{AppToExt, RecordingSnapshot, RecordingState};
 use lare_recording::{Feeds, RecordingMode, StartRequest};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -195,7 +196,40 @@ impl Active {
 /// on every interview that is ended from the browser.
 enum Finish {
     Completed(Box<CompletedPayload>),
-    Cancelled,
+    /// The interview session the discarded recording belonged to (`None` for a demo).
+    Cancelled(Option<String>),
+}
+
+impl Finish {
+    fn session_id(&self) -> Option<&str> {
+        match self {
+            Finish::Completed(p) => p.session_id.as_deref(),
+            Finish::Cancelled(sid) => sid.as_deref(),
+        }
+    }
+}
+
+/// How the extension finished an interview session (`session.end` or `session.cancel`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SessionFinish {
+    Stop,
+    Cancel,
+}
+
+/// Interview sessions remembered in [`Recorder::early_finishes`]; old entries fall off the end.
+const EARLY_FINISH_LIMIT: usize = 16;
+
+/// Sent to the extension when a `session.*` frame names a session that is not being recorded.
+const NOT_THIS_SESSION: &str = "The desktop app is not recording this interview.";
+
+/// Sent to the extension when an interview starts while another recording is running.
+const ALREADY_RECORDING: &str =
+    "The desktop app is already recording. Stop that recording, then start the interview again.";
+
+/// Whether `active` is the recording a frame for `expected` may act on. `None` comes from the app
+/// itself (the pill, the draft editor), which always means whatever is recording.
+fn session_matches(active: &Active, expected: Option<&str>) -> bool {
+    expected.is_none_or(|sid| active.session_id.as_deref() == Some(sid))
 }
 
 pub struct Recorder {
@@ -210,6 +244,15 @@ pub struct Recorder {
     recordings_dir: PathBuf,
     live_uploads: Mutex<std::collections::HashMap<PathBuf, LiveUpload>>,
     prepared_upload: Mutex<Option<LiveUploadTarget>>,
+    /// The interview session `start` is bringing up, while it is. Std locks: never held across an
+    /// await, and read from sync code.
+    starting_session: std::sync::Mutex<Option<String>>,
+    /// Interview sessions the extension ended or discarded before their recording existed (the
+    /// start was still coming up, or its frame had not been handled yet). A start that lands
+    /// afterwards is finished the same way instead of recording, and uploading, with no session.
+    early_finishes: std::sync::Mutex<VecDeque<(String, SessionFinish)>>,
+    /// The last state broadcast for the current recording, for `hello.ack.recording`.
+    ext_state: std::sync::Mutex<Option<RecordingSnapshot>>,
 }
 
 impl Recorder {
@@ -231,6 +274,9 @@ impl Recorder {
             recordings_dir,
             live_uploads: Mutex::new(std::collections::HashMap::new()),
             prepared_upload: Mutex::new(None),
+            starting_session: std::sync::Mutex::new(None),
+            early_finishes: std::sync::Mutex::new(VecDeque::new()),
+            ext_state: std::sync::Mutex::new(None),
         })
     }
 
@@ -347,7 +393,31 @@ impl Recorder {
         }
     }
 
+    /// Report a change to the current recording. Every call is about the recording this
+    /// recorder owns, so it also becomes what `hello.ack` reports; answers about some other
+    /// session go through [`Recorder::reply_ext`] instead.
     fn broadcast_ext(&self, hub: Option<&WsHub>, session_id: Option<&str>, state: RecordingState, started_at: Option<u64>, message: Option<String>) {
+        if let Ok(mut snapshot) = self.ext_state.lock() {
+            // Only live states stick: a finished or failed recording is nothing to catch up on,
+            // and a lingering `error` would replay its toast on every reconnect.
+            let live = matches!(
+                state,
+                RecordingState::Starting
+                    | RecordingState::Recording
+                    | RecordingState::Paused
+                    | RecordingState::Stopping
+            );
+            *snapshot = live.then(|| RecordingSnapshot {
+                session_id: session_id.map(str::to_string),
+                state,
+                started_at,
+            });
+        }
+        self.reply_ext(hub, session_id, state, started_at, message);
+    }
+
+    /// Send a `recording.state` frame without touching what `hello.ack` reports.
+    fn reply_ext(&self, hub: Option<&WsHub>, session_id: Option<&str>, state: RecordingState, started_at: Option<u64>, message: Option<String>) {
         if let Some(hub) = hub {
             hub.broadcast(AppToExt::RecordingState {
                 session_id: session_id.map(str::to_string),
@@ -356,6 +426,60 @@ impl Recorder {
                 message,
             });
         }
+    }
+
+    /// What the extension was last told about the current recording.
+    pub fn ext_snapshot(&self) -> Option<RecordingSnapshot> {
+        self.ext_state.lock().ok().and_then(|s| s.clone())
+    }
+
+    fn is_starting_session(&self, session_id: &str) -> bool {
+        self.starting_session
+            .lock()
+            .is_ok_and(|s| s.as_deref() == Some(session_id))
+    }
+
+    fn set_starting_session(&self, session_id: Option<String>) {
+        if let Ok(mut s) = self.starting_session.lock() {
+            *s = session_id;
+        }
+    }
+
+    /// Remember that the extension finished `session_id` before its recording existed. A cancel
+    /// overrides an earlier end: the extension only discards a start it has given up on.
+    fn note_early_finish(&self, session_id: &str, finish: SessionFinish) {
+        let Ok(mut early) = self.early_finishes.lock() else {
+            return;
+        };
+        if let Some(entry) = early.iter_mut().find(|(sid, _)| sid == session_id) {
+            if finish == SessionFinish::Cancel {
+                entry.1 = finish;
+            }
+            return;
+        }
+        early.push_back((session_id.to_string(), finish));
+        while early.len() > EARLY_FINISH_LIMIT {
+            early.pop_front();
+        }
+    }
+
+    fn take_early_finish(&self, session_id: &str) -> Option<SessionFinish> {
+        let mut early = self.early_finishes.lock().ok()?;
+        let at = early.iter().position(|(sid, _)| sid == session_id)?;
+        early.remove(at).map(|(_, finish)| finish)
+    }
+
+    /// Answer a `session.pause`/`resume` for a session that is not the one recording. Nothing is
+    /// sent while that session is still starting: the start's own frames will answer it, and an
+    /// error here would make the extension give up on a start that is about to succeed.
+    fn reject_session(&self, hub: Option<&WsHub>, expected: Option<&str>) -> String {
+        let Some(sid) = expected else {
+            return "No active recording".into();
+        };
+        if !self.is_starting_session(sid) {
+            self.reply_ext(hub, Some(sid), RecordingState::Error, None, Some(NOT_THIS_SESSION.into()));
+        }
+        NOT_THIS_SESSION.into()
     }
 
     fn resolve_mic(&self, want_mic: bool) -> Option<String> {
@@ -382,15 +506,27 @@ impl Recorder {
             ..
         } = spec;
         let session_id = session_id.clone();
+        // The extension's `session.end`/`session.cancel` can be handled before this start is: each
+        // frame runs on its own task. A session already finished must not start recording now.
+        if let Some(finish) = session_id.as_deref().and_then(|sid| self.take_early_finish(sid)) {
+            info!(session = ?session_id, ?finish, "interview finished before its recording started; not starting");
+            return Err("The interview ended before recording started.".into());
+        }
         {
             // Same order as `status`: active, then starting. Taking them the other way round
             // here would let the two deadlock against each other.
             let active = self.active.lock().await;
             let mut starting = self.starting.lock().await;
             if *starting || active.is_some() {
+                // Without an answer the extension waits out its whole start timeout. Not
+                // `broadcast_ext`: the recording in progress is still what `hello.ack` reports.
+                if session_id.is_some() {
+                    self.reply_ext(hub.as_ref(), session_id.as_deref(), RecordingState::Error, None, Some(ALREADY_RECORDING.into()));
+                }
                 return Err("A recording is already in progress".into());
             }
             *starting = true;
+            self.set_starting_session(session_id.clone());
         }
         *self.last_finish.lock().await = None;
         // There is no camera track: the facecam preview window is captured as part of the
@@ -402,16 +538,44 @@ impl Recorder {
             }
         }
         let result = self.start_inner(&spec, hub.as_ref()).await;
-        *self.starting.lock().await = false;
+        // `stop`/`cancel` decide between "finish the active recording" and "remember it for the
+        // start still coming up" while holding `finishing`, so clearing the starting session and
+        // collecting what they remembered under the same lock leaves no gap for one to fall into.
+        let early = {
+            let _finishing = self.finishing.lock().await;
+            *self.starting.lock().await = false;
+            self.set_starting_session(None);
+            session_id.as_deref().and_then(|sid| self.take_early_finish(sid))
+        };
+        if let (Ok(_), Some(finish), Some(sid)) = (&result, early, session_id.as_deref()) {
+            info!(session = %sid, ?finish, "interview finished while its recording was starting");
+            match finish {
+                SessionFinish::Cancel => {
+                    if let Err(e) = self.cancel_inner(hub.as_ref(), Some(sid)).await {
+                        warn!(%e, "discarding a recording that started after its interview was cancelled failed");
+                    }
+                }
+                SessionFinish::Stop => {
+                    if let Err(e) = self.stop_inner(hub.as_ref(), Some(sid)).await {
+                        warn!(%e, "stopping a recording that started after its interview ended failed");
+                    }
+                }
+            }
+            return Ok(self.status().await);
+        }
         match &result {
             Ok(payload) => {
-                self.emit_state(payload);
                 // `stop` and `cancel` can run between `start_inner` and here: the extension may
-                // end a session the instant it starts one. Putting the pill up after that would
-                // leave it, and its shortcut, with nothing to control. Holding `finishing` keeps
-                // them from slipping in between this check and the window opening.
+                // end a session the instant it starts one. Announcing "recording" or putting the
+                // pill up after that would leave the app showing, and the pill controlling, a
+                // recording that's gone. Holding `finishing` keeps them from slipping in between
+                // this check and the emit / window opening.
                 let _finishing = self.finishing.lock().await;
-                if self.active.lock().await.is_some() {
+                let still_active = self.active.lock().await.as_ref().is_some_and(|a| {
+                    payload.recording_id.as_deref() == Some(a.recording_id.as_str())
+                });
+                if still_active {
+                    self.emit_state(payload);
                     if let Err(e) =
                         crate::windows::open_recorder(&self.app, display_id.as_deref())
                     {
@@ -536,9 +700,21 @@ impl Recorder {
         Ok(payload)
     }
 
+    /// Pause whatever is recording (the pill, the draft editor).
     pub async fn pause(&self, hub: Option<&WsHub>) -> Result<StatePayload, String> {
+        self.pause_inner(hub, None).await
+    }
+
+    /// Pause the recording of interview `session_id` (`session.pause`), and nothing else.
+    pub async fn pause_session(&self, hub: &WsHub, session_id: &str) -> Result<StatePayload, String> {
+        self.pause_inner(Some(hub), Some(session_id)).await
+    }
+
+    async fn pause_inner(&self, hub: Option<&WsHub>, expected: Option<&str>) -> Result<StatePayload, String> {
         let mut guard = self.active.lock().await;
-        let a = guard.as_mut().ok_or("No active recording")?;
+        let Some(a) = guard.as_mut().filter(|a| session_matches(a, expected)) else {
+            return Err(self.reject_session(hub, expected));
+        };
         if a.paused_at.is_none() {
             a.rec.pause().await.map_err(|e| format!("pause failed: {e:#}"))?;
             a.paused_at = Some(now_ms());
@@ -552,9 +728,21 @@ impl Recorder {
         Ok(p)
     }
 
+    /// Resume whatever is recording (the pill, the draft editor).
     pub async fn resume(&self, hub: Option<&WsHub>) -> Result<StatePayload, String> {
+        self.resume_inner(hub, None).await
+    }
+
+    /// Resume the recording of interview `session_id` (`session.resume`), and nothing else.
+    pub async fn resume_session(&self, hub: &WsHub, session_id: &str) -> Result<StatePayload, String> {
+        self.resume_inner(Some(hub), Some(session_id)).await
+    }
+
+    async fn resume_inner(&self, hub: Option<&WsHub>, expected: Option<&str>) -> Result<StatePayload, String> {
         let mut guard = self.active.lock().await;
-        let a = guard.as_mut().ok_or("No active recording")?;
+        let Some(a) = guard.as_mut().filter(|a| session_matches(a, expected)) else {
+            return Err(self.reject_session(hub, expected));
+        };
         if let Some(at) = a.paused_at {
             a.rec.resume().await.map_err(|e| format!("resume failed: {e:#}"))?;
             a.paused_at = None;
@@ -572,13 +760,45 @@ impl Recorder {
     /// Stop and keep the recording. Safe to call twice: the loser of the race gets the same
     /// payload the winner produced, not an error.
     pub async fn stop(&self, hub: Option<&WsHub>) -> Result<CompletedPayload, String> {
+        self.stop_inner(hub, None).await
+    }
+
+    /// Stop and keep the recording of interview `session_id` (`session.end`), and nothing else.
+    /// A start for that session still coming up is stopped as soon as it lands.
+    pub async fn stop_session(&self, hub: &WsHub, session_id: &str) -> Result<CompletedPayload, String> {
+        self.stop_inner(Some(hub), Some(session_id)).await
+    }
+
+    async fn stop_inner(&self, hub: Option<&WsHub>, expected: Option<&str>) -> Result<CompletedPayload, String> {
         let _finishing = self.finishing.lock().await;
-        let Some(active) = self.active.lock().await.take() else {
-            return match &*self.last_finish.lock().await {
-                Some(Finish::Completed(p)) => Ok((**p).clone()),
-                Some(Finish::Cancelled) => Err("The recording was discarded.".into()),
-                None => Err("No active recording".into()),
+        let taken = {
+            let mut slot = self.active.lock().await;
+            if slot.as_ref().is_some_and(|a| session_matches(a, expected)) {
+                slot.take()
+            } else {
+                None
+            }
+        };
+        let Some(active) = taken else {
+            if let Some(last) = &*self.last_finish.lock().await {
+                if expected.is_none_or(|sid| last.session_id() == Some(sid)) {
+                    return match last {
+                        Finish::Completed(p) => Ok((**p).clone()),
+                        Finish::Cancelled(_) => Err("The recording was discarded.".into()),
+                    };
+                }
+            }
+            let Some(sid) = expected else {
+                return Err("No active recording".into());
             };
+            // Not recording this session (yet): remember it so a start that lands later stops
+            // straight away rather than recording on with nobody to end it.
+            self.note_early_finish(sid, SessionFinish::Stop);
+            if self.is_starting_session(sid) {
+                return Err("The recording is still starting; it stops as soon as it begins.".into());
+            }
+            self.reply_ext(hub, Some(sid), RecordingState::Error, None, Some(NOT_THIS_SESSION.into()));
+            return Err(NOT_THIS_SESSION.into());
         };
         // Hidden, not closed: this call usually comes from a button inside the pill's webview.
         crate::windows::hide_recorder(&self.app);
@@ -661,14 +881,45 @@ impl Recorder {
 
     /// Stop and throw the recording away. Idempotent in the same way as [`Recorder::stop`].
     pub async fn cancel(&self, hub: Option<&WsHub>) -> Result<(), String> {
+        self.cancel_inner(hub, None).await
+    }
+
+    /// Throw away the recording of interview `session_id` (`session.cancel`), and nothing else.
+    /// A start for that session still coming up is discarded as soon as it lands.
+    pub async fn cancel_session(&self, hub: &WsHub, session_id: &str) -> Result<(), String> {
+        self.cancel_inner(Some(hub), Some(session_id)).await
+    }
+
+    async fn cancel_inner(&self, hub: Option<&WsHub>, expected: Option<&str>) -> Result<(), String> {
         let _finishing = self.finishing.lock().await;
-        let Some(active) = self.active.lock().await.take() else {
+        let taken = {
+            let mut slot = self.active.lock().await;
+            if slot.as_ref().is_some_and(|a| session_matches(a, expected)) {
+                slot.take()
+            } else {
+                None
+            }
+        };
+        let Some(active) = taken else {
             // Whichever of the two calls arrived first has already finished the recording;
             // there is nothing left to discard either way.
-            return match &*self.last_finish.lock().await {
-                Some(_) => Ok(()),
-                None => Err("No active recording".into()),
+            if let Some(last) = &*self.last_finish.lock().await {
+                if expected.is_none_or(|sid| last.session_id() == Some(sid)) {
+                    return Ok(());
+                }
+            }
+            let Some(sid) = expected else {
+                return Err("No active recording".into());
             };
+            // Not recording this session (yet): a start that lands later is thrown away instead
+            // of recording, and uploading, an interview the extension has already discarded.
+            self.note_early_finish(sid, SessionFinish::Cancel);
+            if !self.is_starting_session(sid) {
+                // Nothing recording for it is the answer the extension wants; anything else
+                // that is recording carries on untouched.
+                self.reply_ext(hub, Some(sid), RecordingState::Idle, None, None);
+            }
+            return Ok(());
         };
         crate::windows::hide_recorder(&self.app);
         crate::windows::hide_camera(&self.app);
@@ -680,7 +931,7 @@ impl Recorder {
         feeds.release_mic().await;
         feeds.release_camera().await;
         let _ = std::fs::remove_dir_all(&path);
-        *self.last_finish.lock().await = Some(Finish::Cancelled);
+        *self.last_finish.lock().await = Some(Finish::Cancelled(sid.clone()));
         self.broadcast_ext(hub, sid.as_deref(), RecordingState::Idle, None, None);
         self.emit_state(&StatePayload::idle());
         res
@@ -832,48 +1083,58 @@ impl RecordingBackend for CapRecordingBackend {
         });
     }
 
-    fn pause(&self, hub: &WsHub, _session_id: &str, _at: u64) {
+    // Each frame only acts on the session it names: a stale `session.end` from the extension
+    // (say, from a start it gave up on) must never stop a demo or another interview.
+    fn pause(&self, hub: &WsHub, session_id: &str, _at: u64) {
         let recorder = self.recorder.clone();
         let hub = hub.clone();
+        let session_id = session_id.to_string();
         tauri::async_runtime::spawn(async move {
-            if let Err(e) = recorder.pause(Some(&hub)).await {
-                warn!(%e, "pause failed");
+            if let Err(e) = recorder.pause_session(&hub, &session_id).await {
+                warn!(session = %session_id, %e, "pause failed");
             }
         });
     }
 
-    fn resume(&self, hub: &WsHub, _session_id: &str, _at: u64) {
+    fn resume(&self, hub: &WsHub, session_id: &str, _at: u64) {
         let recorder = self.recorder.clone();
         let hub = hub.clone();
+        let session_id = session_id.to_string();
         tauri::async_runtime::spawn(async move {
-            if let Err(e) = recorder.resume(Some(&hub)).await {
-                warn!(%e, "resume failed");
+            if let Err(e) = recorder.resume_session(&hub, &session_id).await {
+                warn!(session = %session_id, %e, "resume failed");
             }
         });
     }
 
-    fn stop(&self, hub: &WsHub, _session_id: &str, _at: u64) {
+    fn stop(&self, hub: &WsHub, session_id: &str, _at: u64) {
         let recorder = self.recorder.clone();
         let hub = hub.clone();
+        let session_id = session_id.to_string();
         tauri::async_runtime::spawn(async move {
-            if let Err(e) = recorder.stop(Some(&hub)).await {
-                warn!(%e, "stop failed");
+            if let Err(e) = recorder.stop_session(&hub, &session_id).await {
+                warn!(session = %session_id, %e, "stop failed");
             }
         });
     }
 
-    fn cancel(&self, hub: &WsHub, _session_id: &str, _at: u64) {
+    fn cancel(&self, hub: &WsHub, session_id: &str, _at: u64) {
         let recorder = self.recorder.clone();
         let hub = hub.clone();
+        let session_id = session_id.to_string();
         tauri::async_runtime::spawn(async move {
-            if let Err(e) = recorder.cancel(Some(&hub)).await {
-                warn!(%e, "cancel failed");
+            if let Err(e) = recorder.cancel_session(&hub, &session_id).await {
+                warn!(session = %session_id, %e, "cancel failed");
             }
         });
     }
 
     fn capable(&self) -> bool {
         self.recorder.permissions().recording_capable()
+    }
+
+    fn snapshot(&self) -> Option<RecordingSnapshot> {
+        self.recorder.ext_snapshot()
     }
 }
 

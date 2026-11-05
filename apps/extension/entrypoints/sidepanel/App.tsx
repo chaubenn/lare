@@ -52,6 +52,8 @@ export function App() {
   /** Which of the interview's two endings is waiting to be confirmed. */
   const [confirmFinish, setConfirmFinish] = useState<"end" | "discard" | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmDiscardUnsaved, setConfirmDiscardUnsaved] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [facecam, setFacecam] = useState(false);
   const [graded, setGraded] = useState(true);
   const [selected, setSelected] = useState<string[]>([]);
@@ -156,6 +158,9 @@ export function App() {
   // clearing) happens in the desktop app, which reads the real inbox from the
   // server — this list is just a local, at-a-glance echo of it.
   const tracked = snap?.state.tracking.problems ?? [];
+  // Ended interviews whose save failed. They no longer hold up anything else; the background
+  // keeps retrying them until they save or are discarded here.
+  const unsaved = snap?.state.unsaved ?? [];
   const recording = snap?.recording ?? null;
   // A start can fail in the background after the panel request returned.
   const shownError =
@@ -308,7 +313,7 @@ export function App() {
                 {t.id === "interview" && (interview || starting) && (
                   <span className="tab-live" role="img" aria-label="In progress" />
                 )}
-                {t.id === "interview" && !interview && !!snap.state.pendingSync.length && (
+                {t.id === "interview" && !interview && unsaved.length > 0 && (
                   <span className="tab-alert" role="img" aria-label="Needs attention" />
                 )}
               </button>
@@ -442,7 +447,14 @@ export function App() {
                   <div className="timer" role="timer">
                     {formatDuration(activeMs(interview.events, Date.now()))}
                   </div>
-                  <p className="note">The desktop app is recording your screen and microphone.</p>
+                  {recording?.state === "error" ? (
+                    // The recording stopped or was lost (say, the app restarted); the timer did not.
+                    <p className="error" role="status">
+                      {recording.message ?? "The desktop app stopped recording."}
+                    </p>
+                  ) : (
+                    <p className="note">The desktop app is recording your screen and microphone.</p>
+                  )}
                   <p className="muted">
                     {interview.graded
                       ? "Graded: transcribed locally, then AI reviewed."
@@ -614,22 +626,67 @@ export function App() {
                 </>
               )}
 
-              {!!snap.state.pendingSync.length && (
+              {unsaved.length > 0 && (
                 <section className="card retry">
-                  <div className="card-title">Couldn’t save a mock interview</div>
+                  <div className="card-title">
+                    {unsaved.length === 1
+                      ? "Couldn’t save a mock interview"
+                      : `Couldn’t save ${unsaved.length} mock interviews`}
+                  </div>
                   <p className="muted">
-                    {snap.state.pendingSync.length === 1
-                      ? "The last mock interview is still on this device. Retry the upload."
-                      : `${snap.state.pendingSync.length} mock interviews are waiting to sync.`}
+                    {unsaved.length === 1
+                      ? "It’s still on this device and Lare keeps retrying in the background."
+                      : "They’re still on this device and Lare keeps retrying in the background."}{" "}
+                    You can start another interview in the meantime.
                   </p>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={busy}
-                    onClick={() => void run(() => sendRuntime({ type: "RETRY_SYNC" }))}
-                  >
-                    Retry sync
-                  </button>
+                  {confirmDiscardUnsaved ? (
+                    <div className="confirm-sheet" role="dialog" aria-label="Discard unsaved">
+                      <p>
+                        Stop retrying and remove{" "}
+                        {unsaved.length === 1 ? "it" : `all ${unsaved.length}`} from this device? No
+                        draft is created. The desktop app keeps its copy of the recording.
+                      </p>
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          disabled={busy}
+                          onClick={() => {
+                            setConfirmDiscardUnsaved(false);
+                            void run(() => sendRuntime({ type: "DISCARD_UNSAVED" }));
+                          }}
+                        >
+                          Confirm discard
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setConfirmDiscardUnsaved(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="row">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={busy}
+                        onClick={() => void run(() => sendRuntime({ type: "RETRY_SYNC" }))}
+                      >
+                        Retry now
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={busy}
+                        onClick={() => setConfirmDiscardUnsaved(true)}
+                      >
+                        Discard
+                      </button>
+                    </div>
+                  )}
                 </section>
               )}
             </section>
@@ -654,11 +711,43 @@ export function App() {
                 type="button"
                 className="link"
                 disabled={busy || !!interview}
-                onClick={() => void run(() => sendRuntime({ type: "SIGN_OUT" }))}
+                title={interview ? "End the mock interview before signing out" : undefined}
+                onClick={() =>
+                  // Signing out clears this device's state, unsaved interviews included.
+                  unsaved.length > 0
+                    ? setConfirmSignOut(true)
+                    : void run(() => sendRuntime({ type: "SIGN_OUT" }))
+                }
               >
                 Sign out
               </button>
             </div>
+            {confirmSignOut && (
+              <div className="confirm-sheet" role="dialog" aria-label="Sign out">
+                <p>
+                  {unsaved.length === 1
+                    ? "A mock interview hasn’t been saved yet. Signing out removes it from this device."
+                    : `${unsaved.length} mock interviews haven’t been saved yet. Signing out removes them from this device.`}{" "}
+                  The desktop app keeps its copy of the recording.
+                </p>
+                <div className="row">
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    disabled={busy}
+                    onClick={() => {
+                      setConfirmSignOut(false);
+                      void run(() => sendRuntime({ type: "SIGN_OUT" }));
+                    }}
+                  >
+                    Sign out anyway
+                  </button>
+                  <button type="button" className="btn" onClick={() => setConfirmSignOut(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </footer>
         </>
       )}

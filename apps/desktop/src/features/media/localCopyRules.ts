@@ -9,6 +9,8 @@ export interface LocalCopyMeta {
   videoId: string | null;
   /** The cloud confirmed it has every byte. */
   uploaded: boolean;
+  /** Set while a failed transcription can still be retried, which needs this file. */
+  transcribeError?: string | null;
 }
 
 export interface LocalRecording {
@@ -30,7 +32,8 @@ export function localFileFor(
 
 /**
  * Recordings safe to delete: uploaded, and their video is `ready` or no longer exists (removed
- * from the draft). Anything still uploading, processing or failed keeps its source for a retry.
+ * from the draft). Anything still uploading, processing or failed keeps its source for a retry,
+ * and so does a take whose transcription failed until it is retried or settled as video only.
  * `statuses` must come from a successful lookup of every uploaded video id.
  */
 export function copiesToRemove(
@@ -38,7 +41,7 @@ export function copiesToRemove(
   statuses: Readonly<Record<string, string>>,
 ): string[] {
   return metas
-    .filter((m) => m.uploaded && m.videoId !== null)
+    .filter((m) => m.uploaded && m.videoId !== null && !m.transcribeError)
     .filter((m) => {
       const status = statuses[m.videoId as string];
       return status === undefined || status === "ready";

@@ -1,82 +1,266 @@
 # Lare architecture
 
-Social progress tracking for LeetCode: log practice sessions with a pausable timer, capture submissions (code, runtime
-and memory percentiles, the runtime distribution graph), share posts with followers, attach demo
-videos, and run AI-graded mock interviews.
+Social progress tracking for LeetCode. The Chrome extension logs practice on its own, the desktop
+app records and transcribes mock interviews, and Supabase holds everything people share: posts with
+demo videos, follows, likes, comments, leaderboards, and AI-graded interview reviews.
+
+Current release: 3.4.x (desktop and extension are versioned together).
+
+- [Parts](#parts)
+- [How the pieces talk](#how-the-pieces-talk)
+- [What gets captured](#what-gets-captured)
+- [Extension ↔ desktop protocol](#extension--desktop-protocol)
+- [Data model](#data-model-supabase)
+- [Access rules](#access-rules)
+- [Edge Functions](#edge-functions)
+- [Time model](#time-model)
+- [Recording pipeline](#recording-pipeline)
+- [Desktop app](#desktop-app)
+- [Post carousel](#post-carousel)
+- [Website](#website)
+- [Build, CI and releases](#build-ci-and-releases)
+- [Licensing](#licensing)
 
 ## Parts
 
 | Part | Stack | Responsibility |
 | --- | --- | --- |
-| `apps/extension` | Chrome MV3, WXT, React | Passive practice capture (every problem opened, every submission judged — nothing to start or stop), Monaco edit log, mock-interview start/pause/end sent to the desktop app. On-page UI is one recording dot, shown only while an interview records; the side panel is the control surface. Writes to Supabase directly; talks to the desktop over `ws://127.0.0.1:47831`. |
-| `apps/desktop` | Tauri 2, React 19, Rust | Drafts and publishing, screen/camera/mic recording (recycled from Cap), whisper.cpp transcription, Bunny TUS uploads, interview review. |
-| `supabase/` | Postgres + RLS, Auth, Storage, Realtime, Edge Functions (Deno) | Source of truth for users, sessions, posts, videos; Bunny signing; OpenAI review. |
-| Bunny Stream | library `lare` (id 743884) | Video storage, encoding, delivery. Embed token authentication is on. |
+| `apps/extension` | Chrome MV3, WXT, React | Passive capture of every LeetCode problem opened and every submission judged, plus the Monaco edit log. Side panel (tabs: *Tracking*, *Mock interview*) is the control surface; the only on-page UI is a recording dot while an interview records. Signs in and writes to Supabase directly. Starts, pauses and ends interviews on the desktop over a loopback WebSocket. Chrome 116+. |
+| `apps/desktop` | Tauri 2, React 19, Rust | The main app: feed, drafts, sessions, profiles, leaderboards, notifications, settings. Records screen, camera and mic (Cap's stack), transcribes with whisper.cpp, uploads to Bunny over TUS, runs the local server the extension talks to, and self-updates. |
+| `supabase/` | Postgres + RLS, Auth, Storage, Realtime, Edge Functions (Deno) | Source of truth. Also Bunny signing and the OpenAI review. |
+| Bunny Stream | library `lare` (id 743884) | Video storage, encoding and delivery. Embed token authentication is on. |
+| `packages/shared` | TypeScript | Types and pure logic used by both clients: wire protocol, timer and time model, edit log, LeetCode parsing, formatting, goals and leaderboard maths, search doc shapes, AI review schema. |
+| `packages/ui` | React, Tailwind | Design tokens, icons, motion and the shared components (activity and runtime charts, code block, badges). |
+| `packages/supabase-types` | generated | `database.types.ts`. |
+| `packages/capture` | TypeScript | Browser MediaRecorder capture with resumable TUS upload, from when the website and extension recorded video. Nothing imports it now; the desktop app records instead. |
+| `crates/lare-core` | Rust | Protocol and edit-log types mirrored from `packages/shared`; the port and `PROTOCOL_VERSION`. |
+| `crates/lare-recording` | Rust | Facade over Cap: devices, permissions, instant recording, the live fragment muxer, crash recovery. See its README. |
+| `crates/lare-transcribe` | Rust | whisper.cpp wrapper and resumable model download. |
+| `crates/lare-bunny` | Rust | TUS uploader, including uploading a file while it is still growing. |
+| `crates/vendor/cap/*` | Rust | Vendored [Cap](https://github.com/CapSoftware/Cap) crates (`UPSTREAM_COMMIT`, `CHANGES.md`, resync with `scripts/sync-cap.sh`). |
+
+## How the pieces talk
 
 ```mermaid
 flowchart LR
   subgraph chrome [Chrome on leetcode.com]
     MainCS["MAIN-world script: Monaco hook + fetch tap"]
-    IsoCS["Isolated script: recording dot + same-origin GraphQL"]
-    SW["Service worker: practice inbox, interview state, Supabase client"]
+    IsoCS["Isolated script: page controller + recording dot"]
+    SW["Service worker: inbox, interview state, queues, Supabase client"]
+    SP["Side panel"]
   end
   subgraph desktop [Lare desktop]
-    WS["axum WebSocket 127.0.0.1:47831 + OAuth loopback"]
+    WS["axum server 127.0.0.1:47831: WebSocket, /health, OAuth callback, previews"]
     Rec["lare-recording (Cap instant actor)"]
-    Exp["cap-export headless render"]
     Whisper["lare-transcribe (whisper-rs)"]
     Tus["lare-bunny TUS uploader"]
-    UI["React: drafts, recordings, session review"]
+    UI["React app"]
+    Zvec["Zvec local search index"]
   end
   subgraph cloud [Backend]
-    SB["Supabase"]
+    SB["Supabase: Postgres, Auth, Storage, Realtime"]
     EF["Edge Functions"]
     Bunny["Bunny Stream"]
     OAI["OpenAI Responses API"]
   end
   MainCS --> IsoCS --> SW
-  SW -->|"problems, submissions, edit logs, draft post"| SB
-  SW -->|"session.start/pause/resume/end, edits.batch, submission"| WS
-  WS --> Rec --> Exp --> Tus --> Bunny
-  Exp --> Whisper --> SB
-  UI --> SB
+  SP <--> SW
+  SW -->|"problems, submissions, edit logs, interview sessions"| SB
+  SW <-->|"session.*, edits.batch, submission / hello.ack, recording.state"| WS
+  WS --> Rec --> Tus --> Bunny
+  Rec --> Whisper
+  UI -->|"transcript, drafts, posts"| SB
   UI --> EF
+  UI --> Zvec
   EF --> Bunny
   EF --> OAI
+  EF --> SB
   Bunny -->|"signed webhook"| EF
+  SB -->|"Realtime: posts, notifications, video status"| UI
 ```
+
+Three rules hold the design together:
+
+1. **The extension never needs the desktop for practice.** Sign-in, passive capture and publishing
+   tracked problems all go straight to Supabase. The desktop is required only for mock interviews,
+   which need recording and local transcription.
+2. **Speech never leaves the machine.** Audio is transcribed by whisper.cpp on the device; only the
+   text is stored.
+3. **Clients are untrusted.** Everything that matters (visibility, ownership, counters, timestamps,
+   the leaderboard) is enforced by RLS, triggers and RPCs in the database. See
+   [Access rules](#access-rules).
+
+## What gets captured
+
+### Practice: passive, no timer
+
+There is nothing to start or stop. The MAIN-world script taps Monaco and `fetch`; the isolated
+script (`pageController.ts`) reports each problem opened and each judged submission to the service
+worker, which writes them to the user's **practice inbox**.
+
+- The inbox is one long-lived `sessions` row per user (`is_practice_inbox`, always `active`, never
+  has a post), created on first use by `practice_inbox()`. Its problems and submissions live in
+  `session_problems` and `submissions` like any other session, so all existing RLS applies.
+- The desktop shows the inbox as **Tracked problems** at the top of Drafts. Publishing a selection
+  calls `publish_practice_problems(problem_ids, title)`, which mints a fresh session and a draft
+  post and *moves* the problems onto it. A problem leaving the inbox is what "posted" means; there
+  is no flag.
+- `delete_practice_post(post_id)` is the inverse: problems return to the inbox, then the post and
+  its session are deleted. It only accepts posts made this way (`sessions.client = 'inbox'`);
+  interviews and older practice posts use a plain delete.
+- Submissions that cannot be saved (offline, Supabase down) wait in a persisted queue in
+  `chrome.storage` (`src/queues.ts`, oldest dropped past 50) and are flushed by the service worker.
+  Edit events are buffered in IndexedDB (`editsDb.ts`) and uploaded as one gzip JSON file per
+  problem to the `session-data` bucket.
+- A two-minute alarm reconciles state after a service worker restart. Writes are upserts keyed by
+  client-generated UUIDs so retries never duplicate rows.
+
+### Mock interviews: explicit, timed, recorded
+
+Started from the side panel's *Mock interview* tab:
+
+1. Connect to the desktop and require a `hello.ack` for the same account with
+   `recordingCapable: true`; otherwise the panel names the blocker.
+2. Create the session and problem rows, show the red dot, send `session.start`, wait for the
+   desktop's `recording.state` (`recording`, or `error` with a message).
+3. Pause, resume, end or discard map to `session.pause`, `session.resume`, `session.end`,
+   `session.cancel`. The same controls exist on the desktop's recording pill. Closing or fully
+   navigating the recorded tab ends the interview; SPA problem changes keep the dot.
+4. The desktop stops, transcribes locally and uploads. The extension finalizes the session
+   (`finalizeSession`) and creates the draft post. The AI review is generated on demand from the
+   session page.
+
+## Extension ↔ desktop protocol
+
+Server: `apps/desktop/src-tauri/src/ws_server.rs`, bound to `127.0.0.1:47831`. Types live in
+`packages/shared/src/session/protocol.ts` and `crates/lare-core/src/protocol.rs`; **keep the two in
+sync and bump `PROTOCOL_VERSION` whenever either side starts relying on something the other's
+previous release does not do.**
+
+| Route | Purpose |
+| --- | --- |
+| `GET /` (WebSocket) | The extension's channel. Only the pinned extension origin (and the Chrome Web Store id, if configured) may upgrade in release builds. |
+| `GET /health` | `{"app":"lare",...}`, readable from any page. Says the app is running and nothing about who is signed in. |
+| `GET /auth/callback` | OAuth loopback redirect; forwards the PKCE `code` to the webview. |
+| `GET /preview/{token}` | This device's copy of a recording, for the local preview. |
+
+Protocol version is **3**; the app still serves extensions back to 2 by answering `hello` with the
+lower of the two versions.
+
+| Extension → app | App → extension |
+| --- | --- |
+| `hello` (protocol, version, `userId`) | `hello.ack` (protocol, app version, `userId`, `recordingCapable`, `recording` snapshot) |
+| `session.start / pause / resume / end / cancel` | `recording.state` (`idle` ... `recording`, `paused`, `stopping`, `error`; optional message) |
+| `problem.open`, `edits.batch`, `submission` | `error` (`not_signed_in`, `user_mismatch`, `permission_denied`, `already_recording`, `recording_failed`, `bad_message`, `unsupported_protocol`) |
+| `ping` | `pong` |
+
+`session.*` frames only act on the session they name. `hello.ack.recording` lets an extension that
+reconnects mid-interview catch up on what it missed. Frames sent while the app is unreachable wait
+in the extension's `lare:desktop-outbox`.
 
 ## Data model (Supabase)
 
-- `profiles` (handle, display_name, avatar_url, bio, `is_private`), `follows` (pending/accepted).
-- `sessions` (kind practice|interview, scope session|problem, status, `started_at`, `ended_at`,
-  `active_ms`, `recording_id`, `recording_started_at`), `session_events` (start/pause/resume/end/
-  problem_open/problem_close, wall-clock `t`) - the timer is derived from the event log.
-- `session_problems` (slug, title, difficulty, description_html, `edits_path` -> gzip JSON edit log
-  in Storage bucket `session-data`), `submissions` (code, verdict, runtime/memory + percentiles,
-  distributions).
+Migrations are `supabase/migrations/0001`–`0030`, all idempotent. Types are generated into
+`packages/supabase-types`.
+
+**People and social**
+- `profiles` (handle, display_name, avatar_url, bio, website, `is_private`).
+- `follows` (`pending` | `accepted`), changed only through `request_follow`, `accept_follow`,
+  `decline_follow`, `remove_follower`. `follow_list` pages followers and following.
+- `post_likes` (`toggle_post_like`), `post_comments` (threaded via `parent_id`, with `edited_at`),
+  `notifications` (`post_like`, `post_comment`, `comment_reply`, `comment_mention`, `follow`,
+  `follow_request`, `follow_accepted`). Notifications are written by triggers only and read with
+  `mark_notifications_read`.
+
+**Practice and interviews**
+- `sessions`: `kind` practice|interview, `scope` session|problem, `status`
+  active|paused|ended|abandoned, `started_at`, `ended_at`, `active_ms`, `graded`, `client`,
+  `is_practice_inbox`, `recording_id`, `recording_started_at`.
+- `session_events` (start/pause/resume/end/problem_open/problem_close with wall-clock `t`). The
+  interview timer is derived from this log.
+- `session_problems` (slug, title, difficulty, `topic_tags`, description_html, `edits_path` → gzip
+  JSON edit log in bucket `session-data`), `submissions` (code, verdict, runtime/memory with
+  percentiles and distributions, `leetcode_submission_id`).
+- `transcripts` (segments `[{s,e,text}]` in media ms; `upsert_transcript_segments`),
+  `interview_reviews` (OpenAI structured output: scores, moments, next steps, code iterations),
+  `review_criteria` (a user's own grading criteria; no row means the defaults in
+  `packages/shared`), `ai_review_usage` (append-only ledger behind the daily limit).
+- `practice_goals` (one private goal per user: N problems per day or week, optional minimum
+  difficulty) with `goal_progress()`.
+
+**Posts and media**
+- `posts` (`draft` | `published`, visibility public|private, `slug`, title, body, counters). Two
+  video slots: `video_id` + `video_kind` (none|full|highlights) for the demo or full take, and
+  `demo_video_id` for an interview's summary clip, each with a `show_*` switch. `include_ai_insights`
+  controls whether the AI review is shown. `include_og_card`, `cover_media_id` and
+  `og_show_ai_scores` are unused (posts have no session card or cover now); the columns remain.
+- `post_media` (images an author adds; rows with `kind = 'og'` are leftovers from the old stored
+  session card and are ignored).
 - `videos` (Bunny guid, status created|uploading|uploaded|processing|ready|failed, dimensions,
-  `thumbnail_path` in bucket `thumbnails`), `posts` (draft|published, visibility public|private,
-  two video slots — `video_id` + `video_kind` none|full|highlights for the demo/full take and
-  `demo_video_id` for an interview's summary clip, each with a `show_*` switch — plus the three
-  optional extra the draft editor offers: `include_ai_insights`. (`include_og_card` and `cover_media_id`
-  are unused now that posts have no session card or cover; the columns remain.)
-  `og_show_ai_scores` is unused — the AI review is a section of the post, not a strip on the card).
-- `post_media` (the images an author adds; rows with `kind = 'og'` are leftovers from when the
-  session card was a stored PNG and are ignored), `post_likes`, `post_comments`.
-- `transcripts` (segments `[{s,e,text}]` in media ms), `interview_reviews` (OpenAI structured output).
-- Visibility: `can_view_post` - published and (owner, or public post and (author not private or
-  accepted follower)). Child rows inherit through their post; AI insights additionally require
-  `include_ai_insights`.
+  `capture_source`, `thumbnail_path` in bucket `thumbnails`). The `studio` value of the `video_mode`
+  enum is a leftover from the removed studio editor.
+
+**Read APIs (security definer RPCs, because `submissions` is owner-only under RLS)**
+`feed(before, page_size, scope, before_id)` (keyset on `(published_at, id)`, scope `all` | `following`),
+`profile_stats`, `solved_activity`, `solved_skills`, `weekly_leaderboard` (viewer plus accepted
+followees), `global_leaderboard` (everyone, with the viewer's own row).
+
+**Lifecycle RPCs**
+`practice_inbox`, `publish_practice_problems`, `delete_practice_post`, `create_session_draft`
+(gives a finished session a fresh draft, built the way the extension builds one),
+`unpublish_post`, `claim_ai_review_slot`.
 
 Edge Function configuration lives in Supabase Vault (`public.get_app_secrets`, service role only)
 with `Deno.env` taking precedence; see `supabase/functions/_shared/http.ts`.
 
-## Landing page
+## Access rules
 
-The landing page is not in this repo. It lives in its own private repo, `chaubenn/lare-landing`,
-which Vercel deploys on every push. It is a static page that holds no session and talks to
-nothing here beyond linking to this repo's releases.
+Visibility is decided once, in `private.can_view_post`, and everything else inherits it.
+
+- **Post visible** = published, and (owner, or public post and (author not private, or viewer is an
+  accepted follower)).
+- **Pending posts (0018).** An author can publish while a video is still processing. Others see the
+  post only once every video it *shows* is `ready`; at that moment `published_at` moves to now so it
+  lands at the top of feeds. There is no `pending` status. A hidden video never holds a post back.
+- **Hidden means hidden (0019).** A video switched off with `show_video` / `show_demo_video` is
+  invisible to viewers in the database, not just the UI, so it cannot be fetched or given a
+  playback token. Authors still see their own.
+- **Children inherit.** Sessions, problems, submissions, videos, thumbnails, comments, likes and
+  media are visible through the post that references them. The transcript and AI review also need
+  `include_ai_insights`.
+- **Posts only reference what the author owns (0020)**: session, videos and cover.
+- **Server-owned columns (0026).** `like_count`, `comment_count`, `published_at`, `slug`, `user_id`,
+  `session_id`, `created_at` cannot be written by `anon` or `authenticated`. Re-publishing never bumps
+  a post.
+- **Follow edges are immutable (0027)** apart from `pending → accepted`, and only via the RPCs.
+- **Private accounts** show only their header (name, picture, handle) to everyone but accepted
+  followers, including signed-out viewers (0024: the helper always returns a real boolean, and the
+  RPCs test `is not true`, so a null can only hide content). The global leaderboard lists them with
+  just a weekly count and difficulty split.
+- **Leaderboard integrity (0028).** `submissions.created_at` is server-stamped; boards only count
+  accepted submissions that carry a LeetCode id, arrived within two days of `submitted_at`, and have
+  a plausible slug, capped at 30 distinct problems per user per UTC day. This is mitigation, not
+  proof: a determined user can still script plausible inserts.
+- **Storage.** `session-data` is per-user (`{user_id}/{session_id}/{problem_id}.json.gz`) and
+  `edits_path` is pinned to the owner's folder (0025), because `ai-review` reads it with the service
+  role. `thumbnails` follows `can_view_video`.
+- **AI review limit.** Five generations per rolling 24 hours per user, claimed under an advisory lock
+  before OpenAI is called.
+
+## Edge Functions
+
+| Function | Caller | What it does |
+| --- | --- | --- |
+| `bunny-create-upload` | desktop | Creates the Bunny video and our `videos` row; returns TUS credentials so clients upload straight to Bunny without seeing the API key. |
+| `bunny-finalize-recording` | desktop | Receipt confirmation only. The client must finish the deferred TUS upload first. |
+| `bunny-captions` | desktop | Owner-only. Attaches the whisper transcript as a WebVTT track. |
+| `bunny-webhook` | Bunny | HMAC-signed (`verify_jwt = false`, auth is the signature). Flips `videos.status`, which releases pending posts. |
+| `bunny-playback-token` | desktop, website | `{videoId}` → signed embed URL valid five minutes. Authorisation is whatever RLS lets the caller select, so it works for anonymous viewers of public posts and refuses hidden clips. |
+| `video-delete` | desktop | Owner-only. Deletes the Bunny video, the thumbnail and the row; clears `video_kind` on posts that pointed at it. |
+| `ai-review` | desktop session page | `{sessionId, force?}`. Builds a timeline from the transcript, Monaco edit checkpoints and submissions, applies the user's `review_criteria`, asks OpenAI (Responses API, strict JSON schema, `gpt-5-mini` unless `OPENAI_MODEL` is set), and upserts `interview_reviews`. |
+
+Shared helpers are in `functions/_shared` (`http.ts`, `bunny.ts`, `edits.ts`, `reviewCriteria.ts`,
+`aiReviewSchema.ts`). Tests: `functions/_tests`, `bunny_test.ts`.
 
 ## Time model
 
@@ -84,52 +268,90 @@ Everything on a session is placed on one **media clock**: milliseconds since
 `sessions.recording_started_at` (falling back to `started_at`) **minus the paused stretches**
 recorded in `session_events`. The recording skips pauses, so transcript segments and AI moments are
 already in media time; edit events (wall-clock epoch from Monaco) and submissions are converted with
-`toMediaMs` (`packages/shared/src/timer.ts`, mirrored in `supabase/functions/_shared/edits.ts`).
+`toMediaMs` (`packages/shared/src/session/timer.ts`, mirrored in
+`supabase/functions/_shared/edits.ts`).
 
 ## Recording pipeline
 
-1. Extension `session.start` (kind interview) or the draft editor's *Record* button.
-2. `Recorder` (`apps/desktop/src-tauri/src/recorder.rs`) starts Cap's **instant** actor (single
-   MP4; facecam preview window is captured as part of the screen). Overlay windows: recorder pill
-   and camera preview.
-   Both are built once and thereafter only shown and hidden — the pill's stop button lives inside
-   its own webview, and destroying that webview under an in-flight `recording_stop` aborts the
-   process. `destroy_overlays` closes them when the main window goes, which is also what quits the
-   app now that the overlays outlive every recording.
+1. Start: the extension's `session.start` (interview), the desktop pill, or the draft editor's
+   *Record* button (demo or summary clip).
+2. `Recorder` (`apps/desktop/src-tauri/src/recorder.rs`) starts Cap's **instant** actor (single MP4;
+   the facecam preview window is captured as part of the screen). Two overlay windows, the recorder
+   pill and the camera preview, are built once and thereafter only shown and hidden: the pill's stop
+   button lives inside its own webview, and destroying that webview under an in-flight
+   `recording_stop` aborts the process. `destroy_overlays` closes them when the main window goes,
+   which is also what quits the app.
    A global shortcut (`windows::sync_pill_shortcut`, setting `pillShortcut`, default
-   Ctrl+Alt+Shift+H on every platform) hides and shows the pill mid-recording. It is only
-   registered between `open_recorder` and `hide_recorder`, so it never claims the key combination
-   outside a take, and hiding is just `hide()` — the webview, timer and window position survive.
-3. On stop, the `recording:completed` event hands the recording to the React pipeline.
-   `stop` and `cancel` are serialised on one mutex and idempotent — the pill's stop button and the
+   Ctrl+Alt+Shift+H on every platform) hides and shows the pill mid-recording. It is registered only
+   between `open_recorder` and `hide_recorder`, so it never claims the keys outside a take.
+3. Stop: the `recording:completed` event hands the take to the React pipeline.
+   `stop` and `cancel` are serialised on one mutex and idempotent: the pill's stop button and the
    extension's `session.end` race on every interview ended from the browser, and the second caller
-   gets the first one's payload rather than an error. The completed manifest
-   (`lare-recording.json`) is written before anything else can fail; if Cap's own stop errors,
-   `lare_recording::finalize_project` finishes the take from the fragments on disk instead. The
-   same call recovers projects a killed process abandoned (a `lare-started.json` with no completed
-   manifest) at the next launch, so they simply turn up in Recordings.
-4. `features/recording/pipeline.ts`:
-   - instant demo -> `publishVideo` (create Bunny video via `bunny-create-upload`, thumbnail to
-     Storage, TUS upload from Rust with progress events, attach to the draft);
-   - interview -> transcribe the MP4 with whisper -> upload -> captions (`bunny-captions`) ->
-     attach to the session's draft. A failed transcription marks the session ungraded and the
-     video still uploads.
-5. Bunny calls `bunny-webhook` (HMAC) as it encodes; `videos.status` flips to `ready` and the app
-   and desktop players pick it up over Realtime. Playback URLs come from `bunny-playback-token`
-   after an RLS visibility check.
+   gets the first one's payload rather than an error. The manifest (`lare-recording.json`) is
+   written before anything else can fail; if Cap's own stop errors,
+   `lare_recording::finalize_project` finishes the take from the fragments on disk.
+4. `features/media/pipeline.ts`:
+   - **demo or summary clip** → `publishVideo`: create the Bunny video (`bunny-create-upload`),
+     thumbnail to Storage, TUS upload from Rust with progress events, attach to the draft.
+     These start with a prepared target (`prepare_bunny_upload`), so the upload tails the growing
+     file *while recording* and only the last fragments remain at stop.
+   - **interview** → `processInterview`: transcribe the MP4 with whisper → store the transcript →
+     upload the finished MP4 → captions (`bunny-captions`) → attach to the session's draft. A failed
+     transcription marks the session ungraded and the video still uploads.
+5. Bunny calls `bunny-webhook` as it encodes; `videos.status` flips to `ready` and the app picks it
+   up over Realtime. Playback URLs come from `bunny-playback-token`.
 
-The recorder reports `recordedMs` — wall clock less every paused stretch — with each state and
+The recorder reports `recordedMs` (wall clock less every paused stretch) with each state and
 completed payload, so the pill's timer counts the video rather than the sitting.
 
-Bookkeeping for resumable pipelines is in the Tauri store (`recordings.json`), surfaced on the
-Recordings page. It also records which of the post's two video slots a take was started for — the
-recorder manifest only carries the post id.
+### Recovery
+
+- **Killed process.** A `lare-started.json` with no completed manifest is finished at the next
+  launch (`recover_incomplete`), so the take turns up like any other.
+- **Unfinished interviews.** `features/media/recovery.ts` lists interview takes on this device that
+  never finished uploading (quit mid-interview, crash, expired upload). The Sessions page and the
+  session page show them with **Retry** (resumes the pipeline; finished steps are skipped) and
+  **Discard** (deletes the take and its half-uploaded `videos` row).
+- **Failed transcription.** The session page offers **Retry transcription** or **Keep as video
+  only**.
+- **Local copies.** Recordings stay on disk after upload and play as a local preview until their
+  video is `ready`; `localCopies.ts` then deletes them (on launch, on the Realtime ready event, and
+  every five minutes). Failed uploads keep their source for retry.
+- Bookkeeping for resumable pipelines is in the Tauri store (`recordings.json`), including which of
+  the post's two video slots a take was started for, since the recorder manifest only carries the
+  post id. There is no Recordings page; takes surface in the draft's media step, the session page
+  and the unfinished-interviews card.
+
+## Desktop app
+
+Routes (`router.tsx`): Feed `/`, post `/posts/:id` and `/posts/:id/edit`, Drafts `/drafts` and
+`/drafts/:id`, Sessions `/sessions` and `/sessions/:id`, Profile `/profile`, `/profile/edit`,
+`/u/:handle`, Friends `/friends` (requests are a tab), Leaderboard (friends and global),
+Notifications, Settings. Code is organised per feature under `src/features/*`; data comes from
+Supabase through TanStack Query with Realtime channels for posts, notifications and video status.
+
+Other things that live in the Rust shell:
+
+- **Command palette search.** `search.rs` keeps one [Zvec](https://crates.io/crates/zvec-rust)
+  collection per signed-in user (sessions, what was said in interviews, posts, drafts, people),
+  filled by `features/search/sync.ts`. Short documents match on 2–3 character n-grams so partial
+  words find results while typing; transcripts and reviews match on stemmed whole words. A CPU
+  without AVX never loads the library and the palette falls back to substring search.
+- **Sign-in.** OAuth (GitHub, Google) with PKCE in the system browser, redirected to the loopback
+  server. `current_user` is mirrored into `hello.ack.userId`, and the extension refuses to start an interview when it names a different account.
+- **Deep links.** `lare://open/<path>` and `lare://drafts/<id>` route inside the app; the
+  single-instance plugin hands a second launch's link to the running one.
+- **Updates.** Checks GitHub Releases on every launch and installs before opening, then hourly, and on
+  demand from Settings.
+- **Whisper models.** `ggml-small.en` by default, fetched from the project's own release mirror
+  (`publish-models.yml`) with resumable chunked download, falling back to Hugging Face.
+- **Logs.** `~/Library/Logs/Lare` on macOS, `%LOCALAPPDATA%\Lare\logs` on Windows, user-only
+  permissions.
 
 ## Post carousel
 
-Two decks, one mechanism. `PostCarousel` is the swipe deck itself — native scroll-snap for the
-swiping, arrows and dots for pointer users — and both the feed and the post page compose their own
-slides into it.
+Two decks, one mechanism. `PostCarousel` is the swipe deck itself (native scroll-snap for swiping,
+arrows and dots for pointer users); the feed and the post page each compose their own slides into it.
 
 The feed's deck, `apps/desktop/src/features/feed/PostSlides.tsx`:
 
@@ -139,27 +361,66 @@ Every slide is something the author chose to add. Images are optional: paste a s
 files on the Images panel, or pick them from the machine (the main window sets
 `dragDropEnabled: false` so file drops reach the page instead of Tauri). A post with no images and
 no video has no deck at all (`postHasSlides`) and the card is just its text. One clip and no images
-is a deck of one slide, the video.
+is a deck of one slide.
 
 The post page builds its own in `PostPage.tsx`, deliberately narrower:
 
     summary video -> images -> demo/highlights video -> problems -> AI review
 
-The problems and the review are slides rather than sections down the page, which is what keeps the
-comments a fixed distance from the title however much a session holds.
+The problems and the review are slides rather than sections down the page, which keeps the comments
+a fixed distance from the title however much a session holds.
 
 Both decks size their frame to the slide in view (`PostCarousel` measures the current slide with a
 `ResizeObserver`, because "Show code" and the problem description collapsible change height on
-their own). Videos and images take their own shape from the stored `width`/`height` (`mediaAspect`,
-clamped to 4:5 .. 12:5), so a 16:10 screen recording has no bars around it; a clip with no stored
-size falls back to 16:9. When a post carries both clips, `LabelledSlide` names them in the corner —
-the player's `title` only ever reached screen readers.
+their own). Videos and images take their shape from the stored `width`/`height` (`mediaAspect`,
+clamped to 4:5 .. 12:5); a clip with no stored size falls back to 16:9. When a post carries both
+clips, `LabelledSlide` names them in the corner.
 
-There is no generated session card or session-overview slide any more. They were drawn from the
-session (and, before that, rendered to a PNG for link unfurls); a post now carries only what its
+There is no generated session card or session-overview slide any more; a post carries only what its
 author attaches.
+
+## Website
+
+The website is not in this repo. This repo only knows its address, `https://lare.fyi`, set in CI as `VITE_SITE_URL` (desktop) and `WXT_SITE_URL` (extension).
+
+- The desktop's **Copy link** (`postActions.ts`, `SHARE_LINKS`) produces `lare.fyi/p/<slug>`. The
+  slug is the canonical handle (`0012_post_slugs.sql`); the site also resolves the UUID and
+  redirects.
+- Public post pages are served from public data: RLS lets anonymous viewers read public posts, and
+  `bunny-playback-token` gives them signed embeds.
+- It links to this project's releases for downloads.
+
+## Build, CI and releases
+
+Workspace: pnpm (Node 22+) for TypeScript, Cargo (edition 2024) for Rust, Biome for lint and format.
+Per-app checks are in `apps/desktop/README.md` and `apps/extension/README.md`.
+
+| Workflow | Trigger | Purpose |
+| --- | --- | --- |
+| `ci-dev.yml` | push to `dev` | Fast lane: format, types, unit tests. |
+| `ci.yml` | push and PR to `main` | Full gate: Rust on macOS and Windows, extension Playwright e2e. |
+| `prebuild.yml` | push to `main` | Builds desktop installers for every `main` commit (via `desktop-build.yml`) so a release is a publish, not a compile. |
+| `release.yml` | tag `vX.Y.Z` | Publishes signed, notarised installers and updater bundles (macOS Apple Silicon and Intel, Windows x64), the extension zip, and `latest.json`. Falls back to compiling if the commit was never prebuilt. |
+| `dev-release.yml` | tag `dev-vX.Y.Z-N[-targets]` | QA prerelease straight from `dev`; never becomes "latest", so no installed app updates onto it. |
+| `publish-models.yml` | change on `main`, manual | Mirrors the whisper models to a GitHub release. |
+
+Development happens in a private repo. `scripts/publish-release.sh` publishes the exact tree as one
+release commit to the public repo, whose history is releases only. The public repo is for reading,
+not building (see the README).
+
+The Chrome Web Store package is built without the pinned `key` (`pnpm zip:store`, `LARE_STORE_BUILD`),
+so the store assigns its own extension id. The desktop's origin allow-list must include it
+(`STORE_EXTENSION_ID`, set with `LARE_STORE_EXTENSION_ID` until it is recorded in the source).
 
 ## Licensing
 
 `crates/vendor/cap/*` is vendored from [Cap](https://github.com/CapSoftware/Cap) (AGPL-3.0, with the
 `cap-camera*`/`scap-*` crates under MIT); Lare is therefore AGPL-3.0-only. See `NOTICE`.
+
+## Related docs
+
+- [`docs/privacy.md`](privacy.md): consent and data-flow rules the product follows.
+- [`docs/privacy-policy.md`](privacy-policy.md): the policy for the app and the extension.
+- [`crates/lare-recording/README.md`](../crates/lare-recording/README.md): the live muxer, its
+  completion and recovery rules, and its limits.
+- [`docs/deferred/studio.md`](deferred/studio.md): the removed studio editor and how to restore it.

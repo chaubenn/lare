@@ -1,6 +1,6 @@
 [package]
 name = "lare-desktop"
-version = "3.4.0"
+version = "3.5.0"
 description = "Lare desktop app: review drafts, publish posts, and (later) record demo videos and mock interviews."
 edition.workspace = true
 license.workspace = true
@@ -58,6 +58,11 @@ objc = "0.2"
 # `catch-all` turns Objective-C exceptions raised inside tao/wry/tauri calls into Rust panics
 # with the exception message, instead of an opaque "cannot catch foreign exceptions" abort.
 objc2 = { version = "0.6", features = ["catch-all"] }
+
+[target.'cfg(windows)'.dependencies]
+# Desktop notifications with a click handler (`commands::show_desktop_notification`): the
+# notification plugin cannot report clicks on desktop. The same version the plugin already uses.
+tauri-winrt-notification = "0.7"
 
 [dev-dependencies]
 tokio-tungstenite = "0.30"
