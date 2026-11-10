@@ -409,8 +409,10 @@ release commit to the public repo, whose history is releases only. The public re
 not building (see the README).
 
 The Chrome Web Store package is built without the pinned `key` (`pnpm zip:store`, `LARE_STORE_BUILD`),
-so the store assigns its own extension id. The desktop's origin allow-list must include it
-(`STORE_EXTENSION_ID`, set with `LARE_STORE_EXTENSION_ID` until it is recorded in the source).
+so the store assigns its own extension id (`anlejcjfgabfkgbhbcbojlmccagbfdhg`). The desktop's origin
+allow-list includes it (`STORE_EXTENSION_ID` in `ws_server.rs`; `LARE_STORE_EXTENSION_ID` overrides it
+at build time), and Supabase Auth needs `https://<that id>.chromiumapp.org/auth/callback` in its
+redirect URLs for sign-in.
 
 ## Licensing
 

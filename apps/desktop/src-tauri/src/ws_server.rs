@@ -52,13 +52,12 @@ pub const EXTENSION_ID: &str = "koplffaeeahehnfikinmldhhmmldghhl";
 pub const EXTENSION_ORIGIN: &str = "chrome-extension://koplffaeeahehnfikinmldhhmmldghhl";
 /// Id the Chrome Web Store assigned to the published extension. The store package is built without
 /// the pinned `key` (`pnpm zip:store`), so the store gives it a different id, and without this a
-/// store install could never reach the app.
-///
-/// TODO(store-id): the id is not recorded anywhere in the repo yet. Replace this with
-/// `Some("<id from the developer dashboard>")` once the listing exists (and add the matching
-/// `chrome-extension://<id>/` redirect in Supabase). Until then it can be set at build time with
-/// the `LARE_STORE_EXTENSION_ID` environment variable.
-pub const STORE_EXTENSION_ID: Option<&str> = option_env!("LARE_STORE_EXTENSION_ID");
+/// store install could never reach the app. The `LARE_STORE_EXTENSION_ID` build-time environment
+/// variable overrides it (for a build that targets a different listing).
+pub const STORE_EXTENSION_ID: Option<&str> = Some(match option_env!("LARE_STORE_EXTENSION_ID") {
+    Some(id) => id,
+    None => "anlejcjfgabfkgbhbcbojlmccagbfdhg",
+});
 
 /// Something the frontend should hear about. Forwarded as Tauri events by `lib.rs`.
 #[derive(Debug, Clone, PartialEq, Eq)]

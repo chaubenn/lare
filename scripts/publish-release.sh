@@ -67,7 +67,7 @@ msg="$(mktemp)"
 trap 'rm -f "$msg"' EXIT
 { echo "Release $version"; if [ -n "$notes" ]; then echo; cat "$notes"; fi; } > "$msg"
 
-commit="$(git commit-tree "$tree"${parent:+-p "$parent"} -F "$msg")"
+commit="$(git commit-tree "$tree" ${parent:+-p "$parent"} -F "$msg")"
 echo "release commit: $commit"
 
 git push "$remote" "$commit:refs/heads/main"
