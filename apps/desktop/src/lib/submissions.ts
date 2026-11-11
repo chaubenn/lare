@@ -4,10 +4,7 @@ import type { Submission } from "@lare/supabase-types";
 type Attempt = Pick<Submission, "id" | "submitted_at">;
 type Ranked = Attempt & Pick<Submission, "accepted" | "runtime_ms">;
 
-/**
- * Submissions in the order they were attempted, so "#1" is the first one they sent.
- * This is deliberately not `sortSubmissions`, which ranks by result for display.
- */
+/** Submissions in the order they were attempted, so "#1" is the first one they sent. */
 export function submissionsInAttemptOrder<T extends Attempt>(subs: readonly T[]): T[] {
   return [...subs].sort((a, b) => {
     const at = new Date(a.submitted_at).getTime();

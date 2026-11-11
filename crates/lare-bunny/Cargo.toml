@@ -10,7 +10,6 @@ description = "Resumable TUS uploads to Bunny Stream for the Lare desktop app."
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream", "json"] }
 tokio = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 base64 = "0.22"

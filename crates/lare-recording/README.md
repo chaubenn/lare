@@ -14,8 +14,7 @@ numbers and track IDs are rewritten before appending. Only moof-relative fragmen
 are accepted. Unsupported layouts fail rather than silently corrupting offsets.
 
 The desktop's `prepare_bunny_upload` registers one pending target for the next
-`recording_start`. Start consumes it even on a failed attempt. An explicit
-`upload: { tus, uploadUrl }` start argument can override it. Instant capture starts
+`recording_start`. Start consumes it even on a failed attempt. Instant capture starts
 `lare_bunny::upload_growing_file` immediately and persists its resume URL beside
 the file. The existing post-recording upload command joins that tailer instead of
 starting a competing PATCH writer. Backend receipt confirmation and deletion

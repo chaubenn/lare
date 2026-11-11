@@ -1,28 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { avatarPath, isAvatarInputMime, rejectAvatarInput, withCacheBust } from "./avatar";
-
-describe("isAvatarInputMime", () => {
-  it("accepts jpeg, png, webp and gif", () => {
-    expect(isAvatarInputMime("image/jpeg")).toBe(true);
-    expect(isAvatarInputMime("image/png")).toBe(true);
-    expect(isAvatarInputMime("image/webp")).toBe(true);
-    expect(isAvatarInputMime("image/gif")).toBe(true);
-  });
-
-  it("rejects anything else", () => {
-    expect(isAvatarInputMime("image/svg+xml")).toBe(false);
-    expect(isAvatarInputMime("application/pdf")).toBe(false);
-    expect(isAvatarInputMime("")).toBe(false);
-  });
-});
+import { avatarPath, rejectAvatarInput, withCacheBust } from "./avatar";
 
 describe("rejectAvatarInput", () => {
   it("accepts a normal photo", () => {
     expect(rejectAvatarInput({ type: "image/png", size: 4_000_000 })).toBeNull();
   });
 
-  it("rejects an unsupported type", () => {
-    expect(rejectAvatarInput({ type: "image/svg+xml", size: 1000 })).toContain("JPEG, PNG");
+  it("accepts jpeg, png, webp and gif, and nothing else", () => {
+    for (const type of ["image/jpeg", "image/png", "image/webp", "image/gif"]) {
+      expect(rejectAvatarInput({ type, size: 1000 })).toBeNull();
+    }
+    for (const type of ["image/svg+xml", "application/pdf", ""]) {
+      expect(rejectAvatarInput({ type, size: 1000 })).toContain("JPEG, PNG");
+    }
   });
 
   it("rejects a file over the input size cap", () => {
@@ -33,7 +23,6 @@ describe("rejectAvatarInput", () => {
 describe("avatarPath", () => {
   it("is a fixed filename per user, so re-uploading overwrites it", () => {
     expect(avatarPath("user-123")).toBe("user-123/avatar.jpg");
-    expect(avatarPath("user-123")).toBe(avatarPath("user-123"));
   });
 });
 

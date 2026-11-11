@@ -261,6 +261,8 @@ query lareSubmissionDetails($submissionId: Int!) {
 export const DifficultySchema = z.enum(["Easy", "Medium", "Hard"]);
 export type Difficulty = z.infer<typeof DifficultySchema>;
 
+export const TopicTagSchema = z.object({ name: z.string(), slug: z.string() });
+
 export const QuestionSchema = z.object({
   questionId: z.string(),
   questionFrontendId: z.string(),
@@ -268,7 +270,7 @@ export const QuestionSchema = z.object({
   titleSlug: z.string(),
   content: z.string().nullable(),
   difficulty: DifficultySchema,
-  topicTags: z.array(z.object({ name: z.string(), slug: z.string() })).default([]),
+  topicTags: z.array(TopicTagSchema).default([]),
 });
 export type Question = z.infer<typeof QuestionSchema>;
 
@@ -452,46 +454,3 @@ export function userBinIndex(dist: Distribution, userValue: number): number {
   }
   return idx === -1 ? 0 : idx;
 }
-
-/** Strip LeetCode's HTML to a plain-text excerpt (for cards / OG descriptions). */
-export function excerptFromHtml(html: string | null | undefined, maxLen = 200): string {
-  if (!html) return "";
-  const text = html
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-  return text.length > maxLen ? `${text.slice(0, maxLen - 1).trimEnd()}…` : text;
-}
-
-/** Monaco language id -> display name. */
-export const LANGUAGE_LABELS: Record<string, string> = {
-  python: "Python",
-  python3: "Python3",
-  cpp: "C++",
-  c: "C",
-  java: "Java",
-  javascript: "JavaScript",
-  typescript: "TypeScript",
-  golang: "Go",
-  go: "Go",
-  rust: "Rust",
-  kotlin: "Kotlin",
-  swift: "Swift",
-  csharp: "C#",
-  ruby: "Ruby",
-  scala: "Scala",
-  php: "PHP",
-  dart: "Dart",
-  racket: "Racket",
-  erlang: "Erlang",
-  elixir: "Elixir",
-  mysql: "MySQL",
-  postgresql: "PostgreSQL",
-};

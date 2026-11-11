@@ -132,10 +132,12 @@ Started from the side panel's *Mock interview* tab:
 
 ## Extension ↔ desktop protocol
 
-Server: `apps/desktop/src-tauri/src/ws_server.rs`, bound to `127.0.0.1:47831`. Types live in
-`packages/shared/src/session/protocol.ts` and `crates/lare-core/src/protocol.rs`; **keep the two in
-sync and bump `PROTOCOL_VERSION` whenever either side starts relying on something the other's
-previous release does not do.**
+Server: `apps/desktop/src-tauri/src/local_server/` (`bridge.rs` is the socket, `pairing.rs` the
+handshake, `oauth_callback.rs` the sign-in redirect), bound to `127.0.0.1:47831`. Types live in
+`packages/shared/src/session/protocol.ts` and `crates/lare-core/src/protocol.rs`. Both are tested
+against `packages/shared/fixtures/bridge.json` (constants, the pairing transcript and one frame of
+every type), so add or change a frame there first. **Bump `PROTOCOL_VERSION` whenever either side
+starts relying on something the other's previous release does not do.**
 
 | Route | Purpose |
 | --- | --- |
@@ -434,20 +436,19 @@ The post page builds its own in `PostPage.tsx`, deliberately narrower:
 The problems and the review are slides rather than sections down the page, which keeps the comments
 a fixed distance from the title however much a session holds.
 
-Both decks size their frame to the slide in view (`PostCarousel` measures the current slide with a
-`ResizeObserver`, because "Show code" and the problem description collapsible change height on
-their own). Videos and images take their shape from the stored `width`/`height` (`mediaAspect`,
-clamped to 4:5 .. 12:5); a clip with no stored size falls back to 16:9. When a post carries both
-clips, `LabelledSlide` names them in the corner.
+Both decks are a `PostCarousel`: one card of a fixed size, a 16:9 frame with a floor and a cap,
+whichever slide is showing. Videos and images fill the card; a slide with more than fits (an
+expanded review, "Show code") scrolls inside itself instead of growing the card. When a post
+carries both clips, `LabelledSlide` names them in the corner.
 
 There is no generated session card or session-overview slide any more; a post carries only what its
 author attaches.
 
 ## Website
 
-The website is not in this repo. This repo only knows its address, `https://lare.fyi`, set in CI as `VITE_SITE_URL` (desktop) and `WXT_SITE_URL` (extension).
+The website is not in this repo. This repo only knows its address, `https://lare.fyi`, set in CI as `VITE_SITE_URL` (desktop).
 
-- The desktop's **Copy link** (`postActions.ts`, `SHARE_LINKS`) produces `lare.fyi/p/<slug>`. The
+- The desktop's **Copy link** (`postActions.ts`) produces `lare.fyi/p/<slug>`. The
   slug is the canonical handle (`0012_post_slugs.sql`); the site also resolves the UUID and
   redirects.
 - Public post pages are served from public data: RLS lets anonymous viewers read public posts, and
@@ -474,7 +475,7 @@ not building (see the README).
 
 The Chrome Web Store package is built without the pinned `key` (`pnpm zip:store`, `LARE_STORE_BUILD`),
 so the store assigns its own extension id (`anlejcjfgabfkgbhbcbojlmccagbfdhg`). The desktop's origin
-allow-list includes it (`STORE_EXTENSION_ID` in `ws_server.rs`; `LARE_STORE_EXTENSION_ID` overrides it
+allow-list includes it (`STORE_EXTENSION_ID` in `local_server/bridge.rs`; `LARE_STORE_EXTENSION_ID` overrides it
 at build time), and Supabase Auth needs `https://<that id>.chromiumapp.org/auth/callback` in its
 redirect URLs for sign-in. If the redirect URL is missing, Supabase falls back to the Site URL, so the
 GitHub/Google popup lands on the landing page instead of returning to the extension. Email sign-in

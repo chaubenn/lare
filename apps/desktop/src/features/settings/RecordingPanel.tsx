@@ -1,1 +1,0 @@
-export { RecordingPanel } from "./recording";

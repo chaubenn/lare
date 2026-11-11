@@ -8,7 +8,6 @@ description = "Thin facade over the vendored Cap crates: devices, permissions, i
 
 [dependencies]
 cap-recording = { path = "../vendor/cap/recording" }
-cap-project = { path = "../vendor/cap/project" }
 cap-camera = { path = "../vendor/cap/camera" }
 cap-enc-ffmpeg = { path = "../vendor/cap/enc-ffmpeg" }
 scap-targets = { path = "../vendor/cap/scap-targets" }
@@ -19,9 +18,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg"] }
 flume = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 anyhow = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]

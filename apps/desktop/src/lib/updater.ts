@@ -13,7 +13,10 @@
 
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { thrownText } from "./errors";
+import { notify } from "./notices";
+import { routes } from "./routes";
 import { inTauri } from "./tauri";
 
 export type UpdateState =
@@ -46,8 +49,8 @@ export function useUpdateState(): UpdateState {
 }
 
 function describe(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "string") return err;
+  const text = thrownText(err);
+  if (text !== null) return text;
   try {
     return JSON.stringify(err);
   } catch {
@@ -141,4 +144,41 @@ export function dismissUpdate(): void {
   if (state.status === "available" || state.status === "error") {
     set({ status: "idle" });
   }
+}
+
+/**
+ * Re-check interval. The splash checks (and installs) on every launch; people leave Lare open for
+ * days, though, so poll while running too.
+ */
+const RECHECK_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * Checks GitHub Releases hourly after launch, and posts a notice when a newer Lare exists.
+ * Settings is where it is installed from, so that is where the notice points. Errors from
+ * background checks stay silent; Settings shows them on a manual check. Mount once, in the shell.
+ */
+export function useUpdateNotices(): void {
+  const current = useUpdateState();
+
+  useEffect(() => {
+    if (!inTauri) return;
+    let timer = setTimeout(run, RECHECK_INTERVAL_MS);
+    function run() {
+      void checkForUpdate().then((result) => {
+        if (result.status === "error") dismissUpdate();
+      });
+      timer = setTimeout(run, RECHECK_INTERVAL_MS);
+    }
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (current.status !== "available") return;
+    notify({
+      key: `update:${current.version}`,
+      title: `Lare v${current.version} is available`,
+      description: "Install it from Settings, or restart Lare to update.",
+      href: routes.settings,
+    });
+  }, [current]);
 }

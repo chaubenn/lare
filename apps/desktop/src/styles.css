@@ -32,9 +32,9 @@ body,
 
 html,
 body {
-  /* Only <main> should ever scroll — the shell (sidebar, footer, jobs tray) stays fixed.
-     Without a y clip here, the document itself gets its own scrollable overflow on top of
-     <main>'s, so the whole page (footer included) can be dragged up past its content. */
+  /* Only <main> should ever scroll; the shell around it stays fixed. Without a y clip here, the
+     document itself gets its own scrollable overflow on top of <main>'s, so the whole page can
+     be dragged up past its content. */
   overflow: clip;
 }
 

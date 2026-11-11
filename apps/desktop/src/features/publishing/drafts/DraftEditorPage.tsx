@@ -1,44 +1,45 @@
 import { formatDurationHuman, showsActiveTime } from "@lare/shared";
 import type { Post } from "@lare/supabase-types";
 import { ArrowLeft, ArrowRight, Check, Eye, Send, Trash2 } from "@lare/ui/icons";
+import {
+  Button,
+  Card,
+  Input,
+  KindBadge,
+  Label,
+  Select,
+  Textarea,
+  Toggle,
+} from "@lare/ui/primitives";
 import { onlineManager } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { PageActions } from "@/components/PageSlots";
 import { ProblemSection } from "@/components/ProblemSection";
-import { KindBadge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Input, Label, Select, Textarea, Toggle } from "@/components/ui/Field";
+import { confirm } from "@/components/ui/Confirm";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useRecorderStatus } from "@/features/media/hooks";
 import { isActive, useJobs } from "@/features/media/jobs";
-import { useNotify } from "@/features/notifications/notices";
 import { PostMediaPanel } from "@/features/publishing/posts/PostMediaPanel";
 import { PostPreview, usePreviewSlides } from "@/features/publishing/posts/PostPreview";
 import {
   isPracticePost,
   postUrl,
-  SHARE_LINKS,
   useDeletePracticePost,
 } from "@/features/publishing/posts/postActions";
-import { PageActions } from "@/features/shell/PageActions";
+import type { PostEdit } from "@/features/publishing/posts/queries";
 import { copyText } from "@/lib/clipboard";
-import { confirm } from "@/lib/confirm";
+import { errorMessage } from "@/lib/errors";
 import { formatDateTime, plural } from "@/lib/format";
 import { useHotkey } from "@/lib/hotkeys";
-import { errorMessage } from "@/lib/supabase";
+import { notify, notifyError } from "@/lib/notices";
+import { postRoute, routes } from "@/lib/routes";
+import { STORAGE_KEYS, storage } from "@/lib/storage";
 import { DemoVideoPanel } from "./DemoVideoPanel";
 import { PostExtrasPanel } from "./PostExtrasPanel";
-import {
-  type Draft,
-  type PublishInput,
-  useDeleteDraft,
-  useDraft,
-  usePublishDraft,
-  useSaveDraft,
-} from "./queries";
-import { draftStepError } from "./validation";
+import { type Draft, useDeleteDraft, useDraft, usePublishDraft, useSaveDraft } from "./queries";
+import { draftStepError, POST_BODY_MAX, POST_TITLE_MAX } from "./validation";
 
 export function DraftEditorPage() {
   const { id = "" } = useParams();
@@ -52,7 +53,7 @@ export function DraftEditorPage() {
         title="Draft not found"
         description="It may have been published or deleted."
         action={
-          <Link to="/drafts" className="text-sm text-zinc-200 underline underline-offset-2">
+          <Link to={routes.drafts} className="text-sm text-zinc-200 underline underline-offset-2">
             Back to drafts
           </Link>
         }
@@ -65,7 +66,7 @@ export function DraftEditorPage() {
         title="Already published"
         action={
           <Link
-            to={`/posts/${draft.data.id}`}
+            to={postRoute(draft.data)}
             className="text-sm text-zinc-200 underline underline-offset-2"
           >
             View the post
@@ -110,7 +111,6 @@ function confirmDelete(practice: boolean): Promise<boolean> {
 
 function DraftEditor({ draft }: { draft: Draft }) {
   const navigate = useNavigate();
-  const { notify } = useNotify();
   const { userId } = useUser();
   const publish = usePublishDraft();
   const save = useSaveDraft();
@@ -121,12 +121,12 @@ function DraftEditor({ draft }: { draft: Draft }) {
   const recording = useRecorderStatus();
   const jobs = useJobs();
 
-  const recoveryKey = `lare:draft:${userId}:${draft.id}`;
-  const [recovered] = useState<Partial<PublishInput>>(() => {
+  const recoveryKey = STORAGE_KEYS.draftRecovery(userId, draft.id);
+  const [recovered] = useState<Partial<PostEdit>>(() => {
     try {
-      const value: unknown = JSON.parse(localStorage.getItem(recoveryKey) ?? "{}");
+      const value: unknown = JSON.parse(storage.get(recoveryKey) ?? "{}");
       if (!value || typeof value !== "object") return {};
-      const draft = value as Partial<PublishInput>;
+      const draft = value as Partial<PostEdit>;
       return typeof draft.title === "string" &&
         typeof draft.body === "string" &&
         ["public", "private"].includes(draft.visibility ?? "") &&
@@ -177,25 +177,17 @@ function DraftEditor({ draft }: { draft: Draft }) {
   useEffect(() => {
     if (leaving.current) return;
     setSaved(false);
-    try {
-      localStorage.setItem(recoveryKey, snapshot);
-    } catch {
+    if (!storage.set(recoveryKey, snapshot))
       setSaveError("Local recovery is unavailable. Keep this page open until cloud save succeeds.");
-    }
     const timer = window.setTimeout(() => {
       if (leaving.current) return;
-      void saveDraft(JSON.parse(snapshot) as PublishInput)
+      void saveDraft(JSON.parse(snapshot) as PostEdit)
         .then(() => {
           if (latestSnapshot.current === snapshot) {
             setSaveError(null);
             setSaved(true);
           }
-          try {
-            if (localStorage.getItem(recoveryKey) === snapshot)
-              localStorage.removeItem(recoveryKey);
-          } catch {
-            /* Cloud save succeeded. */
-          }
+          if (storage.get(recoveryKey) === snapshot) storage.remove(recoveryKey);
         })
         .catch((error: unknown) => {
           setSaveError(errorMessage(error));
@@ -212,16 +204,12 @@ function DraftEditor({ draft }: { draft: Draft }) {
     return onlineManager.subscribe((online) => {
       if (!online || leaving.current) return;
       const pending = latestSnapshot.current;
-      void saveDraft(JSON.parse(pending) as PublishInput)
+      void saveDraft(JSON.parse(pending) as PostEdit)
         .then(() => {
           if (latestSnapshot.current !== pending) return;
           setSaveError(null);
           setSaved(true);
-          try {
-            if (localStorage.getItem(recoveryKey) === pending) localStorage.removeItem(recoveryKey);
-          } catch {
-            /* Cloud save succeeded. */
-          }
+          if (storage.get(recoveryKey) === pending) storage.remove(recoveryKey);
         })
         .catch(() => undefined);
     });
@@ -272,23 +260,16 @@ function DraftEditor({ draft }: { draft: Draft }) {
       leaving.current = true;
       await saveDraft(edit);
       const { id, slug } = await publish.mutateAsync(edit);
-      try {
-        localStorage.removeItem(recoveryKey);
-      } catch {
-        /* Publication already succeeded. */
-      }
+      storage.remove(recoveryKey);
       notify({
         title: "Published",
         variant: "success",
-        action:
-          SHARE_LINKS && slug
-            ? { label: "Copy link", run: () => void copyText(postUrl(slug)) }
-            : undefined,
+        action: slug ? { label: "Copy link", run: () => void copyText(postUrl(slug)) } : undefined,
       });
-      void navigate(`/posts/${id}`, { replace: true });
+      void navigate(routes.post(id), { replace: true });
     } catch (err) {
       leaving.current = false;
-      notify({ title: "Couldn't publish", description: errorMessage(err), variant: "error" });
+      notifyError("Couldn't publish", err);
     }
   };
 
@@ -297,7 +278,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
       await save.mutateAsync(edit);
       notify({ title: "Draft saved", variant: "success" });
     } catch (err) {
-      notify({ title: "Couldn't save", description: errorMessage(err), variant: "error" });
+      notifyError("Couldn't save", err);
     }
   };
 
@@ -308,19 +289,15 @@ function DraftEditor({ draft }: { draft: Draft }) {
       await saveDraft(edit);
       if (practice) await removePractice.mutateAsync(draft.id);
       else await remove.mutateAsync(draft.id);
-      try {
-        localStorage.removeItem(recoveryKey);
-      } catch {
-        /* Deletion already succeeded. */
-      }
+      storage.remove(recoveryKey);
       notify({
         title: "Draft deleted",
         description: practice ? "Its problems are back in Tracked problems." : undefined,
       });
-      void navigate("/drafts", { replace: true });
+      void navigate(routes.drafts, { replace: true });
     } catch (err) {
       leaving.current = false;
-      notify({ title: "Couldn't delete", description: errorMessage(err), variant: "error" });
+      notifyError("Couldn't delete", err);
     }
   };
 
@@ -485,7 +462,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
             {step === 2 ? (
               <Card className="space-y-4">
                 <div>
-                  <Label htmlFor="draft-title" hint={`${title.length}/140`}>
+                  <Label htmlFor="draft-title" hint={`${title.length}/${POST_TITLE_MAX}`}>
                     Title
                   </Label>
                   <Input
@@ -493,7 +470,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
                     className="mt-1"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    maxLength={140}
+                    maxLength={POST_TITLE_MAX}
                     placeholder="Give this session a title"
                   />
                 </div>
@@ -505,7 +482,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     placeholder="What did you learn? What was the approach?"
-                    maxLength={5000}
+                    maxLength={POST_BODY_MAX}
                   />
                 </div>
               </Card>
@@ -578,7 +555,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
           </div>
 
           {/* ---- One action bar for every step, across the whole content pane ---- */}
-          <PageActions fullWidth>
+          <PageActions>
             <Button
               variant="ghost"
               icon={<ArrowLeft className="size-4" aria-hidden />}

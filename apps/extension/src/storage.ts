@@ -1,4 +1,5 @@
 import { EMPTY_EXTENSION_STATE, type ExtensionState, ExtensionStateSchema } from "@lare/shared";
+import { idbConnection } from "./idb";
 
 /**
  * Key-value store for secrets: the Supabase session (refresh token included) and the desktop
@@ -10,44 +11,19 @@ import { EMPTY_EXTENSION_STATE, type ExtensionState, ExtensionStateSchema } from
 const SECURE_DB = "lare-secure";
 const SECURE_STORE = "kv";
 
-let secureDb: Promise<IDBDatabase> | null = null;
-
-function openSecureDb(): Promise<IDBDatabase> {
-  secureDb ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(SECURE_DB, 1);
-    req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(SECURE_STORE))
-        req.result.createObjectStore(SECURE_STORE);
-    };
-    req.onsuccess = () => {
-      const db = req.result;
-      // Closed under us (extension reloaded, storage cleared): reopen on next use.
-      db.onclose = () => {
-        secureDb = null;
-      };
-      db.onversionchange = () => {
-        db.close();
-        secureDb = null;
-      };
-      resolve(db);
-    };
-    req.onerror = () => {
-      secureDb = null;
-      reject(req.error ?? new Error("indexedDB open failed"));
-    };
-  });
-  return secureDb;
-}
+const beginSecureTx = idbConnection(SECURE_DB, 1, (db) => {
+  if (!db.objectStoreNames.contains(SECURE_STORE)) db.createObjectStore(SECURE_STORE);
+});
 
 async function secureRequest<T>(
   mode: IDBTransactionMode,
   run: (store: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T> {
-  const db = await openSecureDb();
+  const tx = await beginSecureTx(SECURE_STORE, mode);
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(SECURE_STORE, mode);
     const req = run(tx.objectStore(SECURE_STORE));
     tx.oncomplete = () => resolve(req.result);
+    // A failed request reaches the transaction before the transaction has an error of its own.
     tx.onerror = () => reject(tx.error ?? req.error ?? new Error("transaction failed"));
     tx.onabort = () => reject(tx.error ?? new Error("transaction aborted"));
   });
@@ -64,7 +40,6 @@ export const secureStorage = {
   async remove(key: string): Promise<void> {
     await secureRequest("readwrite", (s) => s.delete(key));
   },
-  /** Every key starting with `prefix`. */
   async removePrefix(prefix: string): Promise<void> {
     await secureRequest("readwrite", (s) =>
       s.delete(IDBKeyRange.bound(prefix, `${prefix}￿`, false, false)),
@@ -110,16 +85,22 @@ export const chromeStorageAdapter = {
   },
 };
 
-const STATE_KEY = "lare:state";
+/** Also read by the e2e suite, which resets it between tests. */
+export const STATE_KEY = "lare:state";
 
 export async function loadState(): Promise<ExtensionState> {
   const res = await chrome.storage.local.get(STATE_KEY);
-  const parsed = ExtensionStateSchema.safeParse(res[STATE_KEY]);
-  return parsed.success ? parsed.data : { ...EMPTY_EXTENSION_STATE };
-}
-
-export async function saveState(state: ExtensionState): Promise<void> {
-  await chrome.storage.local.set({ [STATE_KEY]: state });
+  const stored = res[STATE_KEY];
+  const parsed = ExtensionStateSchema.safeParse(stored);
+  if (parsed.success) return parsed.data;
+  // Nothing stored yet is the normal first run; anything else is state this build cannot read
+  // (an older schema version, or damage), which is dropped for a fresh start.
+  if (stored !== undefined)
+    console.warn(
+      "[lare] stored state does not match the schema; starting empty:",
+      parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+    );
+  return { ...EMPTY_EXTENSION_STATE };
 }
 
 /**
@@ -127,17 +108,29 @@ export async function saveState(state: ExtensionState): Promise<void> {
  * every mutation goes through this lock to avoid lost updates.
  */
 let chain: Promise<unknown> = Promise.resolve();
+function locked<T>(fn: () => Promise<T>): Promise<T> {
+  const run = chain.then(fn);
+  chain = run.catch(() => undefined);
+  return run;
+}
+
 export function withState<T>(
   fn: (
     state: ExtensionState,
   ) => Promise<{ state: ExtensionState; result: T }> | { state: ExtensionState; result: T },
 ): Promise<T> {
-  const run = chain.then(async () => {
+  return locked(async () => {
     const current = await loadState();
     const { state, result } = await fn(current);
-    await saveState(state);
+    await chrome.storage.local.set({ [STATE_KEY]: state });
     return result;
   });
-  chain = run.catch(() => undefined);
-  return run;
+}
+
+/**
+ * Forget all state (sign-out). Takes the same lock as `withState`: a mutation still in flight
+ * would otherwise write the state back after it was removed.
+ */
+export function clearState(): Promise<void> {
+  return locked(() => chrome.storage.local.remove(STATE_KEY));
 }

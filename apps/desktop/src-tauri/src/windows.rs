@@ -13,14 +13,20 @@
 //! Tokio worker, so public helpers marshal via `run_on_main_thread` (and run inline when
 //! already on the main thread to avoid deadlocking the event loop).
 
-use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::thread::ThreadId;
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalPosition, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
+use crate::events;
+use crate::sync::lock;
+
+/// Window labels. The capabilities in `capabilities/*.json` grant permissions by these names, and
+/// the overlays' labels are also the `?window=` value the React bundle picks its UI by.
+pub const MAIN_LABEL: &str = "main";
 pub const RECORDER_LABEL: &str = "recorder";
 pub const CAMERA_LABEL: &str = "camera";
 
@@ -37,9 +43,7 @@ static PILL_LIVE: AtomicBool = AtomicBool::new(false);
 /// Tells the facecam preview whether it should be holding the webcam open. A hidden window keeps
 /// running its script, and nobody wants the camera light on between takes.
 fn set_camera_active(app: &AppHandle, active: bool) {
-    if let Err(e) = app.emit_to(CAMERA_LABEL, "camera:active", active) {
-        tracing::warn!(%e, "emit camera:active failed");
-    }
+    events::emit_to(app, CAMERA_LABEL, events::CAMERA_ACTIVE, active);
 }
 
 static MAIN_THREAD: OnceLock<ThreadId> = OnceLock::new();
@@ -99,8 +103,8 @@ where
     });
 }
 
-fn window_url(kind: &str) -> WebviewUrl {
-    WebviewUrl::App(format!("index.html?window={kind}").into())
+fn window_url(label: &str) -> WebviewUrl {
+    WebviewUrl::App(format!("index.html?window={label}").into())
 }
 
 /// A monitor's usable area (excluding the menu bar and Dock) in logical pixels.
@@ -130,13 +134,14 @@ impl WorkArea {
 /// the cursor, then the primary monitor, then 1440x900.
 fn target_work_area(app: &AppHandle, display_id: Option<&str>) -> WorkArea {
     let monitors = app.available_monitors().unwrap_or_default();
-    let recorded = lare_recording::devices::display_logical_bounds(display_id).and_then(|(x, y, _, _)| {
-        monitors.iter().find(|m| {
-            let scale = m.scale_factor();
-            let p = m.position();
-            (p.x as f64 / scale - x).abs() < 1.0 && (p.y as f64 / scale - y).abs() < 1.0
-        })
-    });
+    let recorded =
+        lare_recording::devices::display_logical_bounds(display_id).and_then(|(x, y, _, _)| {
+            monitors.iter().find(|m| {
+                let scale = m.scale_factor();
+                let p = m.position();
+                (p.x as f64 / scale - x).abs() < 1.0 && (p.y as f64 / scale - y).abs() < 1.0
+            })
+        });
     let under_cursor = || {
         let c = app.cursor_position().ok()?;
         app.monitor_from_point(c.x, c.y).ok().flatten()
@@ -146,7 +151,12 @@ fn target_work_area(app: &AppHandle, display_id: Option<&str>) -> WorkArea {
         .or_else(under_cursor)
         .or_else(|| app.primary_monitor().ok().flatten())
         .map(|m| WorkArea::from_monitor(&m))
-        .unwrap_or(WorkArea { x: 0.0, y: 0.0, w: 1440.0, h: 900.0 })
+        .unwrap_or(WorkArea {
+            x: 0.0,
+            y: 0.0,
+            w: 1440.0,
+            h: 900.0,
+        })
 }
 
 /// Transparent room above the pill for its tooltips. The window keeps it the whole time, and the
@@ -166,7 +176,10 @@ fn recorder_position(wa: WorkArea) -> (f64, f64) {
 
 /// Bottom-right of the work area, clear of the Dock.
 fn camera_position(wa: WorkArea, size: f64) -> (f64, f64) {
-    (wa.x + wa.w - size - EDGE_MARGIN, wa.y + wa.h - size - EDGE_MARGIN)
+    (
+        wa.x + wa.w - size - EDGE_MARGIN,
+        wa.y + wa.h - size - EDGE_MARGIN,
+    )
 }
 
 /// Turn a freshly built, still hidden overlay into a non-activating `NSPanel` (macOS only).
@@ -256,8 +269,10 @@ mod macos {
     const STATIONARY: u64 = 1 << 4;
     const IGNORES_CYCLE: u64 = 1 << 6;
     const FULL_SCREEN_AUXILIARY: u64 = 1 << 8;
-    const OVERLAY_BEHAVIOR: u64 = CAN_JOIN_ALL_SPACES | STATIONARY | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY;
-    const MOVE_BEHAVIOR: u64 = MOVE_TO_ACTIVE_SPACE | STATIONARY | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY;
+    const OVERLAY_BEHAVIOR: u64 =
+        CAN_JOIN_ALL_SPACES | STATIONARY | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY;
+    const MOVE_BEHAVIOR: u64 =
+        MOVE_TO_ACTIVE_SPACE | STATIONARY | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY;
 
     /// Make `ns` a non-activating panel with the overlay level and Space flags. Must run while the
     /// window has never been ordered in (see [`super::prepare_overlay`]). Idempotent.
@@ -394,7 +409,7 @@ static PILL_ANCHOR: Mutex<Option<PillAnchor>> = Mutex::new(None);
 /// well above the bottom edge in fullscreen. Placing it against the current work area on every
 /// watchdog tick follows the user from one to the other. Main thread only.
 fn reanchor_recorder(app: &AppHandle, w: &tauri::WebviewWindow) {
-    let mut anchor = PILL_ANCHOR.lock().unwrap_or_else(|e| e.into_inner());
+    let mut anchor = lock(&PILL_ANCHOR);
     let Some(a) = anchor.as_mut() else { return };
     let (Ok(pos), Ok(scale)) = (w.outer_position(), w.scale_factor()) else {
         return;
@@ -455,10 +470,6 @@ fn start_overlay_watchdog(app: &AppHandle) {
 
 static POINTER_WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
 
-/// Event carrying the pointer's position over the pill window, in points from its top-left
-/// (`null` when it is off the window).
-const POINTER_EVENT: &str = "recorder:pointer";
-
 /// While the pill is up, follow the pointer over it.
 ///
 /// Two jobs. The window is taller than the pill, to leave room for tooltips, and a transparent
@@ -492,7 +503,12 @@ fn start_pointer_watch(app: &AppHandle) {
                     let _ = w.set_ignore_cursor_events(false);
                 }
                 if last.is_some() {
-                    let _ = app.emit_to(RECORDER_LABEL, POINTER_EVENT, None::<(i32, i32)>);
+                    events::emit_to(
+                        &app,
+                        RECORDER_LABEL,
+                        events::RECORDER_POINTER,
+                        None::<(i32, i32)>,
+                    );
                 }
                 break;
             };
@@ -505,7 +521,7 @@ fn start_pointer_watch(app: &AppHandle) {
             }
             let at = at.map(|(x, y)| (x.round() as i32, y.round() as i32));
             if at != last {
-                let _ = app.emit_to(RECORDER_LABEL, POINTER_EVENT, at);
+                events::emit_to(&app, RECORDER_LABEL, events::RECORDER_POINTER, at);
                 last = at;
             }
         }
@@ -549,9 +565,30 @@ fn pointer_over(w: &tauri::WebviewWindow) -> Option<(f64, f64)> {
 /// recording runs. The settings page enforces the same rule when it captures a chord.
 fn is_claimable(shortcut: &Shortcut) -> bool {
     let function_keys = [
-        Code::F1, Code::F2, Code::F3, Code::F4, Code::F5, Code::F6, Code::F7, Code::F8,
-        Code::F9, Code::F10, Code::F11, Code::F12, Code::F13, Code::F14, Code::F15, Code::F16,
-        Code::F17, Code::F18, Code::F19, Code::F20, Code::F21, Code::F22, Code::F23, Code::F24,
+        Code::F1,
+        Code::F2,
+        Code::F3,
+        Code::F4,
+        Code::F5,
+        Code::F6,
+        Code::F7,
+        Code::F8,
+        Code::F9,
+        Code::F10,
+        Code::F11,
+        Code::F12,
+        Code::F13,
+        Code::F14,
+        Code::F15,
+        Code::F16,
+        Code::F17,
+        Code::F18,
+        Code::F19,
+        Code::F20,
+        Code::F21,
+        Code::F22,
+        Code::F23,
+        Code::F24,
     ];
     function_keys.contains(&shortcut.key) || !shortcut.mods.difference(Modifiers::SHIFT).is_empty()
 }
@@ -574,10 +611,11 @@ pub fn parse_pill_shortcut(setting: Option<&str>) -> Result<Option<Shortcut>, St
     Ok(Some(shortcut))
 }
 
-/// Makes the registered global shortcut match the recording state and the saved setting.
-/// Lare has no other global shortcut, so everything is cleared and the one wanted is re-added.
-pub fn sync_pill_shortcut(app: &AppHandle) {
-    on_main_unit(app, |app| {
+/// Makes the registered global shortcut match the recording state and `setting` (the saved
+/// `pill_shortcut`). Lare has no other global shortcut, so everything is cleared and the one
+/// wanted is re-added.
+pub fn sync_pill_shortcut(app: &AppHandle, setting: Option<String>) {
+    on_main_unit(app, move |app| {
         let shortcuts = app.global_shortcut();
         if let Err(e) = shortcuts.unregister_all() {
             tracing::warn!(%e, "could not clear the pill shortcut");
@@ -585,9 +623,6 @@ pub fn sync_pill_shortcut(app: &AppHandle) {
         if !PILL_LIVE.load(Ordering::SeqCst) {
             return;
         }
-        let setting = app
-            .try_state::<std::sync::Arc<crate::recorder::Recorder>>()
-            .and_then(|rec| rec.settings().pill_shortcut);
         match parse_pill_shortcut(setting.as_deref()) {
             Ok(Some(shortcut)) => {
                 // Typically the OS or another app already owns a combination the user picked;
@@ -633,17 +668,22 @@ pub fn tuck_recorder(app: &AppHandle) {
     });
 }
 
-/// Show the recorder pill (bottom-centre of the recorded display, above the Dock).
-pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), String> {
+/// Show the recorder pill (bottom-centre of the recorded display, above the Dock), with
+/// `pill_shortcut` (the saved setting) registered to hide and show it.
+pub fn open_recorder(
+    app: &AppHandle,
+    display_id: Option<&str>,
+    pill_shortcut: Option<String>,
+) -> Result<(), String> {
     let display_id = display_id.map(str::to_owned);
     on_main(app, move |app| {
         let (x, y) = recorder_position(target_work_area(app, display_id.as_deref()));
-        *PILL_ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) = Some(PillAnchor {
+        *lock(&PILL_ANCHOR) = Some(PillAnchor {
             display_id: display_id.clone(),
             at: (x, y),
         });
         PILL_LIVE.store(true, Ordering::SeqCst);
-        sync_pill_shortcut(app);
+        sync_pill_shortcut(app, pill_shortcut);
         if let Some(w) = app.get_webview_window(RECORDER_LABEL) {
             let _ = w.set_position(LogicalPosition::new(x, y));
             show_overlay(&w)?;
@@ -652,7 +692,7 @@ pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), St
             return Ok(());
         }
         let (w, h) = RECORDER_SIZE;
-        let window = WebviewWindowBuilder::new(app, RECORDER_LABEL, window_url("recorder"))
+        let window = WebviewWindowBuilder::new(app, RECORDER_LABEL, window_url(RECORDER_LABEL))
             .title("Lare recorder")
             .inner_size(w, h)
             .position(x, y)
@@ -678,7 +718,8 @@ pub fn open_recorder(app: &AppHandle, display_id: Option<&str>) -> Result<(), St
 pub fn hide_recorder(app: &AppHandle) {
     on_main_unit(app, |app| {
         PILL_LIVE.store(false, Ordering::SeqCst);
-        sync_pill_shortcut(app);
+        // No pill, no shortcut: whatever the setting says, nothing is registered now.
+        sync_pill_shortcut(app, None);
         if let Some(w) = app.get_webview_window(RECORDER_LABEL) {
             let _ = w.hide();
         }
@@ -706,7 +747,7 @@ pub fn open_camera(app: &AppHandle, display_id: Option<&str>) -> Result<(), Stri
         }
         let size = CAMERA_SIZE;
         let (x, y) = camera_position(wa, size);
-        let window = WebviewWindowBuilder::new(app, CAMERA_LABEL, window_url("camera"))
+        let window = WebviewWindowBuilder::new(app, CAMERA_LABEL, window_url(CAMERA_LABEL))
             .title("Lare camera")
             .inner_size(size, size)
             .position(x, y)
@@ -748,30 +789,6 @@ pub fn destroy_overlays(app: &AppHandle) {
             }
         }
     });
-}
-
-/// Resize the camera preview (small/medium/large presets from the pill).
-pub fn resize_camera(app: &AppHandle, size: f64) -> Result<(), String> {
-    on_main(app, move |app| {
-        let w = app
-            .get_webview_window(CAMERA_LABEL)
-            .ok_or("camera window is not open")?;
-        let size = size.clamp(120.0, 480.0);
-        let scale = w.scale_factor().unwrap_or(1.0);
-        let pos = w.outer_position().map_err(|e| e.to_string())?;
-        let old = w.outer_size().map_err(|e| e.to_string())?;
-        // Keep the bottom-right corner anchored while resizing.
-        let dx = (old.width as f64 / scale) - size;
-        let dy = (old.height as f64 / scale) - size;
-        w.set_size(LogicalSize::new(size, size))
-            .map_err(|e| e.to_string())?;
-        w.set_position(LogicalPosition::new(
-            pos.x as f64 / scale + dx,
-            pos.y as f64 / scale + dy,
-        ))
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    })
 }
 
 #[cfg(test)]
@@ -817,7 +834,13 @@ mod tests {
                 "{accelerator} should be refused"
             );
         }
-        for accelerator in ["F9", "Shift+F9", "Alt+H", "Control+Shift+H", "Command+Space"] {
+        for accelerator in [
+            "F9",
+            "Shift+F9",
+            "Alt+H",
+            "Control+Shift+H",
+            "Command+Space",
+        ] {
             assert!(
                 parse_pill_shortcut(Some(accelerator)).is_ok(),
                 "{accelerator} should be accepted"

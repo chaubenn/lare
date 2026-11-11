@@ -1,21 +1,25 @@
 //! Tauri commands for recording, devices, permissions, upload and transcription.
 //!
-//! Long jobs report progress through events (`upload:progress`, `transcribe:progress`) keyed by a caller-supplied `jobId`, so the React side can show
-//! several jobs at once and survive re-renders.
+//! Long jobs report progress through events (`upload:progress`, `transcribe:progress`) keyed by
+//! a caller-supplied `jobId`, so the React side can show several jobs at once and survive
+//! re-renders.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lare_recording::devices::{CameraInfo, DisplayInfo, MicrophoneInfo};
-use lare_recording::permissions::{PermissionStatus, Permissions};
+use lare_recording::permissions::{PermissionKind, PermissionStatus, Permissions};
 use lare_recording::thumbnail::MediaInfo;
-use lare_transcribe::{ModelKind, Progress, Segment, TranscribeOptions};
+use lare_transcribe::{ModelKind, Progress, Segment};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 use tracing::info;
 
-use crate::recorder::{CompletedPayload, DemoStart, Recorder, RecorderSettings, StatePayload};
+use crate::events;
+use crate::project::{self, CompletedPayload, Purpose};
+use crate::recorder::{DemoStart, Recorder, RecorderSettings, StartSpec, StatePayload};
+use crate::upload::{self, UploadMarker, pinned_tus, pinned_upload_url};
 use crate::windows;
 
 type Rec<'a> = State<'a, Arc<Recorder>>;
@@ -52,23 +56,22 @@ pub fn check_permissions() -> Permissions {
     lare_recording::permissions::check()
 }
 
-/// Prompt for a permission (`screen_recording` | `camera` | `microphone`). Returns the status
-/// afterwards; macOS only prompts once, later calls should open the settings pane instead.
+/// Prompt for a permission. Returns the status afterwards; macOS only prompts once, later calls
+/// should open the settings pane instead.
 #[tauri::command]
-pub async fn request_permission(which: String) -> Result<PermissionStatus, String> {
+pub async fn request_permission(which: PermissionKind) -> Result<PermissionStatus, String> {
     // The AVFoundation permission futures are not `Send`, so drive them on a blocking thread.
-    tokio::task::spawn_blocking(move || match which.as_str() {
-        "screen_recording" => Ok(lare_recording::permissions::request_screen_recording()),
-        "camera" => Ok(futures::executor::block_on(
-            lare_recording::permissions::request_camera(),
-        )),
-        "microphone" => Ok(futures::executor::block_on(
-            lare_recording::permissions::request_microphone(),
-        )),
-        other => Err(format!("unknown permission '{other}'")),
+    tokio::task::spawn_blocking(move || match which {
+        PermissionKind::ScreenRecording => lare_recording::permissions::request_screen_recording(),
+        PermissionKind::Camera => {
+            futures::executor::block_on(lare_recording::permissions::request_camera())
+        }
+        PermissionKind::Microphone => {
+            futures::executor::block_on(lare_recording::permissions::request_microphone())
+        }
     })
     .await
-    .map_err(err)?
+    .map_err(err)
 }
 
 /// Forget the screen-recording decision and ask for it again, for the case an update left a stale
@@ -100,27 +103,24 @@ pub fn preview_url(
     if !path.exists() {
         return Err("no such recording".to_string());
     }
-    let token = previews.register(&path);
-    Ok(format!(
-        "http://127.0.0.1:{}/preview/{token}",
-        lare_core::WS_PORT
-    ))
+    Ok(crate::local_server::preview_url(&previews.register(&path)))
 }
 
-/// URL of the OS settings pane for a permission (macOS), if any.
+/// URL of the OS settings pane for a permission (macOS).
 #[tauri::command]
-pub fn permission_settings_url(which: String) -> Option<String> {
-    lare_recording::permissions::settings_url(&which).map(str::to_string)
+pub fn permission_settings_url(which: PermissionKind) -> String {
+    lare_recording::permissions::settings_url(which).to_string()
 }
 
 /// Open the System Settings pane for a permission. Done from Rust because the opener plugin's
 /// URL scope only allows web/mail schemes and `x-apple.systempreferences:` links are rejected.
 #[tauri::command]
-pub fn open_permission_settings(app: AppHandle, which: String) -> Result<(), String> {
-    let url = lare_recording::permissions::settings_url(&which)
-        .ok_or_else(|| format!("no settings pane for {which}"))?;
+pub fn open_permission_settings(app: AppHandle, which: PermissionKind) -> Result<(), String> {
     app.opener()
-        .open_url(url, None::<&str>)
+        .open_url(
+            lare_recording::permissions::settings_url(which),
+            None::<&str>,
+        )
         .map_err(|e| format!("could not open System Settings: {e}"))
 }
 
@@ -150,64 +150,41 @@ pub async fn recorder_status(rec: Rec<'_>) -> Result<StatePayload, String> {
 #[tauri::command]
 pub async fn recording_start(rec: Rec<'_>, req: DemoStart) -> Result<StatePayload, String> {
     let recorder = rec.inner().clone();
-    let prepared = recorder.take_prepared_upload().await;
-    if let Some(upload) = &req.upload {
-        pinned_tus(&upload.tus)?;
-        pinned_upload_url(&upload.upload_url)?;
-    }
+    let upload = recorder.take_prepared_upload().await;
     recorder
-        .start(
-            crate::recorder::StartSpec {
-                purpose: crate::recorder::Purpose::Demo,
-                mode: req.mode,
-                session_id: None,
-                post_id: req.post_id.clone(),
-                facecam: req.facecam,
-                mic: req.mic,
-                upload: req.upload.or(prepared),
-            },
-            None,
-        )
+        .start(StartSpec {
+            purpose: Purpose::Demo,
+            session_id: None,
+            post_id: req.post_id.clone(),
+            facecam: req.facecam,
+            mic: req.mic,
+            upload,
+        })
         .await
 }
 
-// Pause, resume, stop and cancel come from the pill, which drives mock interviews too. The hub
-// tells the extension, so it can keep the interview timer it owns in step (or close the session).
-// Demo takes have no session id, and the extension ignores a `recording.state` frame that is not
-// about its own session.
+// Pause, resume, stop and cancel come from the pill, which drives mock interviews too: they act
+// on whatever is recording (no session named).
 #[tauri::command]
-pub async fn recording_pause(
-    rec: Rec<'_>,
-    state: State<'_, crate::AppState>,
-) -> Result<StatePayload, String> {
-    rec.pause(Some(&state.ws)).await
+pub async fn recording_pause(rec: Rec<'_>) -> Result<StatePayload, String> {
+    rec.pause(None).await
 }
 
 #[tauri::command]
-pub async fn recording_resume(
-    rec: Rec<'_>,
-    state: State<'_, crate::AppState>,
-) -> Result<StatePayload, String> {
-    rec.resume(Some(&state.ws)).await
+pub async fn recording_resume(rec: Rec<'_>) -> Result<StatePayload, String> {
+    rec.resume(None).await
 }
 
 #[tauri::command]
-pub async fn recording_stop(
-    app: AppHandle,
-    rec: Rec<'_>,
-    state: State<'_, crate::AppState>,
-) -> Result<CompletedPayload, String> {
-    let result = rec.stop(Some(&state.ws)).await;
+pub async fn recording_stop(app: AppHandle, rec: Rec<'_>) -> Result<CompletedPayload, String> {
+    let result = rec.stop(None).await;
     crate::focus_main_window(&app);
     result
 }
 
 #[tauri::command]
-pub async fn recording_cancel(
-    rec: Rec<'_>,
-    state: State<'_, crate::AppState>,
-) -> Result<(), String> {
-    rec.cancel(Some(&state.ws)).await
+pub async fn recording_cancel(rec: Rec<'_>) -> Result<(), String> {
+    rec.cancel(None).await
 }
 
 /// Clear a screen-sharing session macOS is still attributing to Lare.
@@ -263,13 +240,9 @@ pub fn recording_delete(rec: Rec<'_>, recording_id: String) -> Result<(), String
 
 /// The directory of the recording `id` names, confirmed to be one of the recordings.
 ///
-/// The id is checked for shape before it is joined to anything: `recorder` names a take
-/// `<ms>-<random>` in hex (a uuid fits the same rule), and a denylist of separators missed that on
-/// Windows `C:` or `C:name` replaces the base path instead of extending it.
+/// The id is checked for shape before it is joined to anything (see [`project::id`]).
 fn recording_dir(root: &Path, id: &str) -> Result<PathBuf, String> {
-    let well_formed =
-        (1..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-');
-    if !well_formed {
+    if !project::id::is_well_formed(id) {
         return Err("invalid recording id".into());
     }
     let dir = confine(root, &root.join(id))?;
@@ -319,65 +292,13 @@ fn confine(root: &Path, path: &Path) -> Result<PathBuf, String> {
     Ok(root.join(inside))
 }
 
-/// Bunny Stream's TUS endpoint (`BUNNY_TUS_ENDPOINT` in the Edge Functions), the only server a
-/// recording is uploaded to. The credentials reach Rust through the webview, so the endpoint and
-/// every upload URL are held to it rather than trusted: otherwise a webview that ran someone
-/// else's script could send a recording anywhere.
-const BUNNY_TUS_ENDPOINT: &str = "https://video.bunnycdn.com/tusupload";
-
-fn pinned_tus(tus: &lare_bunny::TusCredentials) -> Result<(), String> {
-    if tus.endpoint != BUNNY_TUS_ENDPOINT {
-        return Err("upload endpoint is not Bunny Stream".to_string());
-    }
-    Ok(())
-}
-
-fn pinned_upload_url(url: &str) -> Result<(), String> {
-    let bunny = reqwest::Url::parse(BUNNY_TUS_ENDPOINT).map_err(err)?;
-    let url = reqwest::Url::parse(url).map_err(|_| "invalid upload URL".to_string())?;
-    if url.origin() != bunny.origin() {
-        return Err("upload URL is not on Bunny Stream".to_string());
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Secondary windows
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn open_recorder_window(app: AppHandle, rec: Rec<'_>) -> Result<(), String> {
-    windows::open_recorder(&app, rec.settings().display_id.as_deref())
-}
-
-#[tauri::command]
-pub fn hide_recorder_window(app: AppHandle) {
-    windows::hide_recorder(&app);
-}
-
-#[tauri::command]
 pub fn tuck_recorder_window(app: AppHandle) {
     windows::tuck_recorder(&app);
-}
-
-#[tauri::command]
-pub fn open_camera_window(app: AppHandle, rec: Rec<'_>) -> Result<(), String> {
-    windows::open_camera(&app, rec.settings().display_id.as_deref())
-}
-
-#[tauri::command]
-pub fn hide_camera_window(app: AppHandle) {
-    windows::hide_camera(&app);
-}
-
-#[tauri::command]
-pub fn resize_camera_window(app: AppHandle, size: f64) -> Result<(), String> {
-    windows::resize_camera(&app, size)
-}
-
-#[tauri::command]
-pub fn focus_main(app: AppHandle) {
-    crate::focus_main_window(&app);
 }
 
 // ---------------------------------------------------------------------------
@@ -479,18 +400,14 @@ pub struct ThumbnailRequest {
     pub at_ms: Option<u64>,
     /// Output width cap (default 640).
     pub max_width: Option<u32>,
-    /// Where to write; defaults to `<video dir>/thumbnail.jpg`.
-    pub output: Option<PathBuf>,
 }
 
-/// Write a JPEG poster frame and return its path (read it with the fs plugin to upload).
+/// Write a JPEG poster frame to `<video dir>/thumbnail.jpg` and return its path (the webview
+/// reads it back with `read_file_bytes` to upload).
 #[tauri::command]
 pub async fn make_thumbnail(rec: Rec<'_>, req: ThumbnailRequest) -> Result<PathBuf, String> {
     let video_path = under_recordings(&rec, &req.video_path)?;
-    let output = match &req.output {
-        Some(output) => under_recordings(&rec, output)?,
-        None => video_path.with_file_name("thumbnail.jpg"),
-    };
+    let output = video_path.with_file_name("thumbnail.jpg");
     tokio::task::spawn_blocking(move || {
         let duration = lare_recording::thumbnail::duration_ms(&video_path).unwrap_or(0);
         let at = req.at_ms.unwrap_or(1000).min(duration.saturating_sub(200));
@@ -523,58 +440,57 @@ pub struct UploadJob {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UploadProgress {
-    pub job_id: String,
-    pub uploaded: u64,
-    pub total: u64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UploadResult {
     pub upload_url: String,
     pub size_bytes: u64,
 }
 
 #[tauri::command]
-pub async fn prepare_bunny_upload(rec: Rec<'_>, tus: lare_bunny::TusCredentials) -> Result<String, String> {
+pub async fn prepare_bunny_upload(
+    rec: Rec<'_>,
+    tus: lare_bunny::TusCredentials,
+) -> Result<String, String> {
     pinned_tus(&tus)?;
     rec.prepare_upload(tus).await
 }
 
 #[tauri::command]
-pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Result<UploadResult, String> {
+pub async fn upload_to_bunny(
+    app: AppHandle,
+    rec: Rec<'_>,
+    job: UploadJob,
+) -> Result<UploadResult, String> {
     let path = under_recordings(&rec, &job.path)?;
     pinned_tus(&job.tus)?;
     let client = lare_bunny::http_client();
-    if let Some(upload_url) = rec.join_live_upload(&path, &job.tus, job.resume_url.as_deref()).await? {
-        return Ok(UploadResult { upload_url, size_bytes: tokio::fs::metadata(&path).await.map_err(err)?.len() });
+    if let Some(upload_url) = rec
+        .join_live_upload(&path, &job.tus, job.resume_url.as_deref())
+        .await?
+    {
+        return Ok(UploadResult {
+            upload_url,
+            size_bytes: tokio::fs::metadata(&path).await.map_err(err)?.len(),
+        });
     }
     let size_bytes = tokio::fs::metadata(&path).await.map_err(err)?.len();
     let job_id = job.job_id.clone();
-    // Remember the upload URL next to the file so a restart can resume.
-    let marker = path.with_extension("upload.json");
-    let saved_url = {
-        std::fs::read_to_string(&marker)
-            .ok()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .filter(|v| v["headers"] == serde_json::to_value(&job.tus.headers).unwrap_or_default())
-            .and_then(|v| {
-                v.get("uploadUrl")
-                    .and_then(|u| u.as_str())
-                    .map(str::to_string)
-            })
-    };
-    // A recovered take is remuxed to output.mp4, which is NOT byte-identical to
-    // capture.mp4. The frontend may still hold the pre-capture URL after salvage.
-    // Never resume that object's offset against the replacement file. Prefer a
-    // matching per-file checkpoint on subsequent retries over the stale UI URL.
-    let capture_path = path.parent().map(|p| p.join("capture.mp4"));
-    let inherited_capture_url = capture_path.as_ref().filter(|p| *p != &path)
-        .and_then(|p| std::fs::read_to_string(p.with_extension("upload.json")).ok())
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        .and_then(|v| v["uploadUrl"].as_str().map(str::to_string));
-    let resume_url = saved_url.or_else(|| job.resume_url.clone())
+    let saved_url = UploadMarker::read(&path)
+        .filter(|marker| marker.created_with(&job.tus))
+        .map(|marker| marker.upload_url);
+    // A recovered take is remuxed into a new file, which is NOT byte-identical to the capture
+    // file. The frontend may still hold the pre-capture URL after salvage. Never resume that
+    // object's offset against the replacement file. Prefer a matching per-file checkpoint on
+    // subsequent retries over the stale UI URL.
+    let capture_path = path
+        .parent()
+        .map(|p| p.join(lare_recording::layout::CAPTURE_FILE_NAME));
+    let inherited_capture_url = capture_path
+        .as_ref()
+        .filter(|p| *p != &path)
+        .and_then(|p| UploadMarker::read(p))
+        .map(|marker| marker.upload_url);
+    let resume_url = saved_url
+        .or_else(|| job.resume_url.clone())
         .filter(|url| Some(url) != inherited_capture_url.as_ref());
     let resume_url = match resume_url {
         Some(url) => {
@@ -585,14 +501,12 @@ pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Re
             .await
             .map_err(err)?,
     };
-    tokio::fs::write(
-        &marker,
-        serde_json::json!({"uploadUrl":resume_url,"headers":job.tus.headers}).to_string(),
-    )
-    .await
-    .map_err(err)?;
+    UploadMarker::new(&resume_url, &job.tus)
+        .write(&path)
+        .await
+        .map_err(err)?;
     info!(job = %job_id, path = %path.display(), size_bytes, "upload started");
-    // Retries are closed files. Instant captures join their live tailer above.
+    // Retries are closed files. Captures still being written join their live tailer above.
     let (_finished, completion) = tokio::sync::watch::channel(true);
     let upload_url = lare_bunny::upload_growing_file(
         &client,
@@ -601,16 +515,7 @@ pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Re
         &resume_url,
         lare_bunny::DEFAULT_CHUNK_SIZE,
         completion,
-        |p| {
-            let _ = app.emit(
-                "upload:progress",
-                UploadProgress {
-                    job_id: job_id.clone(),
-                    uploaded: p.uploaded,
-                    total: p.total,
-                },
-            );
-        },
+        upload::progress_reporter(app, job_id),
     )
     .await
     .map_err(|e| format!("{e}"))?;
@@ -619,19 +524,6 @@ pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Re
         upload_url,
         size_bytes,
     })
-}
-
-/// Persist an upload URL for later resume (called by the frontend right after `create-upload`).
-#[tauri::command]
-pub fn remember_upload(rec: Rec<'_>, path: PathBuf, upload_url: String) -> Result<(), String> {
-    let path = under_recordings(&rec, &path)?;
-    pinned_upload_url(&upload_url)?;
-    let marker = path.with_extension("upload.json");
-    std::fs::write(
-        marker,
-        serde_json::json!({ "uploadUrl": upload_url }).to_string(),
-    )
-    .map_err(err)
 }
 
 // ---------------------------------------------------------------------------
@@ -650,22 +542,17 @@ pub struct WhisperModelStatus {
 #[tauri::command]
 pub fn whisper_models(rec: Rec<'_>) -> Vec<WhisperModelStatus> {
     let dir = rec.models_dir();
-    [
-        ModelKind::TinyEn,
-        ModelKind::BaseEn,
-        ModelKind::SmallEn,
-        ModelKind::MediumEn,
-    ]
-    .into_iter()
-    .map(|kind| WhisperModelStatus {
-        kind,
-        label: kind.label().to_string(),
-        approx_mb: kind.approx_mb(),
-        downloaded: std::fs::metadata(dir.join(kind.file_name()))
-            .map(|m| m.len() == kind.size())
-            .unwrap_or(false),
-    })
-    .collect()
+    ModelKind::ALL
+        .into_iter()
+        .map(|kind| WhisperModelStatus {
+            kind,
+            label: kind.label().to_string(),
+            approx_mb: kind.approx_mb(),
+            downloaded: std::fs::metadata(dir.join(kind.file_name()))
+                .map(|m| m.len() == kind.size())
+                .unwrap_or(false),
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -714,7 +601,11 @@ pub async fn ensure_whisper_model(
 ) -> Result<PathBuf, String> {
     let dir = rec.models_dir();
     lare_transcribe::ensure_model(&dir, model, |p| {
-        let _ = app.emit("transcribe:progress", progress_event(&job_id, p));
+        events::emit(
+            &app,
+            events::TRANSCRIBE_PROGRESS,
+            progress_event(&job_id, p),
+        );
     })
     .await
     .map_err(|e| format!("{e:#}"))
@@ -751,7 +642,11 @@ pub async fn transcribe_recording(
         let app = app.clone();
         let job_id = job.job_id.clone();
         move |p| {
-            let _ = app.emit("transcribe:progress", progress_event(&job_id, p));
+            events::emit(
+                &app,
+                events::TRANSCRIBE_PROGRESS,
+                progress_event(&job_id, p),
+            );
         }
     })
     .await
@@ -763,14 +658,13 @@ pub async fn transcribe_recording(
     let job_id = job.job_id.clone();
     info!(job = %job_id, input = %input.display(), ?model, "transcription started");
     let segments = tokio::task::spawn_blocking(move || {
-        lare_transcribe::transcribe_file(
-            &model_path,
-            &input,
-            &TranscribeOptions::default(),
-            move |p| {
-                let _ = app.emit("transcribe:progress", progress_event(&job_id, p));
-            },
-        )
+        lare_transcribe::transcribe_file(&model_path, &input, move |p| {
+            events::emit(
+                &app,
+                events::TRANSCRIBE_PROGRESS,
+                progress_event(&job_id, p),
+            );
+        })
     })
     .await
     .map_err(err)?
@@ -793,14 +687,6 @@ pub async fn read_file_bytes(rec: Rec<'_>, path: PathBuf) -> Result<tauri::ipc::
     }
     let bytes = tokio::fs::read(&path).await.map_err(err)?;
     Ok(tauri::ipc::Response::new(bytes))
-}
-
-/// Delete a file inside the recordings directory.
-#[tauri::command]
-pub fn delete_file(rec: Rec<'_>, path: PathBuf) -> Result<(), String> {
-    // Canonicalised on both sides: a bare `starts_with` let `<recordings>/../elsewhere` through.
-    let path = under_recordings(&rec, &path)?;
-    std::fs::remove_file(&path).map_err(err)
 }
 
 /// Whether a recording path exists (used to detect recordings deleted outside the app).
@@ -857,24 +743,5 @@ mod tests {
         assert!(confine(&root, &root).is_err());
         assert!(confine(&root, &std::env::temp_dir()).is_err());
         std::fs::remove_dir_all(&root).ok();
-    }
-
-    #[test]
-    fn uploads_only_go_to_bunny_stream() {
-        let tus = |endpoint: &str| lare_bunny::TusCredentials {
-            endpoint: endpoint.to_string(),
-            headers: Default::default(),
-            metadata: lare_bunny::TusMetadata {
-                filetype: "video/mp4".into(),
-                title: "t".into(),
-            },
-        };
-        assert!(pinned_tus(&tus(BUNNY_TUS_ENDPOINT)).is_ok());
-        assert!(pinned_tus(&tus("https://video.bunnycdn.com.evil.test/tusupload")).is_err());
-        assert!(pinned_tus(&tus("http://video.bunnycdn.com/tusupload")).is_err());
-        assert!(pinned_upload_url("https://video.bunnycdn.com/tusupload/abc").is_ok());
-        assert!(pinned_upload_url("https://evil.test/tusupload/abc").is_err());
-        assert!(pinned_upload_url("https://video.bunnycdn.com:8443/tusupload/abc").is_err());
-        assert!(pinned_upload_url("not a url").is_err());
     }
 }

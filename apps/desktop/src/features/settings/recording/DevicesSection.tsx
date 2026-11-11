@@ -1,10 +1,10 @@
 import { RefreshCw } from "@lare/ui/icons";
+import { Button, FieldError } from "@lare/ui/primitives";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/Button";
-import { FieldError } from "@/components/ui/Field";
 import { Spinner } from "@/components/ui/States";
-import { devicesKey, useDevices } from "@/features/media/hooks";
-import { errorMessage } from "@/lib/supabase";
+import { useDevices } from "@/features/media/hooks";
+import { errorMessage } from "@/lib/errors";
+import { queryKeys } from "@/lib/queryKeys";
 import { NULL_VALUE, type Option, SettingSelect, SubSection, useSettingsPatch } from "./shared";
 
 const MAX_SIZE_OPTIONS: Option[] = [
@@ -49,7 +49,9 @@ export function DevicesSection() {
           variant="ghost"
           icon={<RefreshCw className="size-3.5" aria-hidden />}
           loading={devices.isFetching}
-          onClick={() => void queryClient.invalidateQueries({ queryKey: devicesKey })}
+          onClick={() =>
+            void queryClient.invalidateQueries({ queryKey: queryKeys.recorder.devices })
+          }
         >
           Refresh devices
         </Button>

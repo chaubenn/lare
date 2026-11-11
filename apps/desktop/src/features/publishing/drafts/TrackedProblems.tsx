@@ -1,13 +1,12 @@
 import { DifficultyBadge } from "@lare/ui";
 import { Radio } from "@lare/ui/icons";
+import { Button, Card, SectionTitle } from "@lare/ui/primitives";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Button } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
-import { useNotify } from "@/features/notifications/notices";
-import { confirm } from "@/lib/confirm";
+import { confirm } from "@/components/ui/Confirm";
 import { formatListWhen, plural, timeAgo } from "@/lib/format";
-import { errorMessage } from "@/lib/supabase";
+import { notifyError } from "@/lib/notices";
+import { routes } from "@/lib/routes";
 import {
   type TrackedProblemRow,
   useClearTracked,
@@ -38,7 +37,6 @@ export function TrackedProblems() {
   const publish = usePublishTracked();
   const clear = useClearTracked();
   const navigate = useNavigate();
-  const { notify } = useNotify();
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const rows = tracked.data ?? [];
@@ -65,13 +63,9 @@ export function TrackedProblems() {
         sessionProblemIds: chosen.map((r) => r.id),
       });
       setSelected(new Set());
-      void navigate(`/drafts/${postId}`);
+      void navigate(routes.draft(postId));
     } catch (err) {
-      notify({
-        title: "Couldn't create the post",
-        description: errorMessage(err),
-        variant: "error",
-      });
+      notifyError("Couldn't create the post", err);
     }
   }
 
@@ -83,11 +77,7 @@ export function TrackedProblems() {
       await clear.mutateAsync(targets.map((r) => r.id));
       setSelected(new Set());
     } catch (err) {
-      notify({
-        title: "Couldn't clear tracked problems",
-        description: errorMessage(err),
-        variant: "error",
-      });
+      notifyError("Couldn't clear tracked problems", err);
     }
   }
 

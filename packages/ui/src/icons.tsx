@@ -8,7 +8,6 @@ import {
   ArrowRight02Icon,
   Camera01Icon,
   Cancel01Icon,
-  CheckListIcon,
   CheckmarkCircle02Icon,
   Clock01Icon,
   CommandIcon,
@@ -44,7 +43,6 @@ import {
   PencilEdit02Icon,
   PlayIcon,
   Radio01Icon,
-  RecordIcon,
   RefreshIcon,
   ReplyIcon,
   RotateLeft01Icon,
@@ -56,7 +54,6 @@ import {
   SidebarLeftIcon,
   SourceCodeIcon,
   SparklesIcon,
-  StopIcon,
   Sun03Icon,
   Target02Icon,
   Tick02Icon,
@@ -96,7 +93,6 @@ export const ChevronLeft = icon(ArrowLeft01Icon);
 export const ChevronRight = icon(ArrowRight01Icon);
 export const CircleAlert = icon(AlertCircleIcon);
 export const CircleCheck = icon(CheckmarkCircle02Icon);
-export const CircleDot = icon(RecordIcon);
 export const Clock = icon(Clock01Icon);
 export const Command = icon(CommandIcon);
 export const Copy = icon(Copy01Icon);
@@ -115,7 +111,6 @@ export const Inbox = icon(InboxIcon);
 export const Info = icon(InformationCircleIcon);
 export const KeyRound = icon(Key01Icon);
 export const Link2 = icon(Link01Icon);
-export const ListChecks = icon(CheckListIcon);
 export const LoaderCircle = icon(Loading03Icon);
 export const Lock = icon(LockIcon);
 export const LogOut = icon(Logout01Icon);
@@ -142,7 +137,6 @@ export const Search = icon(Search01Icon);
 export const Send = icon(SentIcon);
 export const Settings = icon(Settings02Icon);
 export const Sparkles = icon(SparklesIcon);
-export const Square = icon(StopIcon);
 export const SquarePen = icon(PencilEdit01Icon);
 export const Sun = icon(Sun03Icon);
 export const Target = icon(Target02Icon);

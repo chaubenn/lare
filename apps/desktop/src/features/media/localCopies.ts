@@ -7,14 +7,12 @@ import type { Video } from "@lare/supabase-types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useUser } from "@/features/auth/AuthProvider";
+import { queryKeys, refresh } from "@/lib/queryKeys";
 import { recorder } from "@/lib/recorder";
-import { supabase } from "@/lib/supabase";
+import { supabase, uniqueChannel } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
-import { recordingsKey } from "./hooks";
 import { copiesToRemove, localFileFor } from "./localCopyRules";
 import { deleteRecordingMeta, getAllRecordingMeta } from "./recordingStore";
-
-export const localCopiesKey = ["local-copies"] as const;
 
 /** Sweep interval for copies whose ready event was missed (app closed, socket dropped). */
 const SWEEP_MS = 5 * 60_000;
@@ -26,7 +24,7 @@ export function useLocalVideoSrc(
 ): string | null {
   const notReady = status !== "ready";
   const query = useQuery({
-    queryKey: [...localCopiesKey, videoId],
+    queryKey: queryKeys.localCopies.of(videoId),
     enabled: inTauri && !!videoId && notReady,
     queryFn: async () => {
       const [metas, recordings] = await Promise.all([getAllRecordingMeta(), recorder.list()]);
@@ -41,7 +39,7 @@ export function useLocalVideoSrc(
 }
 
 /** Delete local recordings whose cloud video is ready or gone. Returns how many were removed. */
-export async function removeProcessedCopies(): Promise<number> {
+async function removeProcessedCopies(): Promise<number> {
   const metas = Object.values(await getAllRecordingMeta()).filter((m) => m.uploaded && m.videoId);
   if (metas.length === 0) return 0;
   const ids = [...new Set(metas.map((m) => m.videoId as string))];
@@ -70,14 +68,11 @@ export function useLocalCopyCleanup(): void {
     if (!inTauri) return;
     const run = () =>
       void removeProcessedCopies().then((removed) => {
-        if (removed === 0) return;
-        void queryClient.invalidateQueries({ queryKey: localCopiesKey });
-        void queryClient.invalidateQueries({ queryKey: recordingsKey });
+        if (removed > 0) void refresh.recordings(queryClient);
       });
     run();
     const timer = setInterval(run, SWEEP_MS);
-    const channel = supabase
-      .channel(`local-copies:${userId}:${crypto.randomUUID()}`)
+    const channel = uniqueChannel(`local-copies:${userId}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "videos", filter: `user_id=eq.${userId}` },

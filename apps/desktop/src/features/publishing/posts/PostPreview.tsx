@@ -1,17 +1,12 @@
 import { formatLocalTimestamp } from "@lare/shared";
 import type { Post, Video } from "@lare/supabase-types";
 import { Lock, X } from "@lare/ui/icons";
+import { Avatar } from "@lare/ui/primitives";
 import { useEffect } from "react";
-import { Avatar } from "@/components/ui/Avatar";
 import { useUser } from "@/features/auth/AuthProvider";
-import {
-  PostSlides,
-  postHasSlides,
-  type SlidePost,
-  type SlideVideo,
-} from "@/features/feed/PostSlides";
 import { useVideo } from "@/features/media/hooks";
 import { usePostMedia } from "@/features/publishing/posts/media";
+import { PostSlides, postHasSlides, type SlidePost, type SlideVideo } from "./PostSlides";
 
 /**
  * How the post will look once it is published, drawn from what is in the editor right now
@@ -184,15 +179,13 @@ export function usePreviewSlides({
 }
 
 /** A video row narrowed to the four fields the deck reads. */
-export function toSlideVideo(clip: Video | null | undefined): SlideVideo | null {
+function toSlideVideo(clip: Video | null | undefined): SlideVideo | null {
   return clip
     ? {
         id: clip.id,
         status: clip.status,
         bunny_video_id: clip.bunny_video_id,
         duration_ms: clip.duration_ms,
-        width: clip.width,
-        height: clip.height,
       }
     : null;
 }

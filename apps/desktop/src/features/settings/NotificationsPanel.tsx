@@ -1,6 +1,5 @@
+import { Card, SectionTitle, Toggle } from "@lare/ui/primitives";
 import { useEffect, useState } from "react";
-import { Card, SectionTitle } from "@/components/ui/Card";
-import { Toggle } from "@/components/ui/Field";
 import {
   desktopNotificationsEnabled,
   setDesktopNotificationsEnabled,

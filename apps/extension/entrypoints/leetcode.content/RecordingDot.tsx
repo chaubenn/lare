@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { TabMessage } from "@/src/messages";
 import type { PageController } from "@/src/pageController";
 
 /**
@@ -7,7 +8,7 @@ import type { PageController } from "@/src/pageController";
  *
  * There is deliberately nothing else here. Practice is tracked silently, and an
  * interview should not put a timer or a control panel in front of someone who is
- * trying to think — but recording without any visible sign of it would be worse,
+ * trying to think. But recording without any visible sign of it would be worse,
  * so the dot stays. Controls live in the extension side panel and the desktop pill.
  */
 export function RecordingDot({ controller }: { controller: PageController }) {
@@ -15,7 +16,7 @@ export function RecordingDot({ controller }: { controller: PageController }) {
   const [forced, setForced] = useState(false);
   useEffect(() => {
     const listener = (
-      msg: { type?: string; visible?: boolean },
+      msg: TabMessage,
       _sender: chrome.runtime.MessageSender,
       respond: (value: unknown) => void,
     ) => {

@@ -58,11 +58,11 @@ export interface SubmissionDetailsResult {
 /**
  * Distributions are computed asynchronously by LeetCode after a submission is
  * judged, so we retry a few times before giving up on them (but still return
- * whatever we have).
+ * whatever we have). The wait grows with each attempt: `delayMs`, twice that, and so on.
  */
 export async function fetchSubmissionDetails(
   submissionId: number,
-  { retries = 6, delayMs = 1500 } = {},
+  { retries, delayMs }: { retries: number; delayMs: number },
 ): Promise<SubmissionDetailsResult> {
   let details: SubmissionDetails | null = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -74,8 +74,8 @@ export async function fetchSubmissionDetails(
         const accepted = details.statusCode === 10;
         if (!accepted || (details.runtimeDistribution && details.memoryDistribution)) break;
       }
-    } catch {
-      // retry
+    } catch (e) {
+      if (attempt === retries) console.warn("[lare] submission details unavailable", e);
     }
     await new Promise((r) => setTimeout(r, delayMs * (attempt + 1)));
   }
@@ -90,7 +90,6 @@ export function statusLabel(
   code: number | null | undefined,
   fallback: string | null,
 ): string | null {
-  if (code !== null && code !== undefined && LEETCODE_STATUS[code])
-    return LEETCODE_STATUS[code] ?? fallback;
-  return fallback;
+  if (code === null || code === undefined) return fallback;
+  return LEETCODE_STATUS[code] || fallback;
 }

@@ -1,12 +1,13 @@
 import { HANDLE_RE } from "@lare/shared";
+import { Button, FieldError, Input, Label, Toggle } from "@lare/ui/primitives";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { FieldError, Input, Label, Toggle } from "@/components/ui/Field";
 import { WindowScreen } from "@/components/ui/WindowScreen";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage, supabase } from "@/lib/supabase";
-import { profileQueryKey, useAuth, useUser } from "./AuthProvider";
+import { errorMessage } from "@/lib/errors";
+import { notify } from "@/lib/notices";
+import { queryKeys } from "@/lib/queryKeys";
+import { supabase } from "@/lib/supabase";
+import { useAuth, useUser } from "./AuthProvider";
 
 export { HANDLE_RE };
 
@@ -14,7 +15,6 @@ export function OnboardingPage() {
   const { userId, session } = useUser();
   const { signOut } = useAuth();
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   const suggested = (session.user.user_metadata as Record<string, unknown>)?.user_name;
   const suggestedName =
     (session.user.user_metadata as Record<string, unknown>)?.full_name ??
@@ -50,7 +50,7 @@ export function OnboardingPage() {
       }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.profile(userId) });
       notify({ title: "Welcome to Lare", variant: "success" });
     },
     onError: (err) => setError(errorMessage(err)),

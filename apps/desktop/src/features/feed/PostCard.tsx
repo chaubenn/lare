@@ -1,27 +1,24 @@
 import { postStateOf } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Check, Heart, Link2, Lock, MessageCircle, Sparkles } from "@lare/ui/icons";
+import { Avatar, Button, PostStateBadge } from "@lare/ui/primitives";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
-import { PostStateBadge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { ExpandableText } from "@/components/ui/ExpandableText";
 import { CommentsPreview } from "@/features/feed/CommentsPreview";
-import { PostSlides, postHasSlides } from "@/features/feed/PostSlides";
 import type { FeedPost } from "@/features/feed/queries";
-import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
-import type { UserPost } from "@/features/profile/queries";
-import { SHARE_LINKS, useCopyPostLink } from "@/features/publishing/posts/postActions";
+import { PostSlides, postHasSlides } from "@/features/publishing/posts/PostSlides";
+import { useCopyPostLink } from "@/features/publishing/posts/postActions";
 import { useToggleLike } from "@/features/publishing/posts/social";
-import { errorMessage } from "@/lib/supabase";
+import { notifyError } from "@/lib/notices";
+import { routes } from "@/lib/routes";
 
 const cardClass =
   "rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]";
 
 /**
- * A post in the feed, mirroring the web feed card exactly: author header with the copy-link
+ * A post in the feed: author header with the copy-link
  * action (shown on hover or focus), the caption above the swipe deck (images → demo video; absent
  * when the post has no media), then the like/comment row with the "View post" link inline and an
  * inline preview of the first comments.
@@ -30,11 +27,10 @@ export function PostCard({
   post,
   liked,
 }: {
-  post: FeedPost | UserPost;
+  post: FeedPost;
   /** Whether the signed-in viewer has liked this post, resolved once for the whole page. */
   liked: boolean;
 }) {
-  const { notify } = useNotify();
   const toggle = useToggleLike(post.id);
   const author = post.profiles;
   const session = post.sessions;
@@ -42,17 +38,17 @@ export function PostCard({
   const when = post.published_at ?? post.created_at;
   const title = post.title?.trim() || "Untitled session";
   const body = post.body?.trim() ?? "";
-  const href = `/posts/${post.id}`;
+  const href = routes.post(post.id);
   const isLiked = toggle.data?.liked ?? liked;
   const likeCount = toggle.data?.like_count ?? post.like_count;
   const showAiReview = Boolean(post.include_ai_insights && session?.kind === "interview");
 
   return (
-    <article className={cn(cardClass, "group overflow-hidden")}>
+    <article className={cn(cardClass, "group")}>
       <header className="flex items-center gap-3 p-4 pb-3 sm:px-5">
         {author?.handle ? (
           <ProfileHoverCard handle={author.handle} className="shrink-0">
-            <Link to={`/u/${author.handle}`}>
+            <Link to={routes.user(author.handle)}>
               <Avatar url={author.avatar_url} name={name} size={40} />
             </Link>
           </ProfileHoverCard>
@@ -64,7 +60,7 @@ export function PostCard({
             {author?.handle ? (
               <ProfileHoverCard handle={author.handle} className="min-w-0 truncate">
                 <Link
-                  to={`/u/${author.handle}`}
+                  to={routes.user(author.handle)}
                   className="text-sm font-semibold text-[var(--text)] hover:underline"
                 >
                   {name}
@@ -94,9 +90,7 @@ export function PostCard({
             <PostStateBadge state={postStateOf(post)} />
           </div>
         </div>
-        {SHARE_LINKS && post.status === "published" && post.slug ? (
-          <CopyLinkButton slug={post.slug} />
-        ) : null}
+        {post.status === "published" && post.slug ? <CopyLinkButton slug={post.slug} /> : null}
       </header>
 
       <div className="px-4 sm:px-5">
@@ -127,12 +121,7 @@ export function PostCard({
             disabled={toggle.isPending}
             onClick={() =>
               toggle.mutate(undefined, {
-                onError: (e) =>
-                  notify({
-                    title: "Couldn't like",
-                    description: errorMessage(e),
-                    variant: "error",
-                  }),
+                onError: (e) => notifyError("Couldn't like", e),
               })
             }
             className={cn(

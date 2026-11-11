@@ -1,12 +1,11 @@
 import { Camera, ExternalLink, type IconComponent, Mic, Monitor, RotateCcw } from "@lare/ui/icons";
+import { Badge, Button, FieldError } from "@lare/ui/primitives";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { FieldError } from "@/components/ui/Field";
-import { permissionsKey, usePermissions } from "@/features/media/hooks";
-import { useNotify } from "@/features/notifications/notices";
+import { usePermissions } from "@/features/media/hooks";
+import { errorMessage } from "@/lib/errors";
+import { notify, notifyError } from "@/lib/notices";
+import { queryKeys } from "@/lib/queryKeys";
 import { type PermissionStatus, type Permissions, recorder } from "@/lib/recorder";
-import { errorMessage } from "@/lib/supabase";
 import { inTauri } from "@/lib/tauri";
 import { SubSection } from "./shared";
 
@@ -80,12 +79,11 @@ export function PermissionsSection() {
  */
 function StaleGrantNotice() {
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
 
   const reset = useMutation({
     mutationFn: () => recorder.resetScreenRecordingPermission(),
     onSuccess: async (status) => {
-      await queryClient.invalidateQueries({ queryKey: permissionsKey });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.recorder.permissions });
       if (status === "granted") {
         notify({ title: "Screen recording allowed", variant: "success" });
         return;
@@ -95,12 +93,7 @@ function StaleGrantNotice() {
         description: "Lare has asked macOS again. Switch it on if prompted, then reopen Lare.",
       });
     },
-    onError: (e) =>
-      notify({
-        title: "Couldn't reset the permission",
-        description: errorMessage(e),
-        variant: "error",
-      }),
+    onError: (e) => notifyError("Couldn't reset the permission", e),
   });
 
   return (
@@ -132,11 +125,10 @@ function PermissionRow({
   status: PermissionStatus | undefined;
 }) {
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   const Icon = row.icon;
 
   const settingsUrl = useQuery({
-    queryKey: ["recorder", "permission-settings-url", row.which] as const,
+    queryKey: queryKeys.recorder.permissionSettingsUrl(row.which),
     enabled: inTauri,
     queryFn: () => recorder.permissionSettingsUrl(row.which),
     staleTime: Number.POSITIVE_INFINITY,
@@ -145,7 +137,7 @@ function PermissionRow({
   const request = useMutation({
     mutationFn: () => recorder.requestPermission(row.which),
     onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: permissionsKey });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.recorder.permissions });
       if (result === "granted") {
         notify({ title: `${row.label} allowed`, variant: "success" });
       } else if (row.which === "screen_recording") {
@@ -158,12 +150,7 @@ function PermissionRow({
         });
       }
     },
-    onError: (e) =>
-      notify({
-        title: `Couldn't request ${row.label.toLowerCase()} access`,
-        description: errorMessage(e),
-        variant: "error",
-      }),
+    onError: (e) => notifyError(`Couldn't request ${row.label.toLowerCase()} access`, e),
   });
 
   const openSettings = async () => {
@@ -172,11 +159,7 @@ function PermissionRow({
     try {
       await recorder.openPermissionSettings(row.which);
     } catch (e) {
-      notify({
-        title: "Couldn't open System Settings",
-        description: errorMessage(e),
-        variant: "error",
-      });
+      notifyError("Couldn't open System Settings", e);
     }
   };
 

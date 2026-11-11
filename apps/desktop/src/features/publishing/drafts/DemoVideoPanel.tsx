@@ -1,30 +1,26 @@
 import { Camera, Mic, Trash2, Video } from "@lare/ui/icons";
-import { Progress } from "@lare/ui/primitives";
+import { Button, Card, Progress, SectionTitle, Toggle } from "@lare/ui/primitives";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
-import { Button } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
-import { Toggle } from "@/components/ui/Field";
-import { VideoEmbed } from "@/components/VideoEmbed";
+import { confirm } from "@/components/ui/Confirm";
 import { useUser } from "@/features/auth/AuthProvider";
 import { usePermissions, useRecorderStatus, useRecordings, useVideo } from "@/features/media/hooks";
 import { isActive, useJobs } from "@/features/media/jobs";
-import { publishInstantDemo, type VideoSlot } from "@/features/media/pipeline";
-import { patchRecordingMeta } from "@/features/media/recordingStore";
-import { useNotify } from "@/features/notifications/notices";
-import { confirm } from "@/lib/confirm";
-import { type CreateUploadResponse, recorder } from "@/lib/recorder";
-import { errorMessage, invokeFunction } from "@/lib/supabase";
+import { publishInstantDemo, startSlotRecording } from "@/features/media/pipeline";
+import type { VideoSlot } from "@/features/media/types";
+import { VideoEmbed } from "@/features/media/VideoEmbed";
+import { edge } from "@/lib/edge";
+import { notify, notifyError } from "@/lib/notices";
+import { queryKeys } from "@/lib/queryKeys";
+import { routes } from "@/lib/routes";
 import { inTauri } from "@/lib/tauri";
 import type { Draft } from "./queries";
-import { draftKey, draftsKey } from "./queries";
 
 /** Everything the two panels share: recorder state, permissions and cache invalidation. */
 function useSlotRecording(draft: Draft) {
   const { userId } = useUser();
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   const status = useRecorderStatus();
   const permissions = usePermissions();
 
@@ -35,43 +31,20 @@ function useSlotRecording(draft: Draft) {
 
   const invalidate = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: draftKey(draft.id) }),
-      queryClient.invalidateQueries({ queryKey: draftsKey(userId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.draft.of(draft.id) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.drafts.of(userId) }),
     ]);
   };
 
-  /**
-   * Start a take for one slot. The recorder only knows which post it belongs to, so the slot is
-   * written to the local recording store here and read back when the take finishes.
-   */
   const start = async (slot: VideoSlot, options: { facecam: boolean; mic: boolean }) => {
-    const upload = await invokeFunction<CreateUploadResponse>("bunny-create-upload", {
-      mode: "instant",
-      title: slot === "demo" ? "Summary video" : "Demo video",
-      captureSource: "desktop",
-      mimeType: "video/mp4",
-    });
-    try {
-      const uploadUrl = await recorder.prepareUpload(upload.tus);
-      const state = await recorder.start({ mode: "instant", postId: draft.id, ...options });
-      if (state.recordingId)
-        await patchRecordingMeta(state.recordingId, {
-          slot,
-          upload,
-          uploadUrl,
-          videoId: upload.videoId,
-        });
-    } catch (error) {
-      await invokeFunction("video-delete", { videoId: upload.videoId }).catch(() => undefined);
-      throw error;
-    }
+    await startSlotRecording({ postId: draft.id, slot, ...options });
     notify({
       title: "Recording",
       description: "Stop from the pill to upload straight away.",
     });
   };
 
-  return { permissions, recordingBusy, screenOk, invalidate, start, notify };
+  return { permissions, recordingBusy, screenOk, invalidate, start };
 }
 
 /**
@@ -84,7 +57,6 @@ export function DemoVideoPanel({ draft }: { draft: Draft }) {
   const recordings = useRecordings();
   const { userId } = useUser();
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   const working = useJobs().some((job) => isActive(job) && job.postId === draft.id);
   const retry = useMutation({
     mutationFn: (recording: NonNullable<typeof recordings.data>[number]) =>
@@ -96,12 +68,7 @@ export function DemoVideoPanel({ draft }: { draft: Draft }) {
         title: draft.title ?? "Demo video",
         queryClient,
       }),
-    onError: (error) =>
-      notify({
-        title: "Upload failed; source kept",
-        description: errorMessage(error),
-        variant: "error",
-      }),
+    onError: (error) => notifyError("Upload failed; source kept", error),
   });
   const pending = recordings.data?.filter((r) => r.postId === draft.id && !r.uploaded) ?? [];
   return (
@@ -152,18 +119,13 @@ function MainVideoPanel({ draft }: { draft: Draft }) {
   const removeVideo = useMutation({
     mutationFn: async () => {
       if (!draft.video_id) return;
-      await invokeFunction("video-delete", { videoId: draft.video_id });
+      await edge.deleteVideo(draft.video_id);
     },
     onSuccess: async () => {
       await slot.invalidate();
-      slot.notify({ title: "Video removed" });
+      notify({ title: "Video removed" });
     },
-    onError: (e) =>
-      slot.notify({
-        title: "Couldn't remove video",
-        description: errorMessage(e),
-        variant: "error",
-      }),
+    onError: (e) => notifyError("Couldn't remove video", e),
   });
   // The interview take is recorded live during the session: once it is gone there is no second
   // attempt, unlike a demo you can simply record again.
@@ -259,18 +221,13 @@ function SummaryVideoPanel({ draft }: { draft: Draft }) {
   const removeVideo = useMutation({
     mutationFn: async () => {
       if (!draft.demo_video_id) return;
-      await invokeFunction("video-delete", { videoId: draft.demo_video_id });
+      await edge.deleteVideo(draft.demo_video_id);
     },
     onSuccess: async () => {
       await slot.invalidate();
-      slot.notify({ title: "Summary video removed" });
+      notify({ title: "Summary video removed" });
     },
-    onError: (e) =>
-      slot.notify({
-        title: "Couldn't remove the summary video",
-        description: errorMessage(e),
-        variant: "error",
-      }),
+    onError: (e) => notifyError("Couldn't remove the summary video", e),
   });
   const confirmRemove = async () => {
     const ok = await confirm({
@@ -360,7 +317,7 @@ function RecordControls({
   blurb: ReactNode;
   recording: ReturnType<typeof useSlotRecording>;
 }) {
-  const { permissions, recordingBusy, screenOk, start, notify } = recording;
+  const { permissions, recordingBusy, screenOk, start } = recording;
   const [facecam, setFacecam] = useState(false);
   const [mic, setMic] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -372,7 +329,7 @@ function RecordControls({
     try {
       await start(slot, { facecam, mic });
     } catch (e) {
-      notify({ title: "Couldn't start recording", description: errorMessage(e), variant: "error" });
+      notifyError("Couldn't start recording", e);
     } finally {
       setStarting(false);
     }
@@ -386,7 +343,7 @@ function RecordControls({
       ) : permissions.data && !screenOk ? (
         <p className="text-xs text-amber-400">
           Screen recording permission is required.{" "}
-          <Link to="/settings" className="underline">
+          <Link to={routes.settings} className="underline">
             Grant it in Settings
           </Link>
           .

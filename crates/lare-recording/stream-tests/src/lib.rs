@@ -2,6 +2,9 @@
 #![cfg(test)]
 #[path = "../../src/fragmented.rs"]
 mod fragmented;
+#[allow(dead_code)]
+#[path = "../../src/layout.rs"]
+mod layout;
 #[path = "../../src/live.rs"]
 mod live;
 

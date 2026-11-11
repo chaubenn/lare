@@ -15,38 +15,3 @@ export const brand = {
   statusPause: "#c4a15a",
   statusStop: "#c45c5c",
 } as const;
-
-export const semantic = {
-  surface: brand.ink,
-  surfaceRaised: brand.ink2,
-  surfaceSunken: brand.ink3,
-  border: brand.line,
-  borderStrong: brand.lineStrong,
-  text: brand.bone,
-  textSecondary: brand.soft,
-  textTertiary: brand.muted,
-  accent: brand.bone,
-  accentFg: brand.ink,
-  focus: brand.focus,
-  diffEasy: brand.statusRun,
-  diffMedium: brand.statusPause,
-  diffHard: brand.statusStop,
-  info: "#7a9eb0",
-  danger: brand.statusStop,
-} as const;
-
-export const DIFFICULTY_COLOUR: Record<"Easy" | "Medium" | "Hard", string> = {
-  Easy: semantic.diffEasy,
-  Medium: semantic.diffMedium,
-  Hard: semantic.diffHard,
-};
-
-export const chart = {
-  barIdle: brand.lineStrong,
-  barActive: brand.bone,
-  barStub: brand.line,
-  tick: brand.muted,
-  paper: brand.ink2,
-  ink: brand.bone,
-  line: brand.line,
-} as const;

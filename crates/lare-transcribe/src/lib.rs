@@ -13,9 +13,7 @@ use std::time::Duration;
 use anyhow::{Context, anyhow};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use whisper_rs::{
-    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
-};
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 pub const SAMPLE_RATE: u32 = 16_000;
 
@@ -28,40 +26,110 @@ pub enum ModelKind {
     MediumEn,
 }
 
+/// Everything that differs between models, in one place: adding a model is a variant, a row
+/// here and an entry in [`ModelKind::ALL`].
+struct ModelSpec {
+    /// The serialised name, as the settings file and the webview spell it.
+    name: &'static str,
+    file_name: &'static str,
+    label: &'static str,
+    approx_mb: u32,
+    /// Exact size in bytes, from the upstream LFS pointer.
+    size: u64,
+    /// Upstream SHA-256 of the file.
+    sha256: &'static str,
+}
+
 impl ModelKind {
-    pub fn file_name(self) -> &'static str {
+    pub const ALL: [ModelKind; 4] = [
+        ModelKind::TinyEn,
+        ModelKind::BaseEn,
+        ModelKind::SmallEn,
+        ModelKind::MediumEn,
+    ];
+
+    const fn spec(self) -> ModelSpec {
         match self {
-            ModelKind::TinyEn => "ggml-tiny.en.bin",
-            ModelKind::BaseEn => "ggml-base.en.bin",
-            ModelKind::SmallEn => "ggml-small.en.bin",
-            ModelKind::MediumEn => "ggml-medium.en.bin",
+            ModelKind::TinyEn => ModelSpec {
+                name: "tiny-en",
+                file_name: "ggml-tiny.en.bin",
+                label: "tiny.en (fastest, least accurate)",
+                approx_mb: 75,
+                size: 77_704_715,
+                sha256: "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
+            },
+            ModelKind::BaseEn => ModelSpec {
+                name: "base-en",
+                file_name: "ggml-base.en.bin",
+                label: "base.en (fast)",
+                approx_mb: 142,
+                size: 147_964_211,
+                sha256: "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+            },
+            ModelKind::SmallEn => ModelSpec {
+                name: "small-en",
+                file_name: "ggml-small.en.bin",
+                label: "small.en (recommended)",
+                approx_mb: 466,
+                size: 487_614_201,
+                sha256: "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
+            },
+            ModelKind::MediumEn => ModelSpec {
+                name: "medium-en",
+                file_name: "ggml-medium.en.bin",
+                label: "medium.en (slow, most accurate)",
+                approx_mb: 1500,
+                size: 1_533_774_781,
+                sha256: "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356",
+            },
         }
     }
 
-    pub fn url(self) -> String {
-        format!(
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{}",
-            self.file_name()
-        )
+    /// The model with this serialised name (`tiny-en`, `small-en`, ...).
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.spec().name == name)
+    }
+
+    pub fn file_name(self) -> &'static str {
+        self.spec().file_name
     }
 
     /// Approximate download size in MB (for UI).
     pub fn approx_mb(self) -> u32 {
-        match self {
-            ModelKind::TinyEn => 75,
-            ModelKind::BaseEn => 142,
-            ModelKind::SmallEn => 466,
-            ModelKind::MediumEn => 1500,
-        }
+        self.spec().approx_mb
     }
 
     pub fn label(self) -> &'static str {
-        match self {
-            ModelKind::TinyEn => "tiny.en (fastest, least accurate)",
-            ModelKind::BaseEn => "base.en (fast)",
-            ModelKind::SmallEn => "small.en (recommended)",
-            ModelKind::MediumEn => "medium.en (slow, most accurate)",
-        }
+        self.spec().label
+    }
+
+    /// Exact file size in bytes. Lets the downloader plan ranged requests and preallocate the
+    /// file without trusting the server's headers.
+    pub fn size(self) -> u64 {
+        self.spec().size
+    }
+
+    /// Verified after every download.
+    pub fn sha256(self) -> &'static str {
+        self.spec().sha256
+    }
+
+    /// Download sources in order of preference: an operator override (`LARE_MODEL_BASE_URL`),
+    /// the project's GitHub release mirror, then HuggingFace upstream.
+    pub fn urls(self) -> Vec<String> {
+        self.sources(std::env::var("LARE_MODEL_BASE_URL").ok().as_deref())
+    }
+
+    fn sources(self, override_base: Option<&str>) -> Vec<String> {
+        let file = self.file_name();
+        let override_base = override_base
+            .map(|base| base.trim().trim_end_matches('/'))
+            .filter(|base| !base.is_empty());
+        override_base
+            .into_iter()
+            .chain([GITHUB_MODELS_BASE, HUGGINGFACE_MODELS_BASE])
+            .map(|base| format!("{base}/{file}"))
+            .collect()
     }
 }
 
@@ -85,47 +153,8 @@ pub enum Progress {
 pub const GITHUB_MODELS_BASE: &str =
     "https://github.com/chaubenn/lare/releases/download/whisper-models";
 
-impl ModelKind {
-    /// Exact file size in bytes (from the upstream LFS pointer). Lets the downloader plan ranged
-    /// requests and preallocate the file without trusting the server's headers.
-    pub fn size(self) -> u64 {
-        match self {
-            ModelKind::TinyEn => 77_704_715,
-            ModelKind::BaseEn => 147_964_211,
-            ModelKind::SmallEn => 487_614_201,
-            ModelKind::MediumEn => 1_533_774_781,
-        }
-    }
-
-    /// Upstream SHA-256 of the file; verified after every download.
-    pub fn sha256(self) -> &'static str {
-        match self {
-            ModelKind::TinyEn => "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
-            ModelKind::BaseEn => "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
-            ModelKind::SmallEn => {
-                "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d"
-            }
-            ModelKind::MediumEn => {
-                "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356"
-            }
-        }
-    }
-
-    /// Download sources in order of preference: an operator override (`LARE_MODEL_BASE_URL`),
-    /// the project's GitHub release mirror, then HuggingFace upstream.
-    pub fn urls(self) -> Vec<String> {
-        let mut urls = Vec::with_capacity(3);
-        if let Ok(base) = std::env::var("LARE_MODEL_BASE_URL") {
-            let base = base.trim().trim_end_matches('/');
-            if !base.is_empty() {
-                urls.push(format!("{base}/{}", self.file_name()));
-            }
-        }
-        urls.push(format!("{GITHUB_MODELS_BASE}/{}", self.file_name()));
-        urls.push(self.url());
-        urls
-    }
-}
+/// Where the ggml models are published upstream.
+const HUGGINGFACE_MODELS_BASE: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
 /// Progress events are throttled to this cadence so the webview is not flooded with one IPC
 /// message per network chunk (thousands per second), which freezes the UI.
@@ -629,226 +658,87 @@ fn append_samples(frame: &ffmpeg::frame::Audio, out: &mut Vec<f32>) {
     );
 }
 
-#[derive(Debug, Clone)]
-pub struct TranscribeOptions {
-    pub language: Option<String>,
-    pub threads: Option<usize>,
-    /// Domain hint that improves recognition of technical vocabulary.
-    pub initial_prompt: Option<String>,
-}
-
-impl Default for TranscribeOptions {
-    fn default() -> Self {
-        Self {
-            language: Some("en".into()),
-            threads: None,
-            initial_prompt: Some(
-                "A software engineering mock interview about a LeetCode problem: arrays, hash maps, \
-                 two pointers, binary search, dynamic programming, time complexity O(n), O(n log n), \
-                 O(n^2), edge cases, test cases."
-                    .into(),
-            ),
-        }
-    }
-}
+/// Domain hint that improves recognition of technical vocabulary.
+const INITIAL_PROMPT: &str = "A software engineering mock interview about a LeetCode problem: arrays, hash maps, \
+     two pointers, binary search, dynamic programming, time complexity O(n), O(n log n), \
+     O(n^2), edge cases, test cases.";
 
 /// Transcribe 16 kHz mono PCM. Blocking and CPU/GPU heavy: call from `spawn_blocking`.
 pub fn transcribe_pcm<F>(
     model_path: &Path,
     pcm: &[f32],
-    opts: &TranscribeOptions,
-    on_progress: F,
+    mut on_progress: F,
 ) -> anyhow::Result<Vec<Segment>>
 where
     F: FnMut(Progress) + Send + 'static,
 {
-    PcmTranscriber::new(model_path)?.transcribe(pcm, opts, on_progress)
-}
-
-/// Reuses the model allocation and decoder state across rolling windows.
-pub struct PcmTranscriber {
-    state: WhisperState,
-}
-
-impl PcmTranscriber {
-    pub fn new(model_path: &Path) -> anyhow::Result<Self> {
-        let ctx = WhisperContext::new_with_params(
-            model_path
-                .to_str()
-                .ok_or_else(|| anyhow!("model path is not UTF-8"))?,
-            WhisperContextParameters::default(),
-        )
-        .map_err(|e| anyhow!("loading whisper model: {e}"))?;
-        Ok(Self {
-            state: ctx
-                .create_state()
-                .map_err(|e| anyhow!("whisper state: {e}"))?,
-        })
+    let ctx = WhisperContext::new_with_params(
+        model_path
+            .to_str()
+            .ok_or_else(|| anyhow!("model path is not UTF-8"))?,
+        WhisperContextParameters::default(),
+    )
+    .map_err(|e| anyhow!("loading whisper model: {e}"))?;
+    let mut state = ctx
+        .create_state()
+        .map_err(|e| anyhow!("whisper state: {e}"))?;
+    if pcm.len() < SAMPLE_RATE as usize / 2 {
+        return Ok(Vec::new());
     }
+    anyhow::ensure!(pcm.iter().all(|s| s.is_finite()), "non-finite PCM sample");
 
-    pub fn transcribe<F>(
-        &mut self,
-        pcm: &[f32],
-        opts: &TranscribeOptions,
-        mut on_progress: F,
-    ) -> anyhow::Result<Vec<Segment>>
-    where
-        F: FnMut(Progress) + Send + 'static,
-    {
-        if pcm.len() < SAMPLE_RATE as usize / 2 {
-            return Ok(Vec::new());
-        }
-        anyhow::ensure!(pcm.iter().all(|s| s.is_finite()), "non-finite PCM sample");
-        let state = &mut self.state;
-
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        // whisper.cpp's GGML thread pool has well-documented hangs on Windows at higher
-        // thread counts; cap lower there. Other platforms keep the wider cap.
-        #[cfg(target_os = "windows")]
-        const MAX_THREADS: usize = 4;
-        #[cfg(not(target_os = "windows"))]
-        const MAX_THREADS: usize = 8;
-        let threads = opts.threads.unwrap_or_else(|| {
-            std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(4)
-                .min(MAX_THREADS)
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    // whisper.cpp's GGML thread pool has well-documented hangs on Windows at higher
+    // thread counts; cap lower there. Other platforms keep the wider cap.
+    #[cfg(target_os = "windows")]
+    const MAX_THREADS: usize = 4;
+    #[cfg(not(target_os = "windows"))]
+    const MAX_THREADS: usize = 8;
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .min(MAX_THREADS);
+    params.set_n_threads(threads as i32);
+    params.set_translate(false);
+    params.set_language(Some("en"));
+    params.set_print_special(false);
+    params.set_print_progress(false);
+    params.set_print_realtime(false);
+    params.set_print_timestamps(false);
+    params.set_token_timestamps(false);
+    params.set_suppress_blank(true);
+    params.set_max_len(0);
+    params.set_initial_prompt(INITIAL_PROMPT);
+    params.set_progress_callback_safe(move |p: i32| {
+        on_progress(Progress::Transcribing {
+            percent: p.clamp(0, 100) as u32,
         });
-        params.set_n_threads(threads as i32);
-        params.set_translate(false);
-        params.set_language(opts.language.as_deref());
-        params.set_print_special(false);
-        params.set_print_progress(false);
-        params.set_print_realtime(false);
-        params.set_print_timestamps(false);
-        params.set_token_timestamps(false);
-        params.set_suppress_blank(true);
-        params.set_max_len(0);
-        if let Some(prompt) = &opts.initial_prompt {
-            params.set_initial_prompt(prompt);
+    });
+
+    state
+        .full(params, pcm)
+        .map_err(|e| anyhow!("whisper full() failed: {e}"))?;
+
+    let mut segments = Vec::new();
+    for seg in state.as_iter() {
+        let text = seg
+            .to_str_lossy()
+            .map(|c| c.trim().to_string())
+            .unwrap_or_default();
+        // Pure non-speech markers like [BLANK_AUDIO] are not transcript.
+        if text.is_empty() || (text.starts_with('[') && text.ends_with(']')) {
+            continue;
         }
-        params.set_progress_callback_safe(move |p: i32| {
-            on_progress(Progress::Transcribing {
-                percent: p.clamp(0, 100) as u32,
-            });
+        // whisper timestamps are in centiseconds.
+        let s = (seg.start_timestamp().max(0) as u64) * 10;
+        let e = (seg.end_timestamp().max(0) as u64) * 10;
+        segments.push(Segment {
+            s,
+            e: e.max(s),
+            text,
         });
-
-        state
-            .full(params, pcm)
-            .map_err(|e| anyhow!("whisper full() failed: {e}"))?;
-
-        let mut segments = Vec::new();
-        for seg in state.as_iter() {
-            let text = seg
-                .to_str_lossy()
-                .map(|c| c.trim().to_string())
-                .unwrap_or_default();
-            if text.is_empty() || (text.starts_with('[') && text.ends_with(']')) {
-                continue; // skip empty and pure non-speech markers like [BLANK_AUDIO]
-            }
-            // whisper timestamps are in centiseconds.
-            let s = (seg.start_timestamp().max(0) as u64) * 10;
-            let e = (seg.end_timestamp().max(0) as u64) * 10;
-            segments.push(Segment {
-                s,
-                e: e.max(s),
-                text,
-            });
-        }
-        Ok(segments)
     }
-}
-
-/// Bounded rolling audio buffer. Timestamps remain relative to the entire PCM stream.
-pub struct RollingTranscriber {
-    engine: PcmTranscriber,
-    pcm: Vec<f32>,
-    offset: u64,
-    pub segments: Vec<Segment>,
-    pub next_sample: u64,
-    finished: bool,
-}
-
-impl RollingTranscriber {
-    pub fn new(model: &Path) -> anyhow::Result<Self> {
-        Ok(Self {
-            engine: PcmTranscriber::new(model)?,
-            pcm: Vec::new(),
-            offset: 0,
-            segments: Vec::new(),
-            next_sample: 0,
-            finished: false,
-        })
-    }
-
-    pub fn push(&mut self, pcm: &[f32], finish: bool) -> anyhow::Result<()> {
-        anyhow::ensure!(!self.finished, "transcription already finished");
-        anyhow::ensure!(
-            pcm.len() <= SAMPLE_RATE as usize * 30,
-            "PCM frame exceeds 30 seconds"
-        );
-        anyhow::ensure!(pcm.iter().all(|s| s.is_finite()), "non-finite PCM sample");
-        self.pcm.extend_from_slice(pcm);
-        self.next_sample += pcm.len() as u64;
-        let window = SAMPLE_RATE as usize * 30;
-        let stride = SAMPLE_RATE as usize * 28;
-        while self.pcm.len() >= window || (finish && !self.pcm.is_empty()) {
-            let count = self.pcm.len().min(window);
-            let result = self.engine.transcribe(
-                &self.pcm[..count],
-                &TranscribeOptions::default(),
-                |_| {},
-            )?;
-            append_window(
-                &mut self.segments,
-                result,
-                self.offset * 1000 / u64::from(SAMPLE_RATE),
-            );
-            let consumed = if count < window { count } else { stride };
-            self.pcm.drain(..consumed);
-            self.offset += consumed as u64;
-        }
-        self.finished = finish;
-        Ok(())
-    }
-}
-
-fn append_window(existing: &mut Vec<Segment>, incoming: Vec<Segment>, offset: u64) {
-    for mut segment in incoming {
-        segment.s += offset;
-        segment.e += offset;
-        if let Some(last) = existing.last() {
-            if segment.e <= last.e {
-                continue;
-            }
-            if segment.s <= last.e {
-                let previous: Vec<_> = existing
-                    .iter()
-                    .filter(|s| s.e > offset)
-                    .flat_map(|s| s.text.split_whitespace())
-                    .collect();
-                let words: Vec<_> = segment.text.split_whitespace().collect();
-                let normalize = |s: &str| {
-                    s.trim_matches(|c: char| !c.is_alphanumeric())
-                        .to_lowercase()
-                };
-                let overlap = (1..=previous.len().min(words.len()))
-                    .rev()
-                    .find(|&n| {
-                        previous[previous.len() - n..]
-                            .iter()
-                            .zip(&words[..n])
-                            .all(|(a, b)| normalize(a) == normalize(b))
-                    })
-                    .unwrap_or(0);
-                segment.text = words[overlap..].join(" ");
-                segment.s = last.e;
-            }
-        }
-        if !segment.text.is_empty() && segment.e > segment.s {
-            existing.push(segment);
-        }
-    }
+    Ok(segments)
 }
 
 /// Decode + transcribe a media file. Blocking; call from `spawn_blocking`.
@@ -856,7 +746,6 @@ fn append_window(existing: &mut Vec<Segment>, incoming: Vec<Segment>, offset: u6
 pub fn transcribe_file<F>(
     model_path: &Path,
     input: &Path,
-    opts: &TranscribeOptions,
     mut on_progress: F,
 ) -> anyhow::Result<Vec<Segment>>
 where
@@ -864,7 +753,7 @@ where
 {
     on_progress(Progress::Decoding);
     let pcm = decode_to_pcm16k(input)?;
-    transcribe_pcm(model_path, &pcm, opts, on_progress)
+    transcribe_pcm(model_path, &pcm, on_progress)
 }
 
 /// WebVTT rendering (for Bunny captions).
@@ -894,98 +783,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rolling_seam_removes_repeated_words_and_offsets_timestamps() {
-        let mut segments = vec![Segment {
-            s: 27000,
-            e: 29500,
-            text: "use a Hash map.".into(),
-        }];
-        append_window(
-            &mut segments,
-            vec![Segment {
-                s: 0,
-                e: 4000,
-                text: "hash map for lookup".into(),
-            }],
-            28000,
-        );
-        assert_eq!(
-            segments[1],
-            Segment {
-                s: 29500,
-                e: 32000,
-                text: "for lookup".into()
-            }
-        );
-    }
-
-    #[test]
-    fn rolling_seam_skips_covered_segments_but_preserves_later_repetition() {
-        let mut segments = vec![Segment {
-            s: 27000,
-            e: 30000,
-            text: "yes".into(),
-        }];
-        append_window(
-            &mut segments,
-            vec![
-                Segment {
-                    s: 0,
-                    e: 1000,
-                    text: "yes".into(),
-                },
-                Segment {
-                    s: 3000,
-                    e: 4000,
-                    text: "yes".into(),
-                },
-            ],
-            28000,
-        );
-        assert_eq!(segments.len(), 2);
-        assert_eq!(segments[1].s, 31000);
-    }
-
-    #[test]
-    fn rolling_engine_can_move_to_the_blocking_worker() {
-        fn assert_send<T: Send>() {}
-        assert_send::<RollingTranscriber>();
-    }
-
-    #[test]
-    fn rolling_seam_deduplicates_across_segment_boundaries() {
-        let mut segments = vec![
-            Segment {
-                s: 28000,
-                e: 29000,
-                text: "a hash".into(),
-            },
-            Segment {
-                s: 29000,
-                e: 30000,
-                text: "map".into(),
-            },
-        ];
-        append_window(
-            &mut segments,
-            vec![Segment {
-                s: 1000,
-                e: 4000,
-                text: "hash map lookup".into(),
-            }],
-            28000,
-        );
-        assert_eq!(
-            segments.last().unwrap(),
-            &Segment {
-                s: 30000,
-                e: 32000,
-                text: "lookup".into()
-            }
-        );
-    }
-
-    #[test]
     fn webvtt_formats_timestamps() {
         let vtt = to_webvtt(&[Segment {
             s: 61_500,
@@ -1010,17 +807,36 @@ mod tests {
     }
 
     #[test]
-    fn sources_prefer_the_github_mirror_then_huggingface() {
-        let urls = ModelKind::SmallEn.urls();
-        assert!(urls[0].starts_with(GITHUB_MODELS_BASE) || urls.len() == 3);
-        assert_eq!(urls.last().unwrap(), &ModelKind::SmallEn.url());
+    fn sources_are_the_override_then_the_github_mirror_then_huggingface() {
+        let github = format!("{GITHUB_MODELS_BASE}/ggml-small.en.bin");
+        let upstream =
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin";
+        assert_eq!(
+            ModelKind::SmallEn.sources(None),
+            [github.as_str(), upstream]
+        );
+        assert_eq!(
+            ModelKind::SmallEn.sources(Some("  ")),
+            [github.as_str(), upstream]
+        );
+        assert_eq!(
+            ModelKind::SmallEn.sources(Some(" https://mirror.test/models/ ")),
+            [
+                "https://mirror.test/models/ggml-small.en.bin",
+                github.as_str(),
+                upstream
+            ]
+        );
     }
 
     #[test]
-    fn model_urls_point_at_ggerganov_hf() {
-        assert_eq!(
-            ModelKind::SmallEn.url(),
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"
-        );
+    fn model_names_are_the_serialised_ones() {
+        // The settings file and the webview hold these strings.
+        let names = ["tiny-en", "base-en", "small-en", "medium-en"];
+        for (kind, name) in ModelKind::ALL.into_iter().zip(names) {
+            assert_eq!(serde_json::to_value(kind).unwrap(), name);
+            assert_eq!(ModelKind::from_name(name), Some(kind));
+        }
+        assert_eq!(ModelKind::from_name("large"), None);
     }
 }

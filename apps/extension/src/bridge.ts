@@ -12,7 +12,6 @@ import { z } from "zod";
 export const BRIDGE_MARK = "__lare__" as const;
 
 export type MainToIsolated =
-  | { [BRIDGE_MARK]: 1; kind: "monaco-ready" }
   | {
       [BRIDGE_MARK]: 1;
       kind: "edits";
@@ -28,9 +27,7 @@ export type MainToIsolated =
 /** Omit that distributes over union members (plain Omit collapses unions). */
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
-export type IsolatedToMain =
-  | { [BRIDGE_MARK]: 2; kind: "request-snapshot"; modelId: string }
-  | { [BRIDGE_MARK]: 2; kind: "list-models" };
+export type IsolatedToMain = { [BRIDGE_MARK]: 2; kind: "request-snapshot"; modelId: string };
 
 const mark = z.literal(1);
 const pageUrl = z.url({ protocol: /^https?$/ }).max(4096);
@@ -38,7 +35,6 @@ const pageUrl = z.url({ protocol: /^https?$/ }).max(4096);
 const judgeBody = z.custom<object>((v) => typeof v === "object" && v !== null);
 
 const MainToIsolatedSchema: z.ZodType<MainToIsolated> = z.discriminatedUnion("kind", [
-  z.object({ [BRIDGE_MARK]: mark, kind: z.literal("monaco-ready") }),
   z.object({
     [BRIDGE_MARK]: mark,
     kind: z.literal("edits"),
@@ -52,7 +48,10 @@ const MainToIsolatedSchema: z.ZodType<MainToIsolated> = z.discriminatedUnion("ki
   z.object({ [BRIDGE_MARK]: mark, kind: z.literal("route"), url: pageUrl }),
 ]);
 
-/** The message if it is one the MAIN script sends, else null (to be ignored). */
+/**
+ * The message if it is one the MAIN script sends, else null (to be ignored). The MAIN script
+ * outlives extension updates, so kinds an older build posted (`monaco-ready`) still arrive.
+ */
 export function parseMainToIsolated(data: unknown): MainToIsolated | null {
   if (
     typeof data !== "object" ||

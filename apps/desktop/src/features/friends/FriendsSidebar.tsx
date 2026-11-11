@@ -1,16 +1,17 @@
 import { ArrowRight, Lock } from "@lare/ui/icons";
+import { Avatar } from "@lare/ui/primitives";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
 import { useUser } from "@/features/auth/AuthProvider";
 import { type FeedPost, useFeed } from "@/features/feed/queries";
+import { FollowButton } from "@/features/profile/FollowButton";
+import { type PersonSummary, useFollowStates } from "@/features/profile/follows";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { useProfileStats } from "@/features/profile/queries";
+import { personName } from "@/features/profile/UserRow";
 import { useFollowRequests } from "@/features/requests/queries";
 import { timeAgo } from "@/lib/format";
-import { FollowButton } from "./FollowButton";
-import { type PersonSummary, useFollowStates } from "./queries";
-import { personName } from "./UserRow";
+import { routes } from "@/lib/routes";
 
 type FriendsTab = "following" | "followers" | "requests" | "find";
 
@@ -21,7 +22,7 @@ type FriendsTab = "following" | "followers" | "requests" | "find";
 export function useSuggestedPeople(limit: number) {
   const { userId } = useUser();
   const feed = useFeed("all");
-  const authors = new Map<string, PersonSummary & { lastPostAt: string }>();
+  const authors = new Map<string, PersonSummary & { handle: string; lastPostAt: string }>();
   for (const post of feed.data?.pages.flat() ?? []) {
     const p = post.profiles;
     if (!p?.handle || post.user_id === userId || authors.has(post.user_id)) continue;
@@ -115,7 +116,7 @@ function Network({ onTab }: { onTab: (tab: FriendsTab) => void }) {
             <span>
               Private account: people request to follow you.{" "}
               <Link
-                to="/profile/edit"
+                to={routes.profileEdit}
                 className="underline underline-offset-2 hover:text-[var(--text)]"
               >
                 Change
@@ -126,7 +127,7 @@ function Network({ onTab }: { onTab: (tab: FriendsTab) => void }) {
           <span>
             Public account: follows are accepted automatically.{" "}
             <Link
-              to="/profile/edit"
+              to={routes.profileEdit}
               className="underline underline-offset-2 hover:text-[var(--text)]"
             >
               Change
@@ -154,7 +155,7 @@ function RecentlyActive() {
       title="Recently active"
       action={
         posts.length > 0 ? (
-          <Link to="/?scope=following" className={linkClass}>
+          <Link to={routes.followingFeed} className={linkClass}>
             Feed <ArrowRight className="size-3" aria-hidden />
           </Link>
         ) : undefined
@@ -172,7 +173,7 @@ function RecentlyActive() {
             return (
               <li key={post.id} className="flex items-start gap-2.5">
                 <ProfileHoverCard handle={p?.handle} className="shrink-0">
-                  <Link to={p?.handle ? `/u/${p.handle}` : `/posts/${post.id}`}>
+                  <Link to={p?.handle ? routes.user(p.handle) : routes.post(post.id)}>
                     <Avatar url={p?.avatar_url} name={name} size={28} />
                   </Link>
                 </ProfileHoverCard>
@@ -180,7 +181,7 @@ function RecentlyActive() {
                   <p className="flex items-baseline gap-1.5 text-sm">
                     <ProfileHoverCard handle={p?.handle} className="min-w-0 truncate">
                       <Link
-                        to={p?.handle ? `/u/${p.handle}` : `/posts/${post.id}`}
+                        to={p?.handle ? routes.user(p.handle) : routes.post(post.id)}
                         className="font-medium text-[var(--text)] hover:underline"
                       >
                         {name}
@@ -191,7 +192,7 @@ function RecentlyActive() {
                     </span>
                   </p>
                   <Link
-                    to={`/posts/${post.id}`}
+                    to={routes.post(post.id)}
                     className="block truncate text-xs text-[var(--text-secondary)] hover:text-[var(--text)]"
                   >
                     {post.title?.trim() || "Untitled session"}
@@ -222,14 +223,14 @@ function Suggestions({ onTab }: { onTab: (tab: FriendsTab) => void }) {
         {people.map((person) => (
           <li key={person.id} className="flex items-center gap-2.5">
             <ProfileHoverCard handle={person.handle} className="shrink-0">
-              <Link to={`/u/${person.handle}`}>
+              <Link to={routes.user(person.handle)}>
                 <Avatar url={person.avatar_url} name={personName(person)} size={28} />
               </Link>
             </ProfileHoverCard>
             <div className="min-w-0 flex-1">
               <ProfileHoverCard handle={person.handle} className="block truncate">
                 <Link
-                  to={`/u/${person.handle}`}
+                  to={routes.user(person.handle)}
                   className="text-sm font-medium text-[var(--text)] hover:underline"
                 >
                   {personName(person)}

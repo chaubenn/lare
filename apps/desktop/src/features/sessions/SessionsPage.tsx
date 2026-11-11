@@ -1,13 +1,14 @@
 import { formatDurationHuman, showsActiveTime } from "@lare/shared";
 import { ArrowRight, ChevronRight, Inbox } from "@lare/ui/icons";
+import { KindBadge, SessionStatusBadge } from "@lare/ui/primitives";
 import { useState } from "react";
 import { Link } from "react-router";
-import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
+import { PageBlurb } from "@/components/PageSlots";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import { LoadMore } from "@/components/ui/LoadMore";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
-import { PageBlurb } from "@/features/shell/PageBlurb";
 import { plural } from "@/lib/format";
+import { postRoute, routes } from "@/lib/routes";
 import { groupSittings, SITTING_GAP_MS, type Sitting } from "./grouping";
 import { UnfinishedInterviews } from "./InterviewRecovery";
 import { type SessionRow, useSessions } from "./queries";
@@ -175,7 +176,7 @@ function SessionRows({ sessions, className }: { sessions: SessionRow[]; classNam
             {clock(Date.parse(s.started_at))}
           </span>
           <Link
-            to={`/sessions/${s.id}`}
+            to={routes.session(s.id)}
             className="flex min-w-0 items-center gap-2 rounded-[var(--lare-r-1)] focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
           >
             {/* Fixed width so difficulty and title line up whatever the kind. */}
@@ -220,17 +221,19 @@ function SessionAction({ session }: { session: SessionRow }) {
   const cls =
     "inline-flex items-center gap-1 whitespace-nowrap text-xs text-[var(--text-secondary)] hover:text-[var(--text)]";
   if (post)
-    return post.status === "draft" ? (
-      <Link to={`/drafts/${post.id}`} className={cls}>
-        Draft
-      </Link>
-    ) : (
-      <Link to={`/posts/${post.id}`} className={cls}>
-        Posted <ArrowRight className="size-3" aria-hidden />
+    return (
+      <Link to={postRoute(post)} className={cls}>
+        {post.status === "draft" ? (
+          "Draft"
+        ) : (
+          <>
+            Posted <ArrowRight className="size-3" aria-hidden />
+          </>
+        )}
       </Link>
     );
   return (
-    <Link to={`/sessions/${session.id}`} className={cls}>
+    <Link to={routes.session(session.id)} className={cls}>
       Review
     </Link>
   );

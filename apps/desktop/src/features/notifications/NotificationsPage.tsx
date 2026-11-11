@@ -1,13 +1,12 @@
 import { type AppNotification, describeNotification, notificationActorName } from "@lare/shared";
 import { Bell, LoaderCircle } from "@lare/ui/icons";
-import { Progress } from "@lare/ui/primitives";
+import { Avatar, Progress } from "@lare/ui/primitives";
 import { useEffect, useRef } from "react";
 import { Link } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
+import { PageBlurb } from "@/components/PageSlots";
 import { LoadMore } from "@/components/ui/LoadMore";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { isActive, type Job, STAGE_LABEL, useJobs } from "@/features/media/jobs";
-import { PageBlurb } from "@/features/shell/PageBlurb";
 import { timeAgo } from "@/lib/format";
 import { DESKTOP_NOTIFICATION_LINKS } from "./links";
 import { useMarkNotificationsRead, useNotifications } from "./queries";

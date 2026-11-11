@@ -1,17 +1,8 @@
-import type { QueryData } from "@supabase/supabase-js";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
+import type { PersonSummary } from "@/features/profile/follows";
+import { queryKeys } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";
-
-export type FollowState = "none" | "pending" | "accepted";
-
-export interface PersonSummary {
-  id: string;
-  handle: string | null;
-  display_name: string | null;
-  avatar_url: string | null;
-  is_private: boolean;
-}
 
 const PERSON_COLUMNS = "id, handle, display_name, avatar_url, is_private";
 
@@ -35,14 +26,11 @@ function followersQuery(userId: string) {
     .order("created_at", { ascending: false });
 }
 
-export type FollowingEdge = QueryData<ReturnType<typeof followingQuery>>[number];
-export type FollowerEdge = QueryData<ReturnType<typeof followersQuery>>[number];
-
 /** Everyone the viewer follows, including the requests still waiting for approval. */
 export function useFollowing() {
   const { userId } = useUser();
   return useQuery({
-    queryKey: ["following", userId],
+    queryKey: queryKeys.following.of(userId),
     queryFn: async () => {
       const { data, error } = await followingQuery(userId);
       if (error) throw error;
@@ -54,7 +42,7 @@ export function useFollowing() {
 export function useFollowers() {
   const { userId } = useUser();
   return useQuery({
-    queryKey: ["followers", userId],
+    queryKey: queryKeys.followers.of(userId),
     queryFn: async () => {
       const { data, error } = await followersQuery(userId);
       if (error) throw error;
@@ -67,7 +55,7 @@ export function useFollowers() {
 // Search
 // ---------------------------------------------------------------------------
 /** Handles are `[a-z0-9_]`; keep the term to characters PostgREST's `or` filter parses. */
-export function sanitiseSearch(raw: string): string {
+function sanitiseSearch(raw: string): string {
   return raw
     .replace(/^@/, "")
     .replace(/[^a-zA-Z0-9_ -]/g, " ")
@@ -80,7 +68,7 @@ export function useProfileSearch(term: string) {
   const { userId } = useUser();
   const query = sanitiseSearch(term);
   return useQuery({
-    queryKey: ["profile-search", query],
+    queryKey: queryKeys.profileSearch.of(query),
     enabled: query.length > 0,
     queryFn: async (): Promise<PersonSummary[]> => {
       const like = `%${query}%`;
@@ -94,99 +82,6 @@ export function useProfileSearch(term: string) {
         .limit(25);
       if (error) throw error;
       return data ?? [];
-    },
-  });
-}
-
-/** The viewer's own outgoing edges towards `ids`, so lists show Follow / Requested / Following. */
-export function useFollowStates(ids: string[]) {
-  const { userId } = useUser();
-  const key = [...ids].sort();
-  return useQuery({
-    queryKey: ["follow-states", userId, key.join(",")],
-    enabled: key.length > 0,
-    queryFn: async (): Promise<Record<string, FollowState>> => {
-      const { data, error } = await supabase
-        .from("follows")
-        .select("followee_id, status")
-        .eq("follower_id", userId)
-        .in("followee_id", key);
-      if (error) throw error;
-      const states: Record<string, FollowState> = {};
-      for (const row of data ?? []) states[row.followee_id] = row.status;
-      return states;
-    },
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Follow / unfollow
-// ---------------------------------------------------------------------------
-/**
- * Invalidate every list that shows an edge or a count after the graph changes: following,
- * unfollowing, and accepting or declining a request.
- */
-export function invalidateGraph(queryClient: ReturnType<typeof useQueryClient>) {
-  for (const key of [
-    "following",
-    "followers",
-    "follow-state",
-    "follow-states",
-    "follow-requests",
-    "follow-list",
-    "profile-stats",
-    "solved-activity",
-    "public-profile",
-    "user-posts",
-    "feed",
-    "weekly-leaderboard",
-  ]) {
-    void queryClient.invalidateQueries({ queryKey: [key] });
-  }
-}
-
-export function useFollow() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (handle: string): Promise<FollowState> => {
-      const { data, error } = await supabase.rpc("request_follow", { target_handle: handle });
-      if (error) throw error;
-      return data === "accepted" ? "accepted" : "pending";
-    },
-    onSuccess: () => invalidateGraph(queryClient),
-  });
-}
-
-/** Also cancels a request the viewer sent: pending and accepted are the same edge. */
-export function useUnfollow() {
-  const queryClient = useQueryClient();
-  const { userId } = useUser();
-  return useMutation({
-    mutationFn: async (targetId: string) => {
-      const { error } = await supabase
-        .from("follows")
-        .delete()
-        .eq("follower_id", userId)
-        .eq("followee_id", targetId);
-      if (error) throw error;
-    },
-    onSuccess: () => invalidateGraph(queryClient),
-  });
-}
-
-/**
- * Stop someone following you: how a private account takes back access it granted.
- */
-export function useRemoveFollower() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (followerId: string) => {
-      const { error } = await supabase.rpc("remove_follower", { p_follower_id: followerId });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      invalidateGraph(queryClient);
-      void queryClient.invalidateQueries({ queryKey: ["follow-list"] });
     },
   });
 }

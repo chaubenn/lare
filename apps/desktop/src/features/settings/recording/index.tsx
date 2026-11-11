@@ -4,7 +4,7 @@
  * `recorder.setSettings`.
  */
 
-import { Card, SectionTitle } from "@/components/ui/Card";
+import { Card, SectionTitle } from "@lare/ui/primitives";
 import { inTauri } from "@/lib/tauri";
 import { DevicesSection } from "./DevicesSection";
 import { PermissionsSection } from "./PermissionsSection";

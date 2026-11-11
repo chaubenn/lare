@@ -5,9 +5,9 @@
  */
 
 import { load, type Store } from "@tauri-apps/plugin-store";
-import type { CreateUploadResponse } from "@/lib/recorder";
+import type { CreateUploadResponse } from "@/lib/edge";
 import { inTauri } from "@/lib/tauri";
-import type { VideoSlot } from "./pipeline";
+import type { VideoSlot } from "./types";
 
 export interface RecordingMeta {
   recordingId: string;

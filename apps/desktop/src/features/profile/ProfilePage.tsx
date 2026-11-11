@@ -1,9 +1,9 @@
 import { Pencil, Rss } from "@lare/ui/icons";
+import { Button } from "@lare/ui/primitives";
 import { Link, useNavigate } from "react-router";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
-import { useViewerLikes } from "@/features/publishing/posts/social";
+import { routes } from "@/lib/routes";
 import { ProfileView } from "./ProfileView";
 import { useProfileStats, useSolvedActivity, useSolvedSkills, useUserPosts } from "./queries";
 
@@ -16,11 +16,6 @@ export function ProfilePage() {
   const skills = useSolvedSkills(profile?.handle);
   const posts = useUserPosts(userId);
   const postList = posts.data ?? [];
-  const likes = useViewerLikes(
-    postList.map((post) => post.id),
-    userId,
-  );
-  const likedIds = likes.data ?? new Set<string>();
   const name = profile?.display_name ?? profile?.handle ?? session.user.email ?? "You";
 
   return (
@@ -35,7 +30,7 @@ export function ProfilePage() {
         <>
           No bio yet.{" "}
           <Link
-            to="/profile/edit"
+            to={routes.profileEdit}
             className="text-[var(--text-secondary)] underline underline-offset-2 hover:text-[var(--text)]"
           >
             Add one
@@ -46,7 +41,7 @@ export function ProfilePage() {
         <Button
           size="sm"
           icon={<Pencil className="size-3.5" aria-hidden />}
-          onClick={() => navigate("/profile/edit")}
+          onClick={() => navigate(routes.profileEdit)}
         >
           Edit profile
         </Button>
@@ -63,7 +58,6 @@ export function ProfilePage() {
       postsError={posts.isError ? posts.error : undefined}
       onRetryPosts={() => void posts.refetch()}
       morePosts={posts}
-      likedIds={likedIds}
       postsEmpty={
         <EmptyState
           icon={<Rss className="size-8" aria-hidden />}
@@ -71,7 +65,7 @@ export function ProfilePage() {
           description={
             <>
               Publish a draft and it shows up here and in the feed.{" "}
-              <Link to="/drafts" className="text-zinc-200 underline underline-offset-2">
+              <Link to={routes.drafts} className="text-zinc-200 underline underline-offset-2">
                 Go to drafts
               </Link>
             </>

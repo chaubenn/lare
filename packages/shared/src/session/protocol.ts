@@ -1,10 +1,11 @@
 /**
  * Extension <-> desktop app protocol over ws://127.0.0.1:47831.
- * Every frame is a JSON object with a `type` discriminator. Mirrored in Rust
- * by crates/lare-core/src/protocol.rs — keep both in sync (PROTOCOL_VERSION).
+ * Every frame is a JSON object with a `type` discriminator. Mirrored in Rust by
+ * crates/lare-core/src/protocol.rs; both sides are tested against fixtures/bridge.json.
  */
 import { z } from "zod";
 import { DifficultySchema } from "../leetcode/leetcode";
+import { SessionKindSchema } from "../primitives";
 import { PAIRING_DOMAIN } from "./constants";
 import { EditEventSchema } from "./edits";
 
@@ -33,7 +34,6 @@ export const SubmissionInfoSchema = z.object({
   totalTestcases: z.number().nullable(),
   code: z.string().nullable(),
 });
-export type SubmissionInfo = z.infer<typeof SubmissionInfoSchema>;
 
 // ----- extension -> app -----------------------------------------------------
 export const ExtHelloSchema = z.object({
@@ -54,7 +54,7 @@ export const AuthResponseSchema = z.object({
 export const SessionStartSchema = z.object({
   type: z.literal("session.start"),
   sessionId: z.string(),
-  kind: z.enum(["practice", "interview"]),
+  kind: SessionKindSchema,
   scope: z.enum(["session", "problem"]),
   startedAt: z.number(),
   problem: ProblemInfoSchema.nullable(),
@@ -121,7 +121,6 @@ export const RecordingSnapshotSchema = z.object({
   state: RecordingStateSchema,
   startedAt: z.number().nullable(),
 });
-export type RecordingSnapshot = z.infer<typeof RecordingSnapshotSchema>;
 
 export const AppToExtSchema = z.discriminatedUnion("type", [
   z.object({
@@ -176,7 +175,8 @@ export type AppToExt = z.infer<typeof AppToExtSchema>;
 
 /**
  * What each side's pairing proof is an HMAC-SHA256 of, keyed with the install's secret (see
- * `ws_server.rs`). `role` keeps one side's proof from ever passing as the other's.
+ * `local_server/pairing.rs` in the desktop app). `role` keeps one side's proof from ever passing
+ * as the other's.
  */
 export function pairingTranscript(
   role: "app" | "ext",
@@ -189,15 +189,6 @@ export function pairingTranscript(
 
 export function encode(msg: ExtToApp | AppToExt): string {
   return JSON.stringify(msg);
-}
-
-export function decodeExtToApp(raw: string): ExtToApp | null {
-  try {
-    const r = ExtToAppSchema.safeParse(JSON.parse(raw));
-    return r.success ? r.data : null;
-  } catch {
-    return null;
-  }
 }
 
 export function decodeAppToExt(raw: string): AppToExt | null {

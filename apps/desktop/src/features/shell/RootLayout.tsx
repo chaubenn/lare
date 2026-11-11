@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router";
-import { Toaster } from "@/features/notifications/Toaster";
-import { ConfirmHost } from "@/lib/confirm";
+import { Toaster } from "@/components/Toaster";
+import { ConfirmHost } from "@/components/ui/Confirm";
 import { takeInitialDeeplink, useTauriEvent } from "@/lib/tauri";
 
 /** Route-level listeners that need the router: deep links (`lare://...`), and the app's toasts. */

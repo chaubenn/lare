@@ -8,11 +8,12 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { FIXTURE_PORT, INBOX_SESSION_ID, PAIRING_SECRET, USER_ID } from "../constants.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const monacoVs = resolve(dirname(require.resolve("monaco-editor/package.json")), "min/vs");
-const PORT = Number(process.env.PORT ?? 4173);
+const PORT = Number(process.env.PORT ?? FIXTURE_PORT);
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -30,8 +31,6 @@ const MIME = {
 const requests = [];
 let checkCalls = new Map();
 let submitCounter = 1000;
-let submissionIdForRun = 0;
-const uploads = new Map();
 /** `session_problems` ids currently on the mock inbox, so reads and deletes see earlier writes. */
 const inboxProblems = new Set();
 
@@ -170,46 +169,13 @@ const server = createServer(async (req, res) => {
   });
 
   // ---- LeetCode judge ----------------------------------------------------------
-  if (path === "/tus" && method === "POST") {
-    const id = crypto.randomUUID();
-    uploads.set(id, { offset: 0, length: null });
-    return json(
-      res,
-      201,
-      {},
-      {
-        Location: `/tus/${id}`,
-        "access-control-expose-headers": "Location,Upload-Offset,Upload-Length",
-      },
-    );
-  }
-  if (path.startsWith("/tus/")) {
-    const upload = uploads.get(path.split("/").pop());
-    if (!upload) return json(res, 404, {});
-    if (method === "PATCH") {
-      if (Number(req.headers["upload-offset"]) !== upload.offset) return json(res, 409, {});
-      upload.offset += body.length;
-      if (req.headers["upload-length"]) upload.length = Number(req.headers["upload-length"]);
-    }
-    return json(
-      res,
-      200,
-      {},
-      {
-        "Upload-Offset": String(upload.offset),
-        ...(upload.length === null ? {} : { "Upload-Length": String(upload.length) }),
-        "access-control-expose-headers": "Upload-Offset,Upload-Length",
-      },
-    );
-  }
   if (method === "POST" && /^\/problems\/[a-z0-9-]+\/submit\/?$/.test(path)) {
     const id = ++submitCounter;
     submittedCode.set(id, body?.typed_code ?? "");
     return json(res, 200, { submission_id: id });
   }
   if (method === "POST" && /^\/problems\/[a-z0-9-]+\/interpret_solution\/?$/.test(path)) {
-    submissionIdForRun = ++submitCounter;
-    return json(res, 200, { interpret_id: `runcode_${submissionIdForRun}` });
+    return json(res, 200, { interpret_id: `runcode_${++submitCounter}` });
   }
   const check = /^\/submissions\/detail\/([^/]+)\/(v2\/)?check\/?$/.exec(path);
   if (check && method === "GET") {
@@ -283,25 +249,11 @@ const server = createServer(async (req, res) => {
     if (sub.startsWith("/auth/v1/token")) {
       return json(res, 200, fakeSession());
     }
-    if (sub === "/functions/v1/bunny-create-upload") {
-      return json(res, 200, {
-        videoId: crypto.randomUUID(),
-        bunnyVideoId: crypto.randomUUID(),
-        libraryId: 1,
-        tus: {
-          endpoint: `http://localhost:${PORT}/tus`,
-          headers: {},
-          metadata: { filetype: body.mimeType, title: "Test recording" },
-        },
-      });
-    }
-    if (sub === "/functions/v1/bunny-finalize-recording") return json(res, 200, { ok: true });
     if (sub.startsWith("/auth/v1/user")) {
       return json(res, 200, fakeSession().user);
     }
-    // The fake desktop's pairing secret (E2E_PAIRING_SECRET in e2e/fakeDesktop.ts).
     if (sub.startsWith("/rest/v1/bridge_secrets")) {
-      return json(res, 200, [{ secret: "e2e0".repeat(16) }]);
+      return json(res, 200, [{ secret: PAIRING_SECRET }]);
     }
     if (sub.startsWith("/rest/v1/profiles")) {
       return json(res, 200, [{ handle: "tester", display_name: "Test User", avatar_url: null }]);
@@ -365,15 +317,12 @@ const server = createServer(async (req, res) => {
   res.end("not found");
 });
 
-/** The single practice-inbox session id the mock `practice_inbox` RPC hands out. */
-export const INBOX_SESSION_ID = "00000000-0000-4000-8000-0000000000b0";
-
-export function fakeSession() {
+function fakeSession() {
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
   const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24;
   const payload = Buffer.from(
     JSON.stringify({
-      sub: "00000000-0000-4000-8000-000000000001",
+      sub: USER_ID,
       role: "authenticated",
       aud: "authenticated",
       exp,
@@ -386,7 +335,7 @@ export function fakeSession() {
     expires_at: exp,
     refresh_token: "fake-refresh-token",
     user: {
-      id: "00000000-0000-4000-8000-000000000001",
+      id: USER_ID,
       aud: "authenticated",
       role: "authenticated",
       email: "tester@example.com",

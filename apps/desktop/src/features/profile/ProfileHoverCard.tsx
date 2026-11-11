@@ -1,17 +1,14 @@
 import { difficultySplit, topicStats } from "@lare/shared";
 import { Lock } from "@lare/ui/icons";
+import { Avatar } from "@lare/ui/primitives";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
 import { useUser } from "@/features/auth/AuthProvider";
-import { FollowButton } from "@/features/friends/FollowButton";
-import {
-  useFollowState,
-  useProfileStats,
-  usePublicProfile,
-  useSolvedSkills,
-} from "@/features/profile/queries";
+import { routes } from "@/lib/routes";
+import { FollowButton } from "./FollowButton";
+import { useFollowState } from "./follows";
+import { useProfileStats, usePublicProfile, useSolvedSkills } from "./queries";
 
 const OPEN_DELAY_MS = 350;
 const CLOSE_DELAY_MS = 150;
@@ -183,12 +180,12 @@ function ProfilePreview({ handle }: { handle: string }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
-        <Link to={`/u/${handle}`} className="shrink-0">
+        <Link to={routes.user(handle)} className="shrink-0">
           <Avatar url={person.avatar_url} name={name} size={48} />
         </Link>
         <div className="min-w-0">
           <Link
-            to={`/u/${handle}`}
+            to={routes.user(handle)}
             className="block truncate text-sm font-semibold text-[var(--text)] hover:underline"
           >
             {name}
@@ -248,7 +245,7 @@ function ProfilePreview({ handle }: { handle: string }) {
 
       <div className="flex items-center justify-between gap-2">
         <Link
-          to={`/u/${handle}`}
+          to={routes.user(handle)}
           className="text-xs text-[var(--text-secondary)] hover:text-[var(--text)] hover:underline"
         >
           View profile

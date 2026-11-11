@@ -1,7 +1,8 @@
 //! Shared, dependency-light types for Lare's Rust side.
 //!
-//! `protocol` mirrors `packages/shared/src/protocol.ts`; `edits` mirrors
-//! `packages/shared/src/edits.ts`. Keep them in sync (see `PROTOCOL_VERSION`).
+//! `protocol` is the Rust side of `packages/shared/src/session/protocol.ts` and `edits` of
+//! `packages/shared/src/session/edits.ts`. `packages/shared/fixtures/bridge.json` is what keeps
+//! the two sides in step: each is tested against it (`tests/bridge_fixtures.rs` here).
 
 pub mod edits;
 pub mod protocol;
@@ -23,5 +24,5 @@ pub const PROTOCOL_VERSION: u32 = 4;
 /// two versions. Older than 4 cannot authenticate, so it is turned away: serving it would let any
 /// local process in by claiming to be an old extension.
 pub const MIN_EXT_PROTOCOL_VERSION: u32 = 4;
-/// Domain-separation prefix of the pairing HMAC transcript (see `ws_server` in the desktop app).
+/// Domain-separation prefix of the pairing HMAC transcript (see `local_server::pairing` in the desktop app).
 pub const PAIRING_DOMAIN: &str = "lare-bridge/1";

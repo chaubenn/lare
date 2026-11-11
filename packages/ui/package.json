@@ -15,17 +15,8 @@
     "./type.css": "./src/type.css",
     "./prose.css": "./src/prose.css",
     "./tailwind-bridge.css": "./src/tailwind-bridge.css",
-    "./motion": "./src/motion.ts",
-    "./gesture": "./src/gesture.ts",
     "./primitives": "./src/primitives/index.ts",
-    "./cn": "./src/cn.ts",
-    "./icons": "./src/icons.tsx",
-    "./ActivityChart": "./src/ActivityChart.tsx",
-    "./GoalSummary": "./src/GoalSummary.tsx",
-    "./RuntimeChart": "./src/RuntimeChart.tsx",
-    "./CodeBlock": "./src/CodeBlock.tsx",
-    "./DifficultyBadge": "./src/DifficultyBadge.tsx",
-    "./SubmissionStats": "./src/SubmissionStats.tsx"
+    "./icons": "./src/icons.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

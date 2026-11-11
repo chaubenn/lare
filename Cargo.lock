@@ -4331,7 +4331,6 @@ dependencies = [
  "base64 0.22.1",
  "reqwest 0.13.4",
  "serde",
- "serde_json",
  "tempfile",
  "thiserror 2.0.16",
  "tokio",
@@ -4344,14 +4343,12 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
- "thiserror 2.0.16",
 ]
 
 [[package]]
 name = "lare-desktop"
-version = "3.6.0"
+version = "3.7.0"
 dependencies = [
- "anyhow",
  "axum 0.8.9",
  "futures",
  "futures-util",
@@ -4393,7 +4390,6 @@ dependencies = [
  "anyhow",
  "cap-camera",
  "cap-enc-ffmpeg",
- "cap-project",
  "cap-recording",
  "cidre",
  "cpal",
@@ -4404,8 +4400,6 @@ dependencies = [
  "scap-screencapturekit",
  "scap-targets",
  "serde",
- "serde_json",
- "thiserror 2.0.16",
  "tokio",
  "tracing",
 ]
@@ -4422,7 +4416,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "thiserror 2.0.16",
  "tokio",
  "tracing",
  "whisper-rs",

@@ -7,19 +7,19 @@ pnpm --filter @lare/desktop typecheck
 pnpm --filter @lare/desktop test
 ```
 
-The production WebSocket server can be compiled and tested without the native
-recorder's FFmpeg and GUI dependencies:
+The transcription and upload crates can be tested without the native recorder's
+FFmpeg and GUI dependencies:
 
 ```sh
-cargo test --manifest-path apps/desktop/src-tauri/protocol-tests/Cargo.toml
 cargo test -p lare-transcribe --no-default-features --lib
 cargo test -p lare-bunny
 ```
 
 These tests do not exercise real microphone capture, Whisper inference with a
-downloaded model, or a live Bunny/Supabase account. Full native validation uses
-`cargo test -p lare-desktop --lib` and requires the native dependencies described
-in the repository's setup instructions.
+downloaded model, or a live Bunny/Supabase account. The local server the
+extension talks to (`src-tauri/src/local_server/`) is tested with the rest of the
+app: full native validation uses `cargo test -p lare-desktop --lib` and requires
+the native dependencies described in the repository's setup instructions.
 
 ## Integration status
 

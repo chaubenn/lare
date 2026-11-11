@@ -1,11 +1,3 @@
-/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
- * design-system: design.md (locked ink/bone) · genre: modern-minimal
- * macrostructure: Long Document — one column: header + caption → one deck (the feed's
- *   carousel, arrows + dots) carrying media AND problems AND the review → hairline →
- *   meta → thread. No tab strip anywhere.
- * tone: utilitarian · anchor hue: neutral (bone on ink; --lare-danger is the only chromatic note)
- * enrichment: none (the post's own video is the media)
- */
 import {
   formatDurationHuman,
   formatLocalTimestamp,
@@ -13,30 +5,35 @@ import {
   showsActiveTime,
 } from "@lare/shared";
 import { Copy, Lock, MoreHorizontal, Pencil, RotateCcw, Trash2 } from "@lare/ui/icons";
-import { useQueryClient } from "@tanstack/react-query";
+import {
+  Avatar,
+  Badge,
+  Button,
+  buttonClass,
+  Card,
+  KindBadge,
+  PostStateBadge,
+  SectionTitle,
+} from "@lare/ui/primitives";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
-import { Avatar } from "@/components/ui/Avatar";
-import { Badge, KindBadge, PostStateBadge } from "@/components/ui/Badge";
-import { Button, buttonClass } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
+import { confirm } from "@/components/ui/Confirm";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
 import { ExpandableText } from "@/components/ui/ExpandableText";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
-import { PostCarousel } from "@/features/feed/PostCarousel";
-import { LabelledSlide, PhotoSlide, TextSlide } from "@/features/feed/PostSlides";
-import { VideoSlide } from "@/features/feed/VideoSlide";
-import { useNotify } from "@/features/notifications/notices";
+import { VideoSlide } from "@/features/media/VideoSlide";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { usePostMedia } from "@/features/publishing/posts/media";
-import { confirm } from "@/lib/confirm";
 import { formatDateTime, plural } from "@/lib/format";
-import { errorMessage } from "@/lib/supabase";
+import { notify, notifyError } from "@/lib/notices";
+import { routes } from "@/lib/routes";
+import { PostCarousel } from "./PostCarousel";
+import { LabelledSlide, PhotoSlide, TextSlide } from "./PostSlides";
 import { CommentsSection, PostActions } from "./PostSocial";
-import { SHARE_LINKS, useCopyPostLink, useUnpublishPost } from "./postActions";
+import { useCopyPostLink, useUnpublishPost } from "./postActions";
 import { type PostDetail, useInterviewReview, usePost } from "./queries";
 import { useDeletePostFlow } from "./useDeletePostFlow";
 
@@ -53,7 +50,10 @@ export function PostPage() {
         title="Post not found"
         description="It may have been deleted, or you don't have access to it."
         action={
-          <Link to="/" className="text-sm text-[var(--text)] underline underline-offset-2">
+          <Link
+            to={routes.feed}
+            className="text-sm text-[var(--text)] underline underline-offset-2"
+          >
             Back to feed
           </Link>
         }
@@ -71,7 +71,6 @@ export function PostPage() {
 function PostView({ post }: { post: PostDetail }) {
   // The route lives under RequireAuth, so the viewer is always signed in here.
   const { userId } = useUser();
-  const _queryClient = useQueryClient();
   const review = useInterviewReview(post.sessions?.graded ? post.session_id : null);
   const author = post.profiles;
   const session = post.sessions;
@@ -88,7 +87,7 @@ function PostView({ post }: { post: PostDetail }) {
           <div className="flex items-start gap-3">
             <ProfileHoverCard handle={author?.handle} className="shrink-0">
               {author?.handle ? (
-                <Link to={`/u/${author.handle}`}>
+                <Link to={routes.user(author.handle)}>
                   <Avatar url={author.avatar_url} name={name} size={40} />
                 </Link>
               ) : (
@@ -100,7 +99,7 @@ function PostView({ post }: { post: PostDetail }) {
                 <ProfileHoverCard handle={author?.handle} className="min-w-0 truncate">
                   {author?.handle ? (
                     <Link
-                      to={`/u/${author.handle}`}
+                      to={routes.user(author.handle)}
                       className="font-medium text-[var(--text)] hover:underline"
                     >
                       {name}
@@ -129,7 +128,7 @@ function PostView({ post }: { post: PostDetail }) {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {isMine ? (
-                <Link to={`/posts/${post.id}/edit`} className={buttonClass("secondary", "sm")}>
+                <Link to={routes.postEdit(post.id)} className={buttonClass("secondary", "sm")}>
                   <Pencil className="size-3.5" aria-hidden />
                   Edit post
                 </Link>
@@ -237,11 +236,8 @@ function PostContent({
               status={summary.status}
               bunnyVideoId={summary.bunny_video_id}
               durationMs={summary.duration_ms}
-              width={summary.width}
-              height={summary.height}
               title={`${title} — summary`}
               className="rounded-none border-0"
-              fill
             />
           </LabelledSlide>
         ) : null}
@@ -258,11 +254,8 @@ function PostContent({
               status={video.status}
               bunnyVideoId={video.bunny_video_id}
               durationMs={video.duration_ms}
-              width={video.width}
-              height={video.height}
               title={`${title} — ${post.video_kind === "highlights" ? "highlights" : "demo"}`}
               className="rounded-none border-0"
-              fill
             />
           </LabelledSlide>
         ) : null}
@@ -333,7 +326,7 @@ function HiddenNote({ postId }: { postId: string }) {
     <p className="mt-2 text-xs text-[var(--text-tertiary)]">
       Hidden from the post.{" "}
       <Link
-        to={`/posts/${postId}/edit`}
+        to={routes.postEdit(postId)}
         className="underline underline-offset-2 hover:text-[var(--text)]"
       >
         Show it
@@ -347,7 +340,6 @@ function HiddenNote({ postId }: { postId: string }) {
  * deleting it are the owner's.
  */
 function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
-  const { notify } = useNotify();
   const navigate = useNavigate();
   const remove = useDeletePostFlow(post.id, post.sessions?.client);
   const unpublish = useUnpublishPost();
@@ -355,7 +347,7 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
   const [open, setOpen] = useState(false);
   const published = post.status === "published";
   // A draft has no public page yet, so there is no link worth sharing.
-  const shareable = SHARE_LINKS && published && Boolean(post.slug);
+  const shareable = published && Boolean(post.slug);
 
   const doUnpublish = async () => {
     const ok = await confirm({
@@ -369,14 +361,9 @@ function PostMenu({ post, isMine }: { post: PostDetail; isMine: boolean }) {
     unpublish.mutate(post.id, {
       onSuccess: () => {
         notify({ title: "Moved back to drafts", variant: "success" });
-        void navigate(`/drafts/${post.id}`, { replace: true });
+        void navigate(routes.draft(post.id), { replace: true });
       },
-      onError: (e) =>
-        notify({
-          title: "Couldn't move it to drafts",
-          description: errorMessage(e),
-          variant: "error",
-        }),
+      onError: (e) => notifyError("Couldn't move it to drafts", e),
     });
   };
   const root = useRef<HTMLDivElement>(null);

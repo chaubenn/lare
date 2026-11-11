@@ -1,14 +1,9 @@
 import { createRoot, type Root } from "react-dom/client";
+import { contentScriptMatches } from "@/src/origins";
 import { PageController } from "@/src/pageController";
 import "@/src/zodConfig";
 import { RecordingDot } from "./RecordingDot";
 import "./recording.css";
-
-// All of leetcode.com, not just problem URLs: LeetCode navigates in-page, so a script that only
-// loads on /problems/* never arrives when a problem is opened from the list or the home page.
-const MATCHES = ["https://leetcode.com/*"];
-const fixtureOrigin = import.meta.env.WXT_DEV_FIXTURE_ORIGIN;
-if (import.meta.env.MODE !== "production" && fixtureOrigin) MATCHES.push(`${fixtureOrigin}/*`);
 
 function isTopFrame(): boolean {
   try {
@@ -19,7 +14,7 @@ function isTopFrame(): boolean {
 }
 
 export default defineContentScript({
-  matches: MATCHES,
+  matches: contentScriptMatches(),
   allFrames: true,
   runAt: "document_idle",
   cssInjectionMode: "ui",

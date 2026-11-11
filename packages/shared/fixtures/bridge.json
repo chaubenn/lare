@@ -1,0 +1,143 @@
+{
+  "constants": {
+    "wsPort": 47831,
+    "authCallbackPath": "/auth/callback",
+    "protocolVersion": 4,
+    "minExtProtocolVersion": 4,
+    "minDesktopProtocolVersion": 4,
+    "pairingDomain": "lare-bridge/1",
+    "extensionId": "koplffaeeahehnfikinmldhhmmldghhl"
+  },
+  "pairingTranscript": {
+    "role": "app",
+    "userId": "u1",
+    "extNonce": "aa",
+    "appNonce": "bb",
+    "expected": "lare-bridge/1\napp\nu1\naa\nbb"
+  },
+  "extToApp": [
+    { "type": "hello", "protocol": 4, "extVersion": "3.6.0", "userId": "u1", "nonce": "aa" },
+    { "type": "hello", "protocol": 4, "extVersion": "3.6.0", "userId": null, "nonce": "aa" },
+    { "type": "auth.response", "proof": "cc" },
+    {
+      "type": "session.start",
+      "sessionId": "s1",
+      "kind": "interview",
+      "scope": "problem",
+      "startedAt": 1700000000000,
+      "problem": {
+        "slug": "two-sum",
+        "frontendId": "1",
+        "title": "Two Sum",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/two-sum/",
+        "language": "python"
+      },
+      "facecam": true,
+      "mic": true
+    },
+    {
+      "type": "session.start",
+      "sessionId": "s2",
+      "kind": "practice",
+      "scope": "session",
+      "startedAt": 1700000000000,
+      "problem": null,
+      "facecam": false,
+      "mic": true
+    },
+    { "type": "session.pause", "sessionId": "s1", "at": 1700000001000 },
+    { "type": "session.resume", "sessionId": "s1", "at": 1700000002000 },
+    { "type": "session.end", "sessionId": "s1", "at": 1700000003000 },
+    { "type": "session.cancel", "sessionId": "s1", "at": 1700000003000 },
+    {
+      "type": "problem.open",
+      "sessionId": "s1",
+      "sessionProblemId": "p1",
+      "at": 1700000000500,
+      "problem": {
+        "slug": "3sum",
+        "frontendId": null,
+        "title": "3Sum",
+        "difficulty": null,
+        "url": "https://leetcode.com/problems/3sum/",
+        "language": null
+      }
+    },
+    {
+      "type": "edits.batch",
+      "sessionId": "s1",
+      "sessionProblemId": "p1",
+      "slug": "two-sum",
+      "events": [
+        { "t": 1700000000100, "v": 1, "c": [], "full": "class Solution:" },
+        { "t": 1700000000200, "v": 2, "c": [[15, 0, "\n"]] }
+      ]
+    },
+    {
+      "type": "submission",
+      "sessionId": "s1",
+      "sessionProblemId": "p1",
+      "submission": {
+        "leetcodeSubmissionId": 123456789,
+        "submittedAt": 1700000002500,
+        "lang": "python3",
+        "statusDisplay": "Accepted",
+        "statusCode": 10,
+        "accepted": true,
+        "runtimeMs": 41.5,
+        "runtimePercentile": 87.25,
+        "memoryMb": 17.5,
+        "memoryPercentile": 54.5,
+        "totalCorrect": 63,
+        "totalTestcases": 63,
+        "code": "class Solution: ..."
+      }
+    },
+    { "type": "ping", "at": 1700000004000 }
+  ],
+  "appToExt": [
+    {
+      "type": "hello.ack",
+      "protocol": 4,
+      "appVersion": "3.6.0",
+      "userId": "u1",
+      "recordingCapable": true,
+      "recording": null
+    },
+    {
+      "type": "hello.ack",
+      "protocol": 4,
+      "appVersion": "3.6.0",
+      "userId": null,
+      "recordingCapable": false,
+      "recording": { "sessionId": "s1", "state": "recording", "startedAt": 1700000000000 }
+    },
+    { "type": "recording.state", "sessionId": null, "state": "idle", "startedAt": null },
+    {
+      "type": "recording.state",
+      "sessionId": "s1",
+      "state": "error",
+      "startedAt": null,
+      "message": "Screen recording permission is missing."
+    },
+    { "type": "recording.state", "sessionId": "s1", "state": "starting", "startedAt": null },
+    { "type": "recording.state", "sessionId": "s1", "state": "paused", "startedAt": 1700000000000 },
+    {
+      "type": "recording.state",
+      "sessionId": "s1",
+      "state": "stopping",
+      "startedAt": 1700000000000
+    },
+    { "type": "auth.challenge", "installId": "i1", "nonce": "bb", "proof": "dd" },
+    { "type": "error", "code": "not_signed_in", "message": "m" },
+    { "type": "error", "code": "user_mismatch", "message": "m" },
+    { "type": "error", "code": "permission_denied", "message": "m" },
+    { "type": "error", "code": "already_recording", "message": "m" },
+    { "type": "error", "code": "recording_failed", "message": "m" },
+    { "type": "error", "code": "bad_message", "message": "m" },
+    { "type": "error", "code": "unsupported_protocol", "message": "m" },
+    { "type": "error", "code": "auth_failed", "message": "m" },
+    { "type": "pong", "at": 1700000004000 }
+  ]
+}

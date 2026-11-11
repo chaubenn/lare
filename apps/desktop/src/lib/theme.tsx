@@ -7,21 +7,16 @@ import {
   useMemo,
   useState,
 } from "react";
+import { STORAGE_KEYS, storage } from "./storage";
 
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 
-const STORAGE_KEY = "lare-theme";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 function readStoredTheme(): Theme {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "system") return stored;
-  } catch {
-    // Storage can be unavailable; fall through to the default.
-  }
-  return "system";
+  const stored = storage.get(STORAGE_KEYS.theme);
+  return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
 }
 
 function systemTheme(): ResolvedTheme {
@@ -65,11 +60,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setTheme = useCallback((next: Theme) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // Not persisted; the choice still applies for this session.
-    }
+    storage.set(STORAGE_KEYS.theme, next);
     setThemeState(next);
   }, []);
 

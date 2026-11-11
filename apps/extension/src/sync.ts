@@ -16,10 +16,32 @@ import {
   type TrackedProblem,
 } from "@lare/shared";
 import { deleteSessionEvents, readEvents } from "./editsDb";
-import type { CapturedSubmission, QuestionDetails } from "./messages";
-import { getSupabase } from "./supabase";
+import { type CapturedSubmission, type QuestionDetails, sendToTab } from "./messages";
+import { CLIENT_TAG, getSupabase } from "./supabase";
 
 const iso = (ms: number) => new Date(ms).toISOString();
+
+/** The `session_problems` columns that describe the problem itself, for inbox and interview rows. */
+function problemRow(
+  id: string,
+  sessionId: string,
+  problem: ProblemInfo,
+  question: QuestionDetails | null,
+  openedAt: number,
+) {
+  return {
+    id,
+    session_id: sessionId,
+    slug: problem.slug,
+    frontend_id: problem.frontendId,
+    title: problem.title,
+    difficulty: problem.difficulty,
+    url: problem.url,
+    description_html: question?.descriptionHtml ?? null,
+    topic_tags: question?.topicTags ?? [],
+    opened_at: iso(openedAt),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Passive practice tracking
@@ -28,7 +50,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 /**
  * The caller's inbox session id, created server-side on first use.
  *
- * Must be its own round trip — the id cannot be inlined into the
+ * Must be its own round trip: the id cannot be inlined into the
  * `session_problems` insert below, because the `owns_session` RLS check is
  * STABLE and would not see an inbox created within that same statement.
  */
@@ -55,22 +77,12 @@ export async function trackInboxProblem(
   seenAt: number,
 ): Promise<void> {
   const supabase = getSupabase();
-  const { error } = await supabase.from("session_problems").upsert(
-    {
-      id: sessionProblemId,
-      session_id: inboxSessionId,
-      slug: problem.slug,
-      frontend_id: problem.frontendId,
-      title: problem.title,
-      difficulty: problem.difficulty,
-      url: problem.url,
-      description_html: question?.descriptionHtml ?? null,
-      topic_tags: question?.topicTags ?? [],
-      opened_at: iso(seenAt),
-      active_ms: 0,
-    },
-    { onConflict: "id" },
-  );
+  const { error } = await supabase
+    .from("session_problems")
+    .upsert(
+      { ...problemRow(sessionProblemId, inboxSessionId, problem, question, seenAt), active_ms: 0 },
+      { onConflict: "id" },
+    );
   if (error) throw new Error(`session_problems upsert: ${error.message}`);
 }
 
@@ -125,7 +137,7 @@ export async function publishInboxProblems(
 export async function syncSessionStart(
   session: ActiveSession,
   userId: string,
-  graded = false,
+  graded: boolean,
 ): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.from("sessions").upsert(
@@ -136,7 +148,7 @@ export async function syncSessionStart(
       scope: session.scope,
       status: "active",
       started_at: iso(session.startedAt),
-      client: `extension/${__EXT_VERSION__}`,
+      client: CLIENT_TAG,
       graded,
     },
     { onConflict: "id" },
@@ -155,10 +167,12 @@ export async function syncTimerEvent(sessionId: string, event: TimerEvent): Prom
   });
   if (error) throw new Error(`session_events insert: ${error.message}`);
   if (event.type === "pause" || event.type === "resume") {
-    await supabase
+    const { error: statusError } = await supabase
       .from("sessions")
       .update({ status: event.type === "pause" ? "paused" : "active" })
       .eq("id", sessionId);
+    // The event row above is what the timer is computed from; the status column only mirrors it.
+    if (statusError) console.warn("[lare] session status update failed", statusError);
   }
 }
 
@@ -168,21 +182,11 @@ export async function syncProblemOpen(
   question: QuestionDetails | null,
 ): Promise<void> {
   const supabase = getSupabase();
-  const { error } = await supabase.from("session_problems").upsert(
-    {
-      id: tp.sessionProblemId,
-      session_id: sessionId,
-      slug: tp.problem.slug,
-      frontend_id: tp.problem.frontendId,
-      title: tp.problem.title,
-      difficulty: tp.problem.difficulty,
-      url: tp.problem.url,
-      description_html: question?.descriptionHtml ?? null,
-      topic_tags: question?.topicTags ?? [],
-      opened_at: iso(tp.openedAt),
-    },
-    { onConflict: "id" },
-  );
+  const { error } = await supabase
+    .from("session_problems")
+    .upsert(problemRow(tp.sessionProblemId, sessionId, tp.problem, question, tp.openedAt), {
+      onConflict: "id",
+    });
   if (error) throw new Error(`session_problems upsert: ${error.message}`);
   await syncTimerEvent(sessionId, { t: tp.openedAt, type: "problem_open", slug: tp.problem.slug });
 }
@@ -242,15 +246,12 @@ async function gzipJson(value: unknown): Promise<Blob> {
 /**
  * Persist the code timeline and session duration before desktop requests AI review.
  */
-export async function syncSessionEnd(
+async function syncSessionEnd(
   session: ActiveSession,
   userId: string,
   endedAt: number,
 ): Promise<void> {
-  if (session.tabId !== null)
-    await chrome.tabs
-      .sendMessage(session.tabId, { type: "LARE_FLUSH_EDITS" })
-      .catch(() => undefined);
+  if (session.tabId !== null) await sendToTab(session.tabId, { type: "LARE_FLUSH_EDITS" });
   const supabase = getSupabase();
   const total = activeMs(session.events, endedAt);
 
@@ -292,6 +293,23 @@ export async function syncSessionEnd(
     })
     .eq("id", session.sessionId);
   if (sessErr) throw new Error(`sessions end: ${sessErr.message}`);
+}
+
+/**
+ * Close a session row that will get no draft: a start that failed, a discarded interview, an
+ * unsaved one given up on. `ungraded` also clears `graded`, so the desktop pipeline does not wait
+ * to transcribe a recording that is not coming. Best effort: a failure is logged, not thrown.
+ */
+export async function closeSession(
+  sessionId: string,
+  endedAt: number,
+  ungraded: boolean,
+): Promise<void> {
+  const { error } = await getSupabase()
+    .from("sessions")
+    .update({ status: "ended", ended_at: iso(endedAt), ...(ungraded ? { graded: false } : {}) })
+    .eq("id", sessionId);
+  if (error) console.warn("[lare] close session", error);
 }
 
 export async function finalizeSession(

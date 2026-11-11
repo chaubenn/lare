@@ -1,10 +1,10 @@
+import { Label, Select } from "@lare/ui/primitives";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { Label, Select } from "@/components/ui/Field";
-import { settingsKey, useRecorderSettings } from "@/features/media/hooks";
-import { useNotify } from "@/features/notifications/notices";
+import { useRecorderSettings } from "@/features/media/hooks";
+import { notifyError } from "@/lib/notices";
+import { queryKeys } from "@/lib/queryKeys";
 import { type RecorderSettings, recorder } from "@/lib/recorder";
-import { errorMessage } from "@/lib/supabase";
 
 export function SubSection({
   title,
@@ -36,26 +36,20 @@ export function SubSection({
 /** Recorder settings + a `save(patch)` that persists immediately (optimistic in the cache). */
 export function useSettingsPatch() {
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   const settings = useRecorderSettings();
   const mutation = useMutation({
     mutationFn: async (patch: Partial<RecorderSettings>) => {
-      const current = queryClient.getQueryData<RecorderSettings>(settingsKey);
+      const current = queryClient.getQueryData<RecorderSettings>(queryKeys.recorder.settings);
       if (!current) throw new Error("Recording settings haven't loaded yet.");
       await recorder.setSettings({ ...current, ...patch });
     },
     onMutate: (patch) => {
-      queryClient.setQueryData<RecorderSettings>(settingsKey, (prev) =>
+      queryClient.setQueryData<RecorderSettings>(queryKeys.recorder.settings, (prev) =>
         prev ? { ...prev, ...patch } : prev,
       );
     },
-    onError: (e) =>
-      notify({
-        title: "Couldn't save recording settings",
-        description: errorMessage(e),
-        variant: "error",
-      }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: settingsKey }),
+    onError: (e) => notifyError("Couldn't save recording settings", e),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.recorder.settings }),
   });
   return { settings, save: mutation.mutate };
 }

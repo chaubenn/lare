@@ -18,7 +18,7 @@ const DIFF = [
  * What someone is good at, from the problems they have solved: a radar over six skill areas,
  * the Easy / Medium / Hard split, and their strongest topics, each bar split by difficulty.
  */
-export function SkillsPanel({ skills, className }: { skills: SolvedSkills; className?: string }) {
+export function SkillsPanel({ skills }: { skills: SolvedSkills }) {
   const split = useMemo(() => difficultySplit(skills), [skills]);
   const areas = useMemo(() => skillAreas(skills), [skills]);
   const topics = useMemo(() => topicStats(skills).slice(0, 6), [skills]);
@@ -26,7 +26,7 @@ export function SkillsPanel({ skills, className }: { skills: SolvedSkills; class
   return (
     <section
       aria-labelledby="skills-heading"
-      className={`@container flex flex-col rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] p-5 ${className ?? ""}`}
+      className="@container flex flex-col rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] p-5"
     >
       <div className="flex items-baseline justify-between gap-3">
         <h2 id="skills-heading" className="text-sm font-semibold text-[var(--text)]">

@@ -7,6 +7,7 @@ import { useUser } from "@/features/auth/AuthProvider";
 import { useSolvedActivity, useSolvedSkills } from "@/features/profile/queries";
 import { GoalPanel } from "@/features/progress/GoalPanel";
 import { useDrafts } from "@/features/publishing/drafts/queries";
+import { routes } from "@/lib/routes";
 import type { FeedPost } from "./queries";
 
 const DIFF = [
@@ -66,7 +67,7 @@ function YourWeek() {
     <Panel
       title="Your week"
       action={
-        <Link to="/profile" className={linkClass}>
+        <Link to={routes.profile} className={linkClass}>
           Profile <ArrowRight className="size-3" aria-hidden />
         </Link>
       }
@@ -110,7 +111,7 @@ function DraftsWaiting() {
   if (count === 0) return null;
   return (
     <Link
-      to="/drafts"
+      to={routes.drafts}
       className="flex items-center justify-between gap-3 rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-3 text-sm text-[var(--text)] transition-colors hover:border-[var(--border-strong)]"
     >
       <span>

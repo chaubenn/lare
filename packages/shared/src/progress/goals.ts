@@ -4,14 +4,13 @@
  * parses that and turns it into copy.
  */
 import { z } from "zod";
-
-const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const Count = z.number().int().nonnegative();
+import { DifficultySchema } from "../leetcode/leetcode";
+import { CountSchema as Count, IsoDateSchema } from "../primitives";
 
 export const GOAL_PERIODS = ["day", "week"] as const;
 export type GoalPeriod = (typeof GOAL_PERIODS)[number];
 
-export const GOAL_DIFFICULTIES = ["Easy", "Medium", "Hard"] as const;
+export const GOAL_DIFFICULTIES = DifficultySchema.options;
 export type GoalDifficulty = (typeof GOAL_DIFFICULTIES)[number];
 
 export const GOAL_TARGET_MIN = 1;

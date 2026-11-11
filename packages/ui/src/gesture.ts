@@ -3,12 +3,12 @@
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 
 /** Apple's exponential-decay endpoint projection (not v²/2a). */
-export function project(velocity: number, decelerationRate = 0.998): number {
+function project(velocity: number, decelerationRate = 0.998): number {
   return ((velocity / 1000) * decelerationRate) / (1 - decelerationRate);
 }
 
 /** Progressive edge resistance. `overshoot` and `dimension` in the same unit. */
-export function rubberband(overshoot: number, dimension: number, constant = 0.55): number {
+function rubberband(overshoot: number, dimension: number, constant = 0.55): number {
   if (dimension <= 0) return 0;
   return (1 - 1 / ((overshoot * constant) / dimension + 1)) * dimension;
 }
@@ -193,134 +193,4 @@ export function useDragToPage(
       el.removeEventListener("pointercancel", onPointerUp);
     };
   }, [applyOffset, disabled, ref]);
-}
-
-export interface DraggableAnchor {
-  x: number;
-  y: number;
-}
-
-export interface UseDraggableOptions {
-  /** Current position (left/top of the element). */
-  position: DraggableAnchor;
-  onMove: (next: DraggableAnchor) => void;
-  /**
-   * Fired as the drag begins. Return an anchor to override the grab origin when
-   * `position` may be stale (e.g. the element is anchored by right/bottom, so
-   * its real left/top is whatever the current layout resolved to).
-   */
-  onGrab?: () => DraggableAnchor | undefined;
-  onRelease?: (next: DraggableAnchor, velocity: { x: number; y: number }) => void;
-  bounds?: { minX: number; maxX: number; minY: number; maxY: number };
-  /** Snap targets after release (corners, edges). */
-  snapTo?: DraggableAnchor[];
-  disabled?: boolean;
-}
-
-/**
- * 1:1 drag that respects the grab offset, snaps to the nearest anchor with
- * projection, and rubber-bands at bounds.
- */
-export function useDraggable(
-  ref: RefObject<HTMLElement | null>,
-  { position, onMove, onGrab, onRelease, bounds, snapTo, disabled = false }: UseDraggableOptions,
-) {
-  const state = useRef({ position, onMove, onGrab, onRelease, bounds, snapTo, disabled });
-  state.current = { position, onMove, onGrab, onRelease, bounds, snapTo, disabled };
-
-  const grab = useRef({ x: 0, y: 0, pointerX: 0, pointerY: 0 });
-  const samples = useRef<Sample[]>([]);
-  const dragging = useRef(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || disabled) return;
-
-    const clamp = (pt: DraggableAnchor): DraggableAnchor => {
-      const b = state.current.bounds;
-      if (!b) return pt;
-      let { x, y } = pt;
-      if (x < b.minX) x = b.minX - rubberband(b.minX - x, Math.max(1, b.maxX - b.minX));
-      if (x > b.maxX) x = b.maxX + rubberband(x - b.maxX, Math.max(1, b.maxX - b.minX));
-      if (y < b.minY) y = b.minY - rubberband(b.minY - y, Math.max(1, b.maxY - b.minY));
-      if (y > b.maxY) y = b.maxY + rubberband(y - b.maxY, Math.max(1, b.maxY - b.minY));
-      return { x, y };
-    };
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("button, a, input, textarea, select, [role='button']")) return;
-      dragging.current = true;
-      const origin = state.current.onGrab?.() ?? state.current.position;
-      grab.current = {
-        x: origin.x,
-        y: origin.y,
-        pointerX: event.clientX,
-        pointerY: event.clientY,
-      };
-      samples.current = [{ t: event.timeStamp, x: event.clientX, y: event.clientY }];
-      el.setPointerCapture(event.pointerId);
-    };
-
-    const onPointerMove = (event: PointerEvent) => {
-      if (!dragging.current) return;
-      samples.current.push({ t: event.timeStamp, x: event.clientX, y: event.clientY });
-      if (samples.current.length > 8) samples.current.shift();
-      const next = clamp({
-        x: grab.current.x + (event.clientX - grab.current.pointerX),
-        y: grab.current.y + (event.clientY - grab.current.pointerY),
-      });
-      state.current.onMove(next);
-    };
-
-    const onPointerUp = (event: PointerEvent) => {
-      if (!dragging.current) return;
-      dragging.current = false;
-      try {
-        el.releasePointerCapture(event.pointerId);
-      } catch {
-        // already released
-      }
-      const vx = velocityFrom(samples.current, "x");
-      const vy = velocityFrom(samples.current, "y");
-      let next = {
-        x: state.current.position.x + project(vx),
-        y: state.current.position.y + project(vy),
-      };
-      const b = state.current.bounds;
-      if (b) {
-        next = {
-          x: Math.min(b.maxX, Math.max(b.minX, next.x)),
-          y: Math.min(b.maxY, Math.max(b.minY, next.y)),
-        };
-      }
-      const anchors = state.current.snapTo;
-      if (anchors && anchors.length > 0) {
-        let best = anchors[0];
-        let bestD = Number.POSITIVE_INFINITY;
-        for (const a of anchors) {
-          const d = (a.x - next.x) ** 2 + (a.y - next.y) ** 2;
-          if (d < bestD) {
-            best = a;
-            bestD = d;
-          }
-        }
-        if (best) next = best;
-      }
-      state.current.onMove(next);
-      state.current.onRelease?.(next, { x: vx, y: vy });
-    };
-
-    el.addEventListener("pointerdown", onPointerDown);
-    el.addEventListener("pointermove", onPointerMove);
-    el.addEventListener("pointerup", onPointerUp);
-    el.addEventListener("pointercancel", onPointerUp);
-    return () => {
-      el.removeEventListener("pointerdown", onPointerDown);
-      el.removeEventListener("pointermove", onPointerMove);
-      el.removeEventListener("pointerup", onPointerUp);
-      el.removeEventListener("pointercancel", onPointerUp);
-    };
-  }, [disabled, ref]);
 }

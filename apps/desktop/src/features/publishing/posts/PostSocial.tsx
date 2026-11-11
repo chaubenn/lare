@@ -1,12 +1,10 @@
 import { formatLocalTimestamp } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Heart, MessageCircle, Pencil, Reply, Trash2 } from "@lare/ui/icons";
+import { Avatar, Button, SectionTitle } from "@lare/ui/primitives";
 import { useState } from "react";
-import { Avatar } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
-import { SectionTitle } from "@/components/ui/Card";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage } from "@/lib/supabase";
+import { COMMENT_MAX } from "@/features/publishing/drafts/validation";
+import { notifyError } from "@/lib/notices";
 import { CommentText, MentionTextarea } from "./Mentions";
 import {
   type PostComment,
@@ -37,7 +35,6 @@ export function PostActions({
   likeCount: number;
   commentCount: number;
 }) {
-  const { notify } = useNotify();
   const liked = useViewerLike(postId, userId);
   const toggle = useToggleLike(postId);
   // The mutation answers with the authoritative count; until then show the row's own value.
@@ -56,8 +53,7 @@ export function PostActions({
         disabled={toggle.isPending}
         onClick={() =>
           toggle.mutate(undefined, {
-            onError: (e) =>
-              notify({ title: "Couldn't like", description: errorMessage(e), variant: "error" }),
+            onError: (e) => notifyError("Couldn't like", e),
           })
         }
         className={cn(
@@ -94,15 +90,13 @@ export function CommentsSection({
   userId: string;
   isPostOwner: boolean;
 }) {
-  const { notify } = useNotify();
   const comments = useComments(postId);
   const add = useAddComment(postId, userId);
   const [draft, setDraft] = useState("");
   // Which top-level comment has its reply box open, and what the box starts with.
   const [replyTo, setReplyTo] = useState<{ parentId: string; prefill: string } | null>(null);
 
-  const fail = (title: string) => (e: unknown) =>
-    notify({ title, description: errorMessage(e), variant: "error" });
+  const fail = (title: string) => (e: unknown) => notifyError(title, e);
 
   const list = comments.data ?? [];
   const topLevel = list.filter((c) => !c.parent_id);
@@ -143,7 +137,7 @@ export function CommentsSection({
           id={COMPOSER_ID}
           value={draft}
           onValueChange={setDraft}
-          maxLength={2000}
+          maxLength={COMMENT_MAX}
           placeholder="Add a comment. Type @ to mention someone."
           aria-label="Add a comment"
         />
@@ -220,7 +214,6 @@ function ReplyComposer({
   prefill: string;
   onDone: () => void;
 }) {
-  const { notify } = useNotify();
   const add = useAddComment(postId, userId);
   const [draft, setDraft] = useState(prefill);
 
@@ -234,12 +227,7 @@ function ReplyComposer({
           { body: draft, parentId },
           {
             onSuccess: onDone,
-            onError: (err) =>
-              notify({
-                title: "Couldn't post the reply",
-                description: errorMessage(err),
-                variant: "error",
-              }),
+            onError: (err) => notifyError("Couldn't post the reply", err),
           },
         );
       }}
@@ -247,7 +235,7 @@ function ReplyComposer({
       <MentionTextarea
         value={draft}
         onValueChange={setDraft}
-        maxLength={2000}
+        maxLength={COMMENT_MAX}
         placeholder="Write a reply"
         aria-label="Write a reply"
         className="min-h-16"
@@ -292,7 +280,6 @@ function CommentRow({
   canDelete: boolean;
   onReply: () => void;
 }) {
-  const { notify } = useNotify();
   const update = useUpdateComment(postId);
   const remove = useDeleteComment(postId);
   const [editing, setEditing] = useState(false);
@@ -300,8 +287,7 @@ function CommentRow({
 
   const author = comment.profiles;
   const name = author?.display_name ?? (author?.handle ? `@${author.handle}` : "Someone");
-  const fail = (title: string) => (e: unknown) =>
-    notify({ title, description: errorMessage(e), variant: "error" });
+  const fail = (title: string) => (e: unknown) => notifyError(title, e);
 
   return (
     <div id={`comment-${comment.id}`} className="flex gap-3">
@@ -318,7 +304,7 @@ function CommentRow({
             <MentionTextarea
               value={draft}
               onValueChange={setDraft}
-              maxLength={2000}
+              maxLength={COMMENT_MAX}
               aria-label="Edit comment"
             />
             <div className="flex gap-2">

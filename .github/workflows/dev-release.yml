@@ -234,7 +234,6 @@ jobs:
         env:
           WXT_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
           WXT_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
-          WXT_SITE_URL: https://lare.fyi
         run: pnpm build && pnpm zip
       - name: Attach to release
         env:

@@ -26,14 +26,16 @@ export const MIN_DESKTOP_PROTOCOL_VERSION = 4;
 /** Domain-separation prefix of the pairing HMAC transcript (`pairingTranscript`). */
 export const PAIRING_DOMAIN = "lare-bridge/1";
 
+/**
+ * Id of the extension built with the pinned `key` in apps/extension/wxt.config.ts (every build but
+ * the Chrome Web Store package). The desktop app accepts its origin (`EXTENSION_ID` in the Rust
+ * bridge).
+ */
+export const EXTENSION_ID = "koplffaeeahehnfikinmldhhmmldghhl";
+
 /** Bunny Stream library used for all videos. */
 export const BUNNY_LIBRARY_ID = 743884;
 export const BUNNY_EMBED_BASE = "https://player.mediadelivery.net/embed";
 
-/** Edit-event snapshot policy (see edits.ts). */
-export const SNAPSHOT_EVERY_EVENTS = 50;
-export const SNAPSHOT_EVERY_MS = 30_000;
-
 /** LeetCode */
 export const LEETCODE_ORIGIN = "https://leetcode.com";
-export const LEETCODE_GRAPHQL = `${LEETCODE_ORIGIN}/graphql`;

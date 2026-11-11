@@ -5,7 +5,7 @@
 
 import { WS_PORT } from "@lare/shared";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { type EventCallback, listen } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import type { RecorderEvents } from "./recorder";
 
@@ -21,7 +21,7 @@ export async function setCurrentUser(userId: string | null): Promise<void> {
   await invoke("set_current_user", { userId });
 }
 
-/** This install's extension pairing secret for `userId` (see `ws_server.rs`). */
+/** This install's extension pairing secret for `userId` (see `local_server/pairing.rs`). */
 export interface BridgeKey {
   userId: string;
   installId: string;
@@ -59,7 +59,6 @@ export async function takeInitialDeeplink(): Promise<string | null> {
 export interface TauriEvents extends RecorderEvents {
   "auth:callback": { code: string; next: string | null };
   "auth:error": { error: string; description: string | null };
-  "ext:message": unknown;
   "ext:connected": boolean;
   "deeplink:navigate": string;
 }
@@ -70,6 +69,14 @@ export type WindowKind = "main" | "recorder" | "camera";
 export function windowKind(): WindowKind {
   const kind = new URLSearchParams(window.location.search).get("window");
   return kind === "recorder" || kind === "camera" ? kind : "main";
+}
+
+/** Subscribe to a Tauri event outside React. Resolves with the function that unsubscribes. */
+export function onTauriEvent<K extends keyof TauriEvents>(
+  name: K,
+  handler: (payload: TauriEvents[K]) => void,
+): Promise<() => void> {
+  return listen<TauriEvents[K]>(name, (event) => handler(event.payload));
 }
 
 /**
@@ -87,9 +94,6 @@ export function useTauriEvent<K extends keyof TauriEvents>(
     if (!inTauri) return;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    const callback: EventCallback<TauriEvents[K]> = (event) => {
-      handlerRef.current(event.payload);
-    };
     // Unlistening can throw inside @tauri-apps/api when the listener was already dropped
     // (StrictMode double effects, or a window being torn down); that is harmless.
     const safeUnlisten = (fn: () => void) => {
@@ -99,7 +103,7 @@ export function useTauriEvent<K extends keyof TauriEvents>(
         /* listener already gone */
       }
     };
-    listen<TauriEvents[K]>(name, callback)
+    onTauriEvent(name, (payload) => handlerRef.current(payload))
       .then((fn) => {
         if (cancelled) safeUnlisten(fn);
         else unlisten = fn;

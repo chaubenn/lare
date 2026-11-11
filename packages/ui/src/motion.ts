@@ -6,5 +6,3 @@ export const SPRING = {
   momentum: { type: "spring", bounce: 0.2, duration: 0.4 },
   sheet: { type: "spring", bounce: 0.2, duration: 0.3 },
 } as const;
-
-export type SpringName = keyof typeof SPRING;

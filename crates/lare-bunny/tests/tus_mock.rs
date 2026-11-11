@@ -1,6 +1,6 @@
 //! End-to-end test of the TUS client against an in-process mock server that
-//! implements creation, HEAD offset lookup, PATCH with offset validation, and
-//! injects a transient failure to exercise the retry path.
+//! implements deferred-length creation, HEAD offset lookup, PATCH with offset
+//! validation, and injects failures to exercise the retry paths.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -12,7 +12,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{head, patch, post};
-use lare_bunny::{TusCredentials, TusMetadata, upload_file};
+use lare_bunny::{TusCredentials, TusMetadata};
 
 #[derive(Default)]
 struct MockState {
@@ -166,108 +166,6 @@ fn creds(endpoint: String) -> TusCredentials {
 }
 
 #[tokio::test]
-async fn uploads_in_chunks_and_recovers_from_a_transient_failure() {
-    let state = Arc::new(MockState::default());
-    state.fail_next_patch.store(1, Ordering::SeqCst);
-    let endpoint = spawn_server(state.clone()).await;
-
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("demo.mp4");
-    let payload: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();
-    std::fs::write(&path, &payload).unwrap();
-
-    let client = reqwest::Client::new();
-    let mut progress = Vec::new();
-    let url = upload_file(&client, &path, &creds(endpoint), None, 64 * 1024, |p| {
-        progress.push(p.uploaded)
-    })
-    .await
-    .expect("upload succeeds");
-
-    assert!(
-        url.ends_with("/tusupload/upl1"),
-        "absolute upload url: {url}"
-    );
-    let uploads = state.uploads.lock().unwrap();
-    let (declared, bytes) = uploads.get("upl1").unwrap();
-    assert_eq!(*declared, payload.len() as u64);
-    assert_eq!(bytes, &payload, "server must hold the exact file bytes");
-    assert_eq!(progress.last().copied(), Some(payload.len() as u64));
-    assert!(
-        progress.windows(2).all(|w| w[0] <= w[1]),
-        "progress is monotonic"
-    );
-    let auth = state.seen_auth.lock().unwrap();
-    assert_eq!(
-        auth[0],
-        (
-            "sig123".to_string(),
-            "11111111-2222-3333-4444-555555555555".to_string()
-        )
-    );
-}
-
-#[tokio::test]
-async fn resumes_from_server_offset() {
-    let state = Arc::new(MockState::default());
-    let endpoint = spawn_server(state.clone()).await;
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("demo.mp4");
-    let payload: Vec<u8> = (0..150_000u32).map(|i| (i % 199) as u8).collect();
-    std::fs::write(&path, &payload).unwrap();
-
-    // Pretend a previous attempt uploaded the first 100k bytes.
-    state.uploads.lock().unwrap().insert(
-        "upl9".into(),
-        (payload.len() as u64, payload[..100_000].to_vec()),
-    );
-    let resume = format!("{endpoint}/upl9");
-    let client = reqwest::Client::new();
-    let mut first_progress = None;
-    let url = upload_file(
-        &client,
-        &path,
-        &creds(endpoint),
-        Some(&resume),
-        32 * 1024,
-        |p| {
-            first_progress.get_or_insert(p.uploaded);
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!(url, resume);
-    assert_eq!(first_progress, Some(100_000));
-    let uploads = state.uploads.lock().unwrap();
-    assert_eq!(uploads.get("upl9").unwrap().1, payload);
-}
-
-#[tokio::test]
-async fn recreates_when_resume_target_is_gone() {
-    let state = Arc::new(MockState::default());
-    let endpoint = spawn_server(state.clone()).await;
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("demo.mp4");
-    std::fs::write(&path, vec![7u8; 10_000]).unwrap();
-    let client = reqwest::Client::new();
-    let url = upload_file(
-        &client,
-        &path,
-        &creds(endpoint.clone()),
-        Some(&format!("{endpoint}/missing")),
-        4096,
-        |_| {},
-    )
-    .await
-    .unwrap();
-    assert!(url.ends_with("/upl1"));
-    assert_eq!(
-        state.uploads.lock().unwrap().get("upl1").unwrap().1.len(),
-        10_000
-    );
-}
-
-#[tokio::test]
 async fn tails_growing_file_and_declares_length_only_after_close() {
     use lare_bunny::{create_deferred_upload, upload_growing_file};
     use tokio::io::AsyncWriteExt;
@@ -279,6 +177,18 @@ async fn tails_growing_file_and_declares_length_only_after_close() {
     let mut file = tokio::fs::File::create(&path).await.unwrap();
     let client = reqwest::Client::new();
     let url = create_deferred_upload(&client, &creds).await.unwrap();
+    assert!(
+        url.starts_with("http://") && url.ends_with("/tusupload/upl1"),
+        "the relative Location is resolved against the endpoint: {url}"
+    );
+    assert_eq!(
+        state.seen_auth.lock().unwrap()[0],
+        (
+            "sig123".to_string(),
+            "11111111-2222-3333-4444-555555555555".to_string()
+        ),
+        "the pre-signed credentials go out with the request"
+    );
     let (tx, rx) = tokio::sync::watch::channel(false);
     let producer_state = state.clone();
     let producer = async move {

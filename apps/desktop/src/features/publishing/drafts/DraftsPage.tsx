@@ -1,15 +1,14 @@
 import { formatDurationHuman, showsActiveTime } from "@lare/shared";
 import { SquarePen, Trash2 } from "@lare/ui/icons";
+import { KindBadge, SectionTitle, StackedList, StackedListItem } from "@lare/ui/primitives";
 import { Link } from "react-router";
-import { KindBadge } from "@/components/ui/Badge";
-import { SectionTitle, StackedList, StackedListItem } from "@/components/ui/Card";
+import { PageBlurb } from "@/components/PageSlots";
+import { confirm } from "@/components/ui/Confirm";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
-import { useNotify } from "@/features/notifications/notices";
 import { isPracticePost, useDeletePracticePost } from "@/features/publishing/posts/postActions";
-import { PageBlurb } from "@/features/shell/PageBlurb";
-import { confirm } from "@/lib/confirm";
 import { formatListWhen, plural } from "@/lib/format";
-import { errorMessage } from "@/lib/supabase";
+import { notify, notifyError } from "@/lib/notices";
+import { routes } from "@/lib/routes";
 import { type Draft, useDeleteDraft, useDrafts } from "./queries";
 import { TrackedProblems } from "./TrackedProblems";
 
@@ -98,7 +97,7 @@ function DraftRow({ draft }: { draft: Draft }) {
     <>
       {/* The link covers the whole row, so any part of it opens the draft. */}
       <Link
-        to={`/drafts/${draft.id}`}
+        to={routes.draft(draft.id)}
         className="min-w-0 rounded-sm after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
       >
         <p className="truncate text-sm text-[var(--text)]">
@@ -204,7 +203,6 @@ function DeleteEmptyDraft({ id, practice }: { id: string; practice: boolean }) {
   const removeDraft = useDeleteDraft();
   const removePractice = useDeletePracticePost();
   const remove = practice ? removePractice : removeDraft;
-  const { notify } = useNotify();
 
   async function doDelete() {
     const ok = await confirm({
@@ -220,7 +218,7 @@ function DeleteEmptyDraft({ id, practice }: { id: string; practice: boolean }) {
       else await removeDraft.mutateAsync(id);
       notify({ title: "Draft deleted" });
     } catch (err) {
-      notify({ title: "Couldn't delete", description: errorMessage(err), variant: "error" });
+      notifyError("Couldn't delete", err);
     }
   }
 

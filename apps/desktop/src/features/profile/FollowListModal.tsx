@@ -1,21 +1,18 @@
 import { Lock, Users } from "@lare/ui/icons";
-import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
-import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { Button, Modal, SegmentedTabs } from "@lare/ui/primitives";
+import { confirm } from "@/components/ui/Confirm";
 import { EmptyState, ErrorState, Spinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
-import { FollowButton } from "@/features/friends/FollowButton";
+import { notify, notifyError } from "@/lib/notices";
+import { FollowButton } from "./FollowButton";
 import {
   type FollowState,
   type PersonSummary,
   useFollowStates,
   useRemoveFollower,
-} from "@/features/friends/queries";
-import { personName, UserRow } from "@/features/friends/UserRow";
-import { useNotify } from "@/features/notifications/notices";
-import { confirm } from "@/lib/confirm";
-import { errorMessage } from "@/lib/supabase";
+} from "./follows";
 import { type FollowListKind, useFollowList } from "./queries";
+import { personName, UserRow } from "./UserRow";
 
 const TABS: Array<{ key: FollowListKind; label: string }> = [
   { key: "followers", label: "Followers" },
@@ -111,7 +108,6 @@ export function FollowListModal({
 /** One of your own followers: follow them back as usual, or remove them. */
 function FollowerActions({ person, state }: { person: PersonSummary; state: FollowState }) {
   const remove = useRemoveFollower();
-  const { notify } = useNotify();
   const name = personName(person);
 
   const doRemove = async () => {
@@ -125,12 +121,7 @@ function FollowerActions({ person, state }: { person: PersonSummary; state: Foll
     if (!ok) return;
     remove.mutate(person.id, {
       onSuccess: () => notify({ title: `Removed ${name}`, variant: "success" }),
-      onError: (e) =>
-        notify({
-          title: "Couldn't remove follower",
-          description: errorMessage(e),
-          variant: "error",
-        }),
+      onError: (e) => notifyError("Couldn't remove follower", e),
     });
   };
 

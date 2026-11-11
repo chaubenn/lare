@@ -5,9 +5,9 @@
 import { z } from "zod";
 
 /**
- * What the AI review grades against when the user has not written their own criteria. Mirrors
- * supabase/functions/_shared/reviewCriteria.ts (the Edge Function cannot import this package);
- * keep the two identical.
+ * What the AI review grades against when the user has not written their own criteria. The Edge
+ * Function cannot import this package, so supabase/functions/_shared/reviewCriteria.ts holds a
+ * copy; edgeMirrors.test.ts fails when the two differ.
  */
 export const DEFAULT_REVIEW_CRITERIA = [
   "Grade fairly and specifically.",
@@ -73,13 +73,6 @@ export const AI_SCORE_LABELS: Record<AiScoreKey, string> = {
   correctness: "Correctness",
 };
 
-export const AI_REVIEW_JSON_SCHEMA_NAME = "lare_interview_review";
-
-/** JSON schema for OpenAI `text.format = { type: "json_schema", strict: true, ... }`. */
-export function aiReviewJsonSchema(): Record<string, unknown> {
-  return z.toJSONSchema(AiReviewSchema, { target: "draft-2020-12" }) as Record<string, unknown>;
-}
-
 /** Transcript segment shape stored in transcripts.segments. */
 export const TranscriptSegmentSchema = z.object({
   s: z.number().int().nonnegative(), // start ms
@@ -87,18 +80,3 @@ export const TranscriptSegmentSchema = z.object({
   text: z.string(),
 });
 export type TranscriptSegment = z.infer<typeof TranscriptSegmentSchema>;
-
-/** WebVTT for Bunny captions. */
-export function toWebVtt(segments: readonly TranscriptSegment[]): string {
-  const ts = (ms: number) => {
-    const h = Math.floor(ms / 3_600_000);
-    const m = Math.floor((ms % 3_600_000) / 60_000);
-    const s = Math.floor((ms % 60_000) / 1000);
-    const f = ms % 1000;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(f).padStart(3, "0")}`;
-  };
-  const cues = segments.map(
-    (seg, i) => `${i + 1}\n${ts(seg.s)} --> ${ts(Math.max(seg.e, seg.s + 1))}\n${seg.text.trim()}`,
-  );
-  return `WEBVTT\n\n${cues.join("\n\n")}\n`;
-}

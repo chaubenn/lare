@@ -11,6 +11,7 @@ use std::{
 use anyhow::{Context, anyhow};
 
 use crate::fragmented::Muxer;
+use crate::layout;
 
 pub struct Fragment {
     pub track: usize,
@@ -34,7 +35,7 @@ impl LiveOutput {
         + Send
         + 'static,
     ) -> anyhow::Result<Self> {
-        let path = project.join("content/capture.mp4");
+        let path = layout::live_capture_file(project);
         let file = File::create(&path).context("creating append-only capture output")?;
         let state = Arc::new(AtomicU8::new(0));
         let worker_state = state.clone();
@@ -117,8 +118,7 @@ impl LiveOutput {
         if !clean {
             return Err(anyhow!("capture did not stop cleanly"));
         }
-        // Recovery must never mistake a partially written capture file for a finished take.
-        std::fs::write(self.path.with_extension("complete"), b"closed")?;
+        std::fs::write(layout::complete_marker(&self.path), b"closed")?;
         self.finished.send_replace(true);
         Ok(self.path.clone())
     }

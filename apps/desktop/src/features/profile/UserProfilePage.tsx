@@ -2,11 +2,10 @@ import { Rss } from "@lare/ui/icons";
 import { useParams } from "react-router";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
-import { FollowButton } from "@/features/friends/FollowButton";
-import { useViewerLikes } from "@/features/publishing/posts/social";
+import { FollowButton } from "./FollowButton";
+import { useFollowState } from "./follows";
 import { ProfileView } from "./ProfileView";
 import {
-  useFollowState,
   useProfileStats,
   usePublicProfile,
   useSolvedActivity,
@@ -28,11 +27,6 @@ export function UserProfilePage() {
   const followState = useFollowState(profile?.id);
   const posts = useUserPosts(profile?.id);
   const postList = posts.data ?? [];
-  const likes = useViewerLikes(
-    postList.map((p) => p.id),
-    userId,
-  );
-  const likedIds = likes.data ?? new Set<string>();
 
   if (profileQuery.isPending) return <PageSpinner />;
   if (profileQuery.isError) {
@@ -78,7 +72,6 @@ export function UserProfilePage() {
       postsError={posts.isError ? posts.error : undefined}
       onRetryPosts={() => void posts.refetch()}
       morePosts={posts}
-      likedIds={likedIds}
       postsEmpty={
         <EmptyState
           icon={<Rss className="size-8" aria-hidden />}

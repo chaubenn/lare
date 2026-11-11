@@ -1,22 +1,21 @@
 /**
- * A stand-in for the Lare desktop app's local socket (`ws://127.0.0.1:47831`), just enough of
- * RFC 6455 for the extension's text frames: handshake, masked client frames in, unmasked frames
- * out. It pairs like the app does (`auth.challenge` / `auth.response`, keyed with
- * `E2E_PAIRING_SECRET`, which the fixture serves from `bridge_secrets`), unless it plays an app
- * older than protocol 4. Tests script its replies through `onMessage`.
+ * A stand-in for the Lare desktop app's local socket (`WS_URL`), just enough of RFC 6455 for the
+ * extension's text frames: handshake, masked client frames in, unmasked frames out. It pairs like
+ * the app does (`auth.challenge` / `auth.response`, keyed with `PAIRING_SECRET`, which the fixture
+ * serves from `bridge_secrets`), unless it plays an app from before pairing (older than
+ * `MIN_DESKTOP_PROTOCOL_VERSION`). Tests script its replies through `onMessage`.
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { Socket } from "node:net";
-import { pairingTranscript } from "@lare/shared";
+import { MIN_DESKTOP_PROTOCOL_VERSION, pairingTranscript, WS_PORT } from "@lare/shared";
+import { PAIRING_SECRET } from "./constants.mjs";
 
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 export type DesktopFrame = Record<string, unknown> & { type: string };
 
-export const E2E_INSTALL_ID = "0b6c2f4e-9d1a-4e7b-8c3f-5a2d6e1f9b70";
-/** Also in fixture/server.mjs, which hands it to the extension as this install's row. */
-export const E2E_PAIRING_SECRET = "e2e0".repeat(16);
+const E2E_INSTALL_ID = "0b6c2f4e-9d1a-4e7b-8c3f-5a2d6e1f9b70";
 
 function pairingProof(
   secret: string,
@@ -39,14 +38,14 @@ export class FakeDesktop {
   constructor(
     private readonly ack: { userId: string | null; recordingCapable: boolean; protocol: number },
     /** Another value plays something on the port that is not the paired app. */
-    private readonly secret = E2E_PAIRING_SECRET,
+    private readonly secret = PAIRING_SECRET,
   ) {}
 
   onMessage(handler: (msg: DesktopFrame, reply: (frame: object) => void) => void): void {
     this.handler = handler;
   }
 
-  async start(port = 47831): Promise<void> {
+  async start(port = WS_PORT): Promise<void> {
     const server = createServer((_req, res) => {
       res.writeHead(404).end();
     });
@@ -88,7 +87,7 @@ export class FakeDesktop {
             reply({ type: "error", code, message: code });
             socket.end();
           };
-          if (msg.type === "hello" && this.ack.protocol < 4) {
+          if (msg.type === "hello" && this.ack.protocol < MIN_DESKTOP_PROTOCOL_VERSION) {
             ack();
           } else if (msg.type === "hello") {
             const extNonce = typeof msg.nonce === "string" ? msg.nonce : "";
@@ -123,7 +122,7 @@ export class FakeDesktop {
               paired = "yes";
               ack();
             } else refuse("auth_failed");
-          } else if (paired !== "yes" && this.ack.protocol >= 4) {
+          } else if (paired !== "yes" && this.ack.protocol >= MIN_DESKTOP_PROTOCOL_VERSION) {
             refuse("bad_message");
           } else if (msg.type === "ping") {
             reply({ type: "pong", at: msg.at });

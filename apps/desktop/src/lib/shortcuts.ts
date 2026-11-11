@@ -17,6 +17,9 @@ export interface KeyLike {
 
 const MODIFIER_CODES = /^(Meta|Control|Alt|Shift|OS)(Left|Right)$/;
 
+/** Whether this is macOS, where shortcuts are drawn as glyphs and use Command. */
+export const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+
 /** `KeyboardEvent.code` values whose accelerator name is not just the code itself. */
 const NAMED_KEYS: Record<string, string> = {
   Space: "Space",

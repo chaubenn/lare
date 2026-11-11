@@ -1,6 +1,11 @@
 /** Parsers for the jsonb columns we read (all validated with zod; never trust the shape). */
-import { AiReviewSchema, type Distribution, DistributionSchema } from "@lare/shared";
-import type { Json, Submission } from "@lare/supabase-types";
+import {
+  AiReviewSchema,
+  type Distribution,
+  DistributionSchema,
+  TopicTagSchema,
+} from "@lare/shared";
+import type { Json } from "@lare/supabase-types";
 import { z } from "zod";
 
 export function parseDistributionJson(value: Json | null | undefined): Distribution | null {
@@ -9,7 +14,7 @@ export function parseDistributionJson(value: Json | null | undefined): Distribut
   return r.success ? r.data : null;
 }
 
-const TopicTagsSchema = z.array(z.object({ name: z.string(), slug: z.string() }));
+const TopicTagsSchema = z.array(TopicTagSchema);
 export type TopicTag = z.infer<typeof TopicTagsSchema>[number];
 
 export function parseTopicTags(value: Json | null | undefined): TopicTag[] {
@@ -73,26 +78,4 @@ export function parseAiReview(row: {
     next_steps: row.next_steps,
   });
   return r.success ? r.data : null;
-}
-
-/** Accepted submissions first (fastest first), then the rest newest-first. */
-export function sortSubmissions<
-  T extends Pick<Submission, "accepted" | "runtime_ms" | "submitted_at">,
->(subs: readonly T[]): T[] {
-  return [...subs].sort((a, b) => {
-    if (a.accepted !== b.accepted) return a.accepted ? -1 : 1;
-    if (a.accepted && b.accepted) {
-      const ar = a.runtime_ms ?? Number.POSITIVE_INFINITY;
-      const br = b.runtime_ms ?? Number.POSITIVE_INFINITY;
-      if (ar !== br) return ar - br;
-    }
-    return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime();
-  });
-}
-
-/** Best (fastest) accepted submission, if any. */
-export function bestAccepted<
-  T extends Pick<Submission, "accepted" | "runtime_ms" | "submitted_at">,
->(subs: readonly T[]): T | null {
-  return sortSubmissions(subs).find((s) => s.accepted) ?? null;
 }

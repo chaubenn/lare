@@ -1,6 +1,6 @@
 import { leaderboardHasFriends } from "@lare/shared";
 import { Search, Trophy } from "@lare/ui/icons";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@lare/ui/primitives";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/ui/States";
 import { LeaderboardItem } from "./LeaderboardItem";
 import type { WeekOffset } from "./queries";

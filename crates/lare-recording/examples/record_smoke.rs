@@ -5,7 +5,6 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
-    let mode = lare_recording::RecordingMode::Instant;
     let seconds: u64 = args.next().and_then(|s| s.parse().ok()).unwrap_or(4);
     let mic_label = args.next();
 
@@ -14,7 +13,6 @@ async fn main() -> anyhow::Result<()> {
     let started = std::time::Instant::now();
     let rec = lare_recording::start(
         lare_recording::StartRequest {
-            mode,
             dir: dir.clone(),
             display_id: None,
             mic_label,
@@ -26,7 +24,11 @@ async fn main() -> anyhow::Result<()> {
         &feeds,
     )
     .await?;
-    println!("started {:?} in {:?} -> {}", mode, started.elapsed(), rec.project_path().display());
+    println!(
+        "started in {:?} -> {}",
+        started.elapsed(),
+        rec.project_path().display()
+    );
     tokio::time::sleep(Duration::from_secs(seconds)).await;
     rec.pause().await?;
     println!("paused");
@@ -38,7 +40,13 @@ async fn main() -> anyhow::Result<()> {
     println!("stopped: {done:#?}");
     for entry in walk(&done.project_path) {
         let size = std::fs::metadata(&entry).map(|m| m.len()).unwrap_or(0);
-        println!("  {} ({size} bytes)", entry.strip_prefix(&done.project_path).unwrap_or(&entry).display());
+        println!(
+            "  {} ({size} bytes)",
+            entry
+                .strip_prefix(&done.project_path)
+                .unwrap_or(&entry)
+                .display()
+        );
     }
     feeds.release_mic().await;
     Ok(())

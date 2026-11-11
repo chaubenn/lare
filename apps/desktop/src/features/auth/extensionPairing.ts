@@ -1,13 +1,13 @@
 /**
- * The secret that pairs this install with the Chrome extension (migration 0032, `ws_server.rs`).
+ * The secret that pairs this install with the Chrome extension (migration 0032, `local_server/pairing.rs`).
  * Kept here so the local server can admit the extension offline; published to the signed-in
  * user's `bridge_secrets` row so the extension, signed in as the same user, can read it. A new
  * secret is drawn on every sign-out, so whoever was paired before has to look it up again.
  */
+import { STORAGE_KEYS, storage } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 import { setBridgeKey } from "@/lib/tauri";
 
-const STORAGE_KEY = "lare:extension-pairing";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SECRET = /^[0-9a-f]{64}$/;
 
@@ -24,7 +24,7 @@ function randomSecret(): string {
 
 function read(): LocalPairing | null {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+    const value: unknown = JSON.parse(storage.get(STORAGE_KEYS.extensionPairing) ?? "null");
     const { installId, secret } = (value ?? {}) as Partial<LocalPairing>;
     if (typeof installId === "string" && UUID.test(installId) && typeof secret === "string")
       return { installId, secret: SECRET.test(secret) ? secret : randomSecret() };
@@ -34,8 +34,9 @@ function read(): LocalPairing | null {
   return null;
 }
 
+/** A pairing that cannot be stored still pairs for this run; the next launch draws a new one. */
 function write(pairing: LocalPairing): LocalPairing {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(pairing));
+  storage.set(STORAGE_KEYS.extensionPairing, JSON.stringify(pairing));
   return pairing;
 }
 

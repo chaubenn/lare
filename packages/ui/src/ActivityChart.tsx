@@ -27,19 +27,6 @@ const WEEK_WINDOW = 4;
 /** Matches the frame's `min-h-40`. */
 const MIN_CHART_HEIGHT = 160;
 
-function describeDayPage(bars: ActivityDay[]): string {
-  const total = bars.reduce((n, d) => n + d.count, 0);
-  const activeDays = bars.filter((d) => d.count > 0).length;
-  if (total === 0) return "No problems this week";
-  return `${total} problem${total === 1 ? "" : "s"} · ${activeDays} day${activeDays === 1 ? "" : "s"} active`;
-}
-
-function describeWeekPage(bars: ActivityWeek[]): string {
-  const total = bars.reduce((n, w) => n + w.count, 0);
-  if (total === 0) return `No problems these ${bars.length} weeks`;
-  return `${total} problem${total === 1 ? "" : "s"} over the last ${bars.length} weeks`;
-}
-
 /** Chart paging arrow. Sits over the bars and fades out rather than moving them when it can't page. */
 function NavButton({
   side,

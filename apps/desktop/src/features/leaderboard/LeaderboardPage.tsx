@@ -1,7 +1,8 @@
 import { leaderboardWeekLabel } from "@lare/shared";
+import { SegmentedTabs } from "@lare/ui/primitives";
 import { useNavigate, useSearchParams } from "react-router";
-import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
-import { PageBlurb } from "@/features/shell/PageBlurb";
+import { PageBlurb } from "@/components/PageSlots";
+import { routes } from "@/lib/routes";
 import { FriendsLeaderboard } from "./FriendsLeaderboard";
 import { GlobalLeaderboard } from "./GlobalLeaderboard";
 import { useGlobalLeaderboard, useWeeklyLeaderboard, type WeekOffset } from "./queries";
@@ -24,7 +25,7 @@ const SUBTITLES: Record<Scope, string> = {
   global: "Everyone on Lare, by problems solved.",
 };
 
-/** Weekly rankings: the people you follow, or everyone with a public account. */
+/** Weekly rankings: the people you follow, or everyone on Lare. */
 export function LeaderboardPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ export function LeaderboardPage() {
         </div>
       </div>
       {scope === "friends" ? (
-        <FriendsLeaderboard weekOffset={offset} onFind={() => void navigate("/friends?tab=find")} />
+        <FriendsLeaderboard weekOffset={offset} onFind={() => void navigate(routes.findFriends)} />
       ) : (
         <GlobalLeaderboard weekOffset={offset} />
       )}

@@ -1,32 +1,18 @@
-import { LANGUAGE_LABELS } from "@lare/shared";
 import type { Submission } from "@lare/supabase-types";
 import { CodeBlock, SubmissionStats } from "@lare/ui";
+import { Badge, Button } from "@lare/ui/primitives";
 import { useState } from "react";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { formatDateTime } from "@/lib/format";
 import { parseDistributionJson } from "@/lib/json";
-
-/** LeetCode's own verbose name when it sent one, otherwise our label for the lang code. */
-export function languageLabel(lang: string | null, verbose?: string | null): string {
-  if (verbose) return verbose;
-  if (!lang) return "Unknown";
-  return LANGUAGE_LABELS[lang] ?? lang;
-}
+import { languageLabel } from "@/lib/languages";
 
 /**
  * One submission: how it was judged, and — when it passed — the runtime and memory
  * distributions behind those percentiles. The code is behind a toggle because it is the
  * tallest thing here and usually not what you came for.
  */
-export function SubmissionCard({
-  submission,
-  defaultShowCode = false,
-}: {
-  submission: Submission;
-  defaultShowCode?: boolean;
-}) {
-  const [showCode, setShowCode] = useState(defaultShowCode);
+export function SubmissionCard({ submission }: { submission: Submission }) {
+  const [showCode, setShowCode] = useState(false);
   const status = submission.status_display ?? (submission.accepted ? "Accepted" : "Unknown");
   const testcases =
     submission.total_correct !== null && submission.total_testcases !== null
@@ -37,7 +23,8 @@ export function SubmissionCard({
     <div className="rounded-[var(--lare-r-3)] border border-[var(--border)] bg-[var(--surface-raised)] p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
         <Badge tone={submission.accepted ? "emerald" : "rose"}>{status}</Badge>
-        <span>{languageLabel(submission.lang, submission.lang_verbose)}</span>
+        {/* LeetCode's own verbose name when it sent one, otherwise our label for the lang code. */}
+        <span>{submission.lang_verbose || (languageLabel(submission.lang) ?? "Unknown")}</span>
         <span aria-hidden>·</span>
         <span>{formatDateTime(submission.submitted_at)}</span>
         {testcases ? (

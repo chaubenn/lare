@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PROTOCOL_VERSION } from "@lare/shared";
+import { MIN_DESKTOP_PROTOCOL_VERSION, PROTOCOL_VERSION } from "@lare/shared";
 import {
   type BrowserContext,
   chromium,
@@ -10,10 +10,11 @@ import {
   test,
   type Worker,
 } from "@playwright/test";
+import { STATE_KEY } from "../src/storage";
+import { FIXTURE_ORIGIN as BASE, INBOX_SESSION_ID, USER_ID } from "./constants.mjs";
 import { FakeDesktop } from "./fakeDesktop";
 
 const EXT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../.output/chrome-mv3-e2e");
-const BASE = "http://localhost:4173";
 
 interface RecordedRequest {
   method: string;
@@ -42,8 +43,8 @@ test.beforeAll(async () => {
     ],
   });
   sw = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
-  // chrome-extension://<id>/sidepanel.html — needed to drive the side panel, which
-  // is now the only UI the extension has.
+  // chrome-extension://<id>/sidepanel.html: needed to drive the side panel, which
+  // is the only UI the extension has.
   extensionId = new URL(sw.url()).host;
   // Seed a Supabase session so the extension believes the user is signed in.
   const res = await fetch(`${BASE}/__reset`);
@@ -71,9 +72,9 @@ test.afterAll(async () => {
  * synced by the next one. Auth lives under a different key and is left alone.
  */
 async function resetExtensionState(): Promise<void> {
-  await sw.evaluate(async () => {
-    await chrome.storage.local.remove("lare:state");
-  });
+  await sw.evaluate(async (key) => {
+    await chrome.storage.local.remove(key);
+  }, STATE_KEY);
 }
 
 async function recorded(): Promise<RecordedRequest[]> {
@@ -102,19 +103,13 @@ async function openPanel() {
   return panel;
 }
 
-const INBOX_SESSION_ID = "00000000-0000-4000-8000-0000000000b0";
-
 test("passive tracking: opening a problem and submitting is captured with no session", async () => {
   await fetch(`${BASE}/__reset`);
   await resetExtensionState();
   const page = await openProblem();
 
-  // Nothing is injected into the page beyond the (hidden) recording dot: no
-  // launcher, no menu, no pill.
-  const overlay = page.locator("lare-overlay");
-  await expect(overlay.getByRole("button", { name: "Lare" })).toHaveCount(0);
-  await expect(overlay.getByTestId("lare-pill")).toHaveCount(0);
-  await expect(overlay.locator(".lare-rec")).toHaveCount(0);
+  // The recording dot is the only thing Lare puts on the page, and practice does not show it.
+  await expect(dotOn(page)).toHaveCount(0);
 
   // Opening the problem is enough to register it against the inbox.
   await expect
@@ -125,7 +120,6 @@ test("passive tracking: opening a problem and submitting is captured with no ses
     )
     .toBeGreaterThan(0);
 
-  // Solve it.
   await focusEditorEnd(page, "editor");
   await page.keyboard.type("        return [0, 1]\n");
 
@@ -196,14 +190,14 @@ test("passive tracking: opening a problem and submitting is captured with no ses
   expect(dist.bins.map((b) => b.value)).toEqual([140, 386, 633, 879, 1126, 1219]);
 
   // Practice does not upload an edit log (that is interview-only) and does not
-  // create a post — publishing is an explicit action in the desktop app.
+  // create a post: publishing is an explicit action.
   expect(sb.filter((r) => r.path.startsWith("/supabase/storage/"))).toHaveLength(0);
   expect(table("posts", "POST")).toHaveLength(0);
 
   await page.close();
 });
 
-test("the side panel lists tracked problems without a hand-off button, and keeps listing them", async () => {
+test("the side panel lists tracked problems, and keeps listing them", async () => {
   await fetch(`${BASE}/__reset`);
   await resetExtensionState();
 
@@ -213,7 +207,6 @@ test("the side panel lists tracked problems without a hand-off button, and keeps
   await submitOnce(first);
   let panel = await openPanel();
   await expect(panel.getByText("Two Sum")).toBeVisible();
-  await expect(panel.getByRole("button", { name: /Review .* in Lare/ })).toHaveCount(0);
   await panel.close();
 
   // Nothing local or server-side got cleared just by looking at the side panel.
@@ -261,7 +254,7 @@ test("publish selected cloud inbox problems hands the draft to the desktop app",
   const problem = await openProblem();
   const panel = await openPanel();
   await panel.getByRole("checkbox", { name: "Select Two Sum" }).check();
-  // The hand-off is a `lare://` deep link now — the website is a landing page and has no drafts
+  // The hand-off is a `lare://` deep link: the website is a landing page and has no drafts
   // page to open. A custom scheme never becomes a Playwright page, so record what the worker asks
   // Chrome to open instead of waiting for a tab that will not navigate.
   await sw.evaluate(() => {
@@ -334,7 +327,7 @@ const startRequest = (tabId: number | null, graded = true) => ({
     frontendId: "1",
     title: "Two Sum",
     difficulty: "Easy",
-    url: "http://localhost:4173/problems/two-sum/",
+    url: `${BASE}/problems/two-sum/`,
     language: null,
   },
   question: null,
@@ -343,7 +336,6 @@ const startRequest = (tabId: number | null, graded = true) => ({
   tabId,
 });
 
-const USER_ID = "00000000-0000-4000-8000-000000000001";
 const dotOn = (page: Page) => page.locator("lare-overlay").locator(".lare-rec");
 const problemTabId = () =>
   sw.evaluate(
@@ -398,7 +390,12 @@ test("a desktop signed in to another account cannot record the interview", async
 for (const [name, desktopFor, expected] of [
   [
     "an app from before pairing, which is told to update",
-    () => new FakeDesktop({ userId: USER_ID, recordingCapable: true, protocol: 3 }),
+    () =>
+      new FakeDesktop({
+        userId: USER_ID,
+        recordingCapable: true,
+        protocol: MIN_DESKTOP_PROTOCOL_VERSION - 1,
+      }),
     /Update the Lare desktop app/,
   ],
   [
@@ -563,8 +560,8 @@ test("a desktop recording error cancels the start and closes the session", async
       error: expect.stringMatching(/Screen recording permission/),
     });
     const state = await sw.evaluate(
-      async () =>
-        (await chrome.storage.local.get("lare:state"))["lare:state"] as { interview?: unknown },
+      async (key) => (await chrome.storage.local.get(key))[key] as { interview?: unknown },
+      STATE_KEY,
     );
     expect(state?.interview ?? null).toBeNull();
     await expect(dotOn(problem)).toHaveCount(0);

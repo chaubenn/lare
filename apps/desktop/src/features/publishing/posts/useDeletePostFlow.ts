@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router";
-import { useNotify } from "@/features/notifications/notices";
-import { confirm } from "@/lib/confirm";
-import { errorMessage } from "@/lib/supabase";
+import { confirm } from "@/components/ui/Confirm";
+import { notify, notifyError } from "@/lib/notices";
+import { routes } from "@/lib/routes";
 import { isPracticePost, useDeletePracticePost } from "./postActions";
 import { useDeletePost } from "./queries";
 
@@ -26,7 +26,6 @@ export function useDeletePostFlow(postId: string, sessionClient: string | null |
   const removePost = useDeletePost();
   const removePractice = useDeletePracticePost();
   const navigate = useNavigate();
-  const { notify } = useNotify();
 
   const deletePost = async () => {
     if (!(await confirmDelete(practice))) return;
@@ -37,10 +36,9 @@ export function useDeletePostFlow(postId: string, sessionClient: string | null |
           description: practice ? "Its problems are back in Tracked problems." : undefined,
           variant: "success",
         });
-        void navigate("/profile", { replace: true });
+        void navigate(routes.profile, { replace: true });
       },
-      onError: (e: Error) =>
-        notify({ title: "Couldn't delete", description: errorMessage(e), variant: "error" }),
+      onError: (e: Error) => notifyError("Couldn't delete", e),
     };
     if (practice) removePractice.mutate(postId, handlers);
     else removePost.mutate(postId, handlers);

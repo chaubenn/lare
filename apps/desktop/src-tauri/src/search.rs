@@ -349,10 +349,11 @@ mod tests {
         }
     }
 
-    /// Skips on a machine that cannot run Zvec, which is exactly the case the app falls back on.
+    /// `None` on a machine that cannot run Zvec, which is exactly the case the app falls back
+    /// on: the test then passes without having checked anything, and says so on stderr.
     fn fresh_index() -> Option<(SearchIndex, PathBuf)> {
         if let Err(e) = engine() {
-            eprintln!("skipping: {e}");
+            eprintln!("skipped: Zvec unavailable ({e})");
             return None;
         }
         let root = std::env::temp_dir().join(format!("lare-search-test-{}", uuid::Uuid::new_v4()));

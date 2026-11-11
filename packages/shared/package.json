@@ -6,18 +6,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./edits": "./src/session/edits.ts",
-    "./timer": "./src/session/timer.ts",
-    "./leetcode": "./src/leetcode/leetcode.ts",
-    "./media": "./src/media/media.ts",
-    "./overview": "./src/session/overview.ts",
-    "./protocol": "./src/session/protocol.ts",
-    "./session": "./src/session/session.ts",
-    "./ai-review": "./src/session/ai-review.ts",
-    "./activity": "./src/session/activity.ts",
-    "./format": "./src/format/format.ts",
-    "./constants": "./src/session/constants.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "test": "vitest run",

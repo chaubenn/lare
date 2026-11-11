@@ -1,13 +1,22 @@
 /**
  * `@handle` mentions in comments. The database finds them with the same rule
  * (`private.comment_mentions`) to decide who gets notified; this side renders them as links and
- * drives the composer's autocomplete. Handles are 3-20 of [a-z0-9_], and an `@` glued to a word
- * (an email address) is not a mention.
+ * drives the composer's autocomplete. An `@` glued to a word (an email address) is not a mention.
  */
+import { HANDLE_CHAR, HANDLE_MAX_LENGTH, HANDLE_MIN_LENGTH } from "../format/handle";
 
 export type MentionSegment = { kind: "text"; text: string } | { kind: "mention"; handle: string };
 
-const MENTION = /(^|[^a-z0-9_])@([a-z0-9_]{3,20})(?![a-z0-9_])/gi;
+const NOT_HANDLE_CHAR = HANDLE_CHAR.replace("[", "[^");
+const MENTION = new RegExp(
+  `(^|${NOT_HANDLE_CHAR})@(${HANDLE_CHAR}{${HANDLE_MIN_LENGTH},${HANDLE_MAX_LENGTH}})(?!${HANDLE_CHAR})`,
+  "gi",
+);
+/** The `@` and whatever part of a handle has been typed after it, at the end of the text. */
+const MENTION_BEING_TYPED = new RegExp(
+  `(^|${NOT_HANDLE_CHAR})@(${HANDLE_CHAR}{0,${HANDLE_MAX_LENGTH}})$`,
+  "i",
+);
 
 /** Splits a comment body into plain text and mentions, in order. */
 export function splitMentions(body: string): MentionSegment[] {
@@ -32,7 +41,7 @@ export function mentionAtCaret(
   caret: number,
 ): { start: number; query: string } | null {
   const before = text.slice(0, caret);
-  const match = /(^|[^a-z0-9_])@([a-z0-9_]{0,20})$/i.exec(before);
+  const match = MENTION_BEING_TYPED.exec(before);
   if (!match) return null;
   const query = match[2] ?? "";
   return { start: caret - query.length - 1, query: query.toLowerCase() };

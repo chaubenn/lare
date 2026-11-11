@@ -5,6 +5,7 @@ export const POST_MEDIA_BUCKET = "post-media";
 /** Enough for a carousel without turning a post into an album. */
 export const MAX_POST_IMAGES = 8;
 
+/** The image types every photo upload accepts (post photos and avatars). */
 export const POST_IMAGE_MIME_TYPES = [
   "image/jpeg",
   "image/png",
@@ -13,7 +14,7 @@ export const POST_IMAGE_MIME_TYPES = [
 ] as const;
 
 /** Matches the bucket's `file_size_limit` in migration 0007. */
-export const MAX_POST_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_POST_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -22,12 +23,17 @@ const EXTENSIONS: Record<string, string> = {
   "image/gif": "gif",
 };
 
-export function isPostImageMime(mime: string): boolean {
-  return (POST_IMAGE_MIME_TYPES as readonly string[]).includes(mime);
+function imageExtension(mime: string): string {
+  return EXTENSIONS[mime] ?? "jpg";
 }
 
-export function imageExtension(mime: string): string {
-  return EXTENSIONS[mime] ?? "jpg";
+/** Human reason an image file is refused for upload, or null when it is fine. */
+export function rejectImage(file: { type: string; size: number }, maxBytes: number): string | null {
+  if (!(POST_IMAGE_MIME_TYPES as readonly string[]).includes(file.type)) {
+    return "Photos must be JPEG, PNG, WebP or GIF.";
+  }
+  if (file.size > maxBytes) return `Photos must be ${maxBytes / (1024 * 1024)} MB or smaller.`;
+  return null;
 }
 
 /**
@@ -45,7 +51,5 @@ export function postMediaPath(
 
 /** Human reason the file was rejected, or null when it is fine to upload. */
 export function rejectPostImage(file: { type: string; size: number }): string | null {
-  if (!isPostImageMime(file.type)) return "Photos must be JPEG, PNG, WebP or GIF.";
-  if (file.size > MAX_POST_IMAGE_BYTES) return "Photos must be 10 MB or smaller.";
-  return null;
+  return rejectImage(file, MAX_POST_IMAGE_BYTES);
 }

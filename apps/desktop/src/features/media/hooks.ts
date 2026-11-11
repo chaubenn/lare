@@ -3,16 +3,17 @@
 import type { Video } from "@lare/supabase-types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { queryKeys } from "@/lib/queryKeys";
 import {
   type CompletedRecording,
   type Permissions,
   type RecorderStatus,
   recorder,
 } from "@/lib/recorder";
-import { supabase } from "@/lib/supabase";
+import { supabase, uniqueChannel } from "@/lib/supabase";
 import { inTauri, useTauriEvent } from "@/lib/tauri";
-import type { VideoSlot } from "./pipeline";
 import { getAllRecordingMeta } from "./recordingStore";
+import type { VideoSlot } from "./types";
 
 const IDLE: RecorderStatus = {
   state: "idle",
@@ -41,15 +42,9 @@ export function useRecorderStatus(): RecorderStatus {
   return status;
 }
 
-export const permissionsKey = ["recorder", "permissions"] as const;
-export const devicesKey = ["recorder", "devices"] as const;
-export const settingsKey = ["recorder", "settings"] as const;
-export const recordingsKey = ["recorder", "recordings"] as const;
-export const whisperModelsKey = ["recorder", "whisper-models"] as const;
-
 export function usePermissions() {
   return useQuery({
-    queryKey: permissionsKey,
+    queryKey: queryKeys.recorder.permissions,
     enabled: inTauri,
     queryFn: (): Promise<Permissions> => recorder.checkPermissions(),
     refetchOnWindowFocus: true,
@@ -58,7 +53,7 @@ export function usePermissions() {
 
 export function useDevices() {
   return useQuery({
-    queryKey: devicesKey,
+    queryKey: queryKeys.recorder.devices,
     enabled: inTauri,
     queryFn: () => recorder.listDevices(),
     staleTime: 30_000,
@@ -67,7 +62,7 @@ export function useDevices() {
 
 export function useRecorderSettings() {
   return useQuery({
-    queryKey: settingsKey,
+    queryKey: queryKeys.recorder.settings,
     enabled: inTauri,
     queryFn: () => recorder.settings(),
   });
@@ -75,7 +70,7 @@ export function useRecorderSettings() {
 
 export function useWhisperModels() {
   return useQuery({
-    queryKey: whisperModelsKey,
+    queryKey: queryKeys.recorder.whisperModels,
     enabled: inTauri,
     queryFn: () => recorder.whisperModels(),
   });
@@ -95,7 +90,7 @@ export interface RecordingWithMeta extends CompletedRecording {
 /** Completed recordings on disk merged with local pipeline bookkeeping. */
 export function useRecordings() {
   return useQuery({
-    queryKey: recordingsKey,
+    queryKey: queryKeys.recorder.recordings,
     enabled: inTauri,
     queryFn: async (): Promise<RecordingWithMeta[]> => {
       const [list, meta] = await Promise.all([recorder.list(), getAllRecordingMeta()]);
@@ -115,13 +110,11 @@ export function useRecordings() {
   });
 }
 
-export const videoKey = (id: string) => ["video", id] as const;
-
 /** One `videos` row, updated live as Bunny's webhook flips its status. */
 export function useVideo(videoId: string | null | undefined) {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: videoKey(videoId ?? ""),
+    queryKey: queryKeys.video(videoId ?? ""),
     enabled: !!videoId,
     queryFn: async (): Promise<Video | null> => {
       const { data, error } = await supabase
@@ -140,15 +133,12 @@ export function useVideo(videoId: string | null | undefined) {
   });
   useEffect(() => {
     if (!videoId) return;
-    // Unique topic: Strict Mode remounts (and two useVideo calls for the same id)
-    // would otherwise reuse a subscribed channel and throw on the second `.on()`.
-    const channel = supabase
-      .channel(`video-${videoId}:${crypto.randomUUID()}`)
+    const channel = uniqueChannel(`video-${videoId}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "videos", filter: `id=eq.${videoId}` },
         (payload) => {
-          queryClient.setQueryData(videoKey(videoId), payload.new as Video);
+          queryClient.setQueryData(queryKeys.video(videoId), payload.new as Video);
         },
       )
       .subscribe();

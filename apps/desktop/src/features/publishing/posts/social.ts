@@ -1,7 +1,7 @@
 import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys, refresh } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";
-import { postKey } from "./queries";
 
 const COMMENT_SELECT =
   "id, post_id, user_id, parent_id, body, edited_at, created_at, profiles!post_comments_user_id_fkey(handle, display_name, avatar_url)" as const;
@@ -16,15 +16,10 @@ function commentsQuery(postId: string) {
 
 export type PostComment = QueryData<ReturnType<typeof commentsQuery>>[number];
 
-export const commentsKey = (postId: string) => ["post-comments", postId] as const;
-export const likeKey = (postId: string) => ["post-like", postId] as const;
-export const likesBatchKey = (userId: string, postIds: string[]) =>
-  ["post-likes", userId, postIds] as const;
-
 /** Whether the signed-in user has liked this post. The count lives on `posts.like_count`. */
 export function useViewerLike(postId: string, userId: string) {
   return useQuery({
-    queryKey: likeKey(postId),
+    queryKey: queryKeys.postLike(postId),
     enabled: postId.length > 0 && userId.length > 0,
     queryFn: async () => {
       const { count, error } = await supabase
@@ -41,7 +36,7 @@ export function useViewerLike(postId: string, userId: string) {
 /** Which of these posts the signed-in viewer has liked, in one round-trip (feed cards). */
 export function useViewerLikes(postIds: string[], userId: string) {
   return useQuery({
-    queryKey: likesBatchKey(userId, postIds),
+    queryKey: queryKeys.postLikes.of(userId, postIds),
     enabled: postIds.length > 0 && userId.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -64,18 +59,17 @@ export function useToggleLike(postId: string) {
       return (data ?? {}) as { liked?: boolean; like_count?: number };
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: likeKey(postId) });
-      void queryClient.invalidateQueries({ queryKey: ["post-likes"] });
-      void queryClient.invalidateQueries({ queryKey: postKey(postId) });
-      void queryClient.invalidateQueries({ queryKey: ["feed"] });
-      void queryClient.invalidateQueries({ queryKey: ["user-posts"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.postLike(postId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.postLikes.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.post.of(postId) });
+      void refresh.postCards(queryClient);
     },
   });
 }
 
 export function useComments(postId: string) {
   return useQuery({
-    queryKey: commentsKey(postId),
+    queryKey: queryKeys.postComments.of(postId),
     enabled: postId.length > 0,
     queryFn: async () => {
       const { data, error } = await commentsQuery(postId);
@@ -90,12 +84,9 @@ export function useComments(postId: string) {
  * Replies stay on the post page, where they sit under the comment they answer.
  * One query for the whole page; posts with fewer comments simply come back shorter.
  */
-export const FEED_COMMENT_PREVIEW = 3;
+const FEED_COMMENT_PREVIEW = 3;
 
-export async function fetchTopComments(
-  postIds: string[],
-  limit = FEED_COMMENT_PREVIEW,
-): Promise<Map<string, PostComment[]>> {
+export async function fetchTopComments(postIds: string[]): Promise<Map<string, PostComment[]>> {
   if (postIds.length === 0) return new Map();
   const { data, error } = await supabase
     .from("post_comments")
@@ -107,7 +98,7 @@ export async function fetchTopComments(
   const map = new Map<string, PostComment[]>();
   for (const row of data ?? []) {
     const list = map.get(row.post_id);
-    if (list && list.length >= limit) continue;
+    if (list && list.length >= FEED_COMMENT_PREVIEW) continue;
     if (list) list.push(row);
     else map.set(row.post_id, [row]);
   }
@@ -119,11 +110,9 @@ function useCommentMutation<TVars>(postId: string, run: (vars: TVars) => Promise
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: commentsKey(postId) });
-      void queryClient.invalidateQueries({ queryKey: postKey(postId) });
-      // Feed and profile cards carry the comment count and the first few comments inline.
-      void queryClient.invalidateQueries({ queryKey: ["feed"] });
-      void queryClient.invalidateQueries({ queryKey: ["user-posts"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.postComments.of(postId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.post.of(postId) });
+      void refresh.postCards(queryClient);
     },
   });
 }
@@ -143,7 +132,7 @@ export function useAddComment(postId: string, userId: string) {
   );
 }
 
-export interface MentionCandidate {
+interface MentionCandidate {
   id: string;
   handle: string;
   display_name: string | null;
@@ -157,7 +146,7 @@ export function useMentionSuggestions(query: string | null) {
     .toLowerCase()
     .slice(0, 20);
   return useQuery({
-    queryKey: ["mention-suggestions", term],
+    queryKey: queryKeys.mentionSuggestions.of(term),
     enabled: query !== null,
     staleTime: 30_000,
     queryFn: async (): Promise<MentionCandidate[]> => {

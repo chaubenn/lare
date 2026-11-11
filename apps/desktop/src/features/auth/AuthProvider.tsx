@@ -10,17 +10,16 @@ import {
   useRef,
   useState,
 } from "react";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage, supabase } from "@/lib/supabase";
+import { notify, notifyError } from "@/lib/notices";
+import { queryKeys } from "@/lib/queryKeys";
+import { supabase } from "@/lib/supabase";
 import { setCurrentUser, useTauriEvent } from "@/lib/tauri";
 import { forgetExtensionPairing, pairExtension, unpairExtension } from "./extensionPairing";
 
 /** How soon to try publishing the pairing secret again after it failed (offline, say). */
 const PAIRING_RETRY_MS = 60_000;
 
-export const profileQueryKey = (userId: string) => ["profile", userId] as const;
-
-export async function fetchProfile(userId: string): Promise<Profile | null> {
+async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
@@ -64,11 +63,9 @@ export function useUser(): {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   // Whose data the query cache currently holds; `undefined` until the session is restored.
   const cacheOwner = useRef<string | null | undefined>(undefined);
 
-  // Restore the persisted session and follow auth changes.
   useEffect(() => {
     let active = true;
     // Every cached query belongs to whoever was signed in when it ran, and most keys do not carry
@@ -131,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [restored, userId]);
 
-  // OAuth loopback: the Rust server received ?code=... on 127.0.0.1:47831/auth/callback.
+  // OAuth loopback: the local Rust server received `?code=...` on its `/auth/callback`.
   useTauriEvent("auth:callback", ({ code }) => {
     supabase.auth
       .exchangeCodeForSession(code)
@@ -139,16 +136,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error)
           notify({ title: "Sign-in failed", description: error.message, variant: "error" });
       })
-      .catch((err: unknown) =>
-        notify({ title: "Sign-in failed", description: errorMessage(err), variant: "error" }),
-      );
+      .catch((err: unknown) => notifyError("Sign-in failed", err));
   });
   useTauriEvent("auth:error", ({ error, description }) => {
     notify({ title: "Sign-in failed", description: description ?? error, variant: "error" });
   });
 
   const profileQuery = useQuery({
-    queryKey: profileQueryKey(userId ?? "anonymous"),
+    queryKey: queryKeys.profile(userId ?? "anonymous"),
     queryFn: () => fetchProfile(userId ?? ""),
     enabled: userId !== null,
     staleTime: 60_000,

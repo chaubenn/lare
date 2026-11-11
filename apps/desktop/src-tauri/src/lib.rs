@@ -3,25 +3,33 @@
 
 pub mod commands;
 pub mod deeplink;
+mod events;
+pub mod local_server;
 pub mod preview;
+pub mod project;
 pub mod recorder;
 pub mod recording;
 pub mod search;
 pub mod shutdown;
+mod sync;
+mod upload;
 pub mod windows;
-pub mod ws_server;
 
 use std::sync::{Arc, Mutex};
 
 use lare_core::WS_PORT;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
-use crate::ws_server::{ServerContext, ServerEvent, WsHub};
+use crate::local_server::{
+    BridgeKeyInput, PairingStore, ServerContext, ServerEvent, SignInGate, WsHub,
+};
+use crate::sync::lock;
+use crate::windows::MAIN_LABEL;
 
 /// State shared between commands and the local server.
 pub struct AppState {
@@ -41,9 +49,23 @@ pub struct WsStatus {
 
 #[tauri::command]
 fn set_current_user(state: State<'_, AppState>, user_id: Option<String>) {
-    if let Ok(mut current) = state.current_user.lock() {
-        *current = user_id;
-    }
+    *lock(&state.current_user) = user_id;
+}
+
+/// Install the pairing secret the webview published for the signed-in user, or forget it with
+/// `null` when signed out.
+#[tauri::command]
+fn set_bridge_key(
+    pairing: State<'_, PairingStore>,
+    key: Option<BridgeKeyInput>,
+) -> Result<(), String> {
+    pairing.set_bridge_key(key)
+}
+
+/// The webview is about to send the user to an OAuth provider: accept the callback that follows.
+#[tauri::command]
+fn expect_auth_callback(sign_in: State<'_, SignInGate>) {
+    sign_in.expect_sign_in();
 }
 
 #[tauri::command]
@@ -62,7 +84,7 @@ fn app_version(app: AppHandle) -> String {
 /// Route from the deep link the app was started with (if any). Cleared after the first call.
 #[tauri::command]
 fn take_initial_deeplink(state: State<'_, AppState>) -> Option<String> {
-    state.initial_deeplink.lock().ok().and_then(|mut slot| slot.take())
+    lock(&state.initial_deeplink).take()
 }
 
 fn init_tracing() {
@@ -141,7 +163,7 @@ fn open_private_log(dir: &std::path::Path) -> std::io::Result<std::fs::File> {
 }
 
 pub fn focus_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_webview_window(MAIN_LABEL) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
@@ -150,33 +172,35 @@ pub fn focus_main_window(app: &AppHandle) {
 
 fn emit_deeplink(app: &AppHandle, path: &str) {
     info!(path, "deep link");
-    if let Err(err) = app.emit("deeplink:navigate", path) {
-        error!(%err, "failed to emit deeplink:navigate");
-    }
+    events::emit(app, events::DEEPLINK_NAVIGATE, path);
     focus_main_window(app);
 }
 
 /// Turn server events into Tauri events for the webview.
 async fn forward_server_events(app: AppHandle, mut events: UnboundedReceiver<ServerEvent>) {
     while let Some(event) = events.recv().await {
-        let result = match event {
+        match event {
             ServerEvent::AuthCallback { code, next } => {
                 focus_main_window(&app);
-                app.emit_to("main", "auth:callback", serde_json::json!({ "code": code, "next": next }))
+                events::emit_to(
+                    &app,
+                    MAIN_LABEL,
+                    events::AUTH_CALLBACK,
+                    serde_json::json!({ "code": code, "next": next }),
+                );
             }
             ServerEvent::AuthError { error, description } => {
                 focus_main_window(&app);
-                app.emit_to(
-                    "main",
-                    "auth:error",
+                events::emit_to(
+                    &app,
+                    MAIN_LABEL,
+                    events::AUTH_ERROR,
                     serde_json::json!({ "error": error, "description": description }),
-                )
+                );
             }
-            ServerEvent::ExtMessage(value) => app.emit("ext:message", value),
-            ServerEvent::ExtConnected(connected) => app.emit("ext:connected", connected),
-        };
-        if let Err(err) = result {
-            warn!(%err, "failed to emit event to the webview");
+            ServerEvent::ExtConnected(connected) => {
+                events::emit(&app, events::EXT_CONNECTED, connected);
+            }
         }
     }
 }
@@ -229,12 +253,13 @@ pub fn run() {
             ws: hub,
             initial_deeplink: Mutex::new(None),
         })
-        .manage(server_ctx.local_auth.clone())
+        .manage(server_ctx.pairing.clone())
+        .manage(server_ctx.sign_in.clone())
         .invoke_handler(tauri::generate_handler![
             commands::prepare_bunny_upload,
             set_current_user,
-            ws_server::set_bridge_key,
-            ws_server::expect_auth_callback,
+            set_bridge_key,
+            expect_auth_callback,
             ws_status,
             app_version,
             take_initial_deeplink,
@@ -256,23 +281,15 @@ pub fn run() {
             commands::recordings_list,
             commands::recording_delete,
             commands::clear_screen_sharing,
-            commands::open_recorder_window,
-            commands::hide_recorder_window,
             commands::tuck_recorder_window,
-            commands::open_camera_window,
-            commands::hide_camera_window,
-            commands::resize_camera_window,
-            commands::focus_main,
             commands::show_desktop_notification,
             commands::media_info,
             commands::make_thumbnail,
             commands::upload_to_bunny,
-            commands::remember_upload,
             commands::whisper_models,
             commands::ensure_whisper_model,
             commands::transcribe_recording,
             commands::read_file_bytes,
-            commands::delete_file,
             commands::path_exists,
             search::search_open,
             search::search_index,
@@ -282,8 +299,15 @@ pub fn run() {
             // Track the UI thread so overlay helpers can run AppKit work safely from Tokio.
             crate::windows::mark_main_thread();
 
+            // Recordings, models, settings and the search index all live under this.
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::env::temp_dir().join("lare"));
+
             // Recorder (Cap capture stack) shared by commands and the extension bridge.
-            let recorder = recorder::Recorder::new(app.handle().clone());
+            let recorder =
+                recorder::Recorder::new(app.handle().clone(), backend_ctx.hub.clone(), &data_dir);
             backend_ctx.set_recording_backend(Some(Arc::new(recorder::CapRecordingBackend::new(
                 recorder.clone(),
             ))));
@@ -300,10 +324,6 @@ pub fn run() {
             app.manage(previews.clone());
 
             // The command palette's index. Nothing touches Zvec until the frontend opens it.
-            let data_dir = app
-                .path()
-                .app_data_dir()
-                .unwrap_or_else(|_| std::env::temp_dir().join("lare"));
             app.manage(Arc::new(search::SearchIndex::new(data_dir)));
 
             // Deep links. macOS registers the scheme via the bundle's Info.plist; Windows/Linux
@@ -316,9 +336,7 @@ pub fn run() {
             }
             if let Ok(Some(urls)) = app.deep_link().get_current() {
                 if let Some(path) = urls.iter().find_map(deeplink::route_for) {
-                    if let Ok(mut slot) = app.state::<AppState>().initial_deeplink.lock() {
-                        *slot = Some(path);
-                    }
+                    *lock(&app.state::<AppState>().initial_deeplink) = Some(path);
                 }
             }
             let handle = app.handle().clone();
@@ -331,9 +349,8 @@ pub fn run() {
                 }
             });
 
-            // Local server + event bridge.
             tauri::async_runtime::spawn(forward_server_events(app.handle().clone(), events));
-            tauri::async_runtime::spawn(ws_server::run_forever(server_ctx));
+            tauri::async_runtime::spawn(local_server::run_forever(server_ctx));
 
             // Ctrl-C under `pnpm dev:desktop`, `killall Lare`, logout: none of these reach the
             // event loop, and a process that dies with a capture open leaves macOS showing Lare
@@ -349,7 +366,7 @@ pub fn run() {
                 // The overlays are only ever hidden while the app runs (closing one mid-recording
                 // crashes it), so the main window is no longer the last window standing: without
                 // this the app would linger after its window went away.
-                tauri::WindowEvent::Destroyed if window.label() == "main" => {
+                tauri::WindowEvent::Destroyed if window.label() == MAIN_LABEL => {
                     // Guarded: the main window is also destroyed on the way out of an exit we
                     // asked for, and asking again from inside that teardown is not welcome.
                     if !QUITTING.swap(true, std::sync::atomic::Ordering::SeqCst) {
@@ -396,8 +413,11 @@ mod tests {
 
         // An earlier build left both world-readable.
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
-        std::fs::set_permissions(dir.join("lare-app.log"), std::fs::Permissions::from_mode(0o644))
-            .unwrap();
+        std::fs::set_permissions(
+            dir.join("lare-app.log"),
+            std::fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
         open_private_log(&dir).unwrap();
         assert_eq!(mode(&dir), 0o700);
         assert_eq!(mode(&dir.join("lare-app.log")), 0o600);

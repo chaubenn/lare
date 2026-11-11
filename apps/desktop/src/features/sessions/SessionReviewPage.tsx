@@ -1,22 +1,29 @@
 import { formatDurationHuman, showsActiveTime } from "@lare/shared";
 import { RefreshCw, Sparkles, SquarePen, Video as VideoIcon } from "@lare/ui/icons";
+import {
+  Button,
+  buttonClass,
+  Card,
+  KindBadge,
+  SectionTitle,
+  SessionStatusBadge,
+} from "@lare/ui/primitives";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { AiReviewSection } from "@/components/AiReviewSection";
 import { ProblemSection } from "@/components/ProblemSection";
-import { KindBadge, SessionStatusBadge } from "@/components/ui/Badge";
-import { Button, buttonClass } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageSpinner, Spinner } from "@/components/ui/States";
-import { VideoEmbed } from "@/components/VideoEmbed";
 import { useVideo } from "@/features/media/hooks";
 import { isActive, useJobs } from "@/features/media/jobs";
 import { useFailedTranscription, useUnfinishedInterviews } from "@/features/media/recovery";
-import { useNotify } from "@/features/notifications/notices";
+import { VideoEmbed } from "@/features/media/VideoEmbed";
 import { useInterviewReview } from "@/features/publishing/posts/queries";
+import { edge } from "@/lib/edge";
 import { formatDateTime, plural } from "@/lib/format";
-import { errorMessage, invokeFunction } from "@/lib/supabase";
+import { notify, notifyError } from "@/lib/notices";
+import { queryKeys } from "@/lib/queryKeys";
+import { postRoute, routes } from "@/lib/routes";
 import { CodeTimeline } from "./CodeTimeline";
 import { lastEditAt } from "./editLog";
 import { TranscriptionRetry, UnfinishedInterviewRow } from "./InterviewRecovery";
@@ -55,7 +62,7 @@ export function SessionReviewPage() {
         title="Session not found"
         description="It may have been deleted, or it belongs to another account."
         action={
-          <Link to="/sessions" className="text-sm text-zinc-200 underline underline-offset-2">
+          <Link to={routes.sessions} className="text-sm text-zinc-200 underline underline-offset-2">
             Back to sessions
           </Link>
         }
@@ -67,7 +74,6 @@ export function SessionReviewPage() {
 
 function SessionReview({ session }: { session: SessionDetail }) {
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   const navigate = useNavigate();
   const isInterview = session.kind === "interview";
   // A take of this session still on this computer: one that never uploaded, or one whose
@@ -166,28 +172,20 @@ function SessionReview({ session }: { session: SessionDetail }) {
           : null;
 
   const generate = useMutation({
-    mutationFn: (force: boolean) =>
-      invokeFunction<unknown>(
-        "ai-review",
-        force ? { sessionId: session.id, force: true } : { sessionId: session.id },
-      ),
+    mutationFn: (force: boolean) => edge.aiReview(session.id, force),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["interview-review", session.id] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.interviewReview(session.id) });
       notify({ title: "AI review ready", variant: "success" });
     },
-    onError: (e) =>
-      notify({
-        title: "Couldn't generate the review",
-        description: errorMessage(e),
-        variant: "error",
-      }),
+    onError: (e) => notifyError("Couldn't generate the review", e),
   });
 
   const title = post.data?.title || (isInterview ? "Mock interview" : "Practice session");
   const postLink = post.data
-    ? post.data.status === "draft"
-      ? { to: `/drafts/${post.data.id}`, label: "Open draft" }
-      : { to: `/posts/${post.data.id}`, label: "View post" }
+    ? {
+        to: postRoute(post.data),
+        label: post.data.status === "draft" ? "Open draft" : "View post",
+      }
     : null;
   // An ended session the extension never made a post for (or whose post was deleted).
   const canCreateDraft =
@@ -198,13 +196,8 @@ function SessionReview({ session }: { session: SessionDetail }) {
     !session.is_practice_inbox;
   const doCreateDraft = () =>
     createDraft.mutate(session.id, {
-      onSuccess: (postId) => void navigate(`/drafts/${postId}`),
-      onError: (e) =>
-        notify({
-          title: "Couldn't create a draft",
-          description: errorMessage(e),
-          variant: "error",
-        }),
+      onSuccess: (postId) => void navigate(routes.draft(postId)),
+      onError: (e) => notifyError("Couldn't create a draft", e),
     });
 
   return (

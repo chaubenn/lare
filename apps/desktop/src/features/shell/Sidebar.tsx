@@ -11,28 +11,22 @@ import {
   Sun,
   User,
 } from "@lare/ui/icons";
+import { Avatar, CountBadge } from "@lare/ui/primitives";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
-import { CountBadge } from "@/components/ui/Badge";
 import { useAuth } from "@/features/auth/AuthProvider";
-import { useNotify } from "@/features/notifications/notices";
+import { useSignOut } from "@/features/auth/useSignOut";
 import { useUnreadNotificationCount } from "@/features/notifications/queries";
 import { useDrafts } from "@/features/publishing/drafts/queries";
 import { useFollowRequests } from "@/features/requests/queries";
-import { errorMessage } from "@/lib/supabase";
+import { routes } from "@/lib/routes";
+import { STORAGE_KEYS, storage } from "@/lib/storage";
 import { type Theme, useTheme } from "@/lib/theme";
 import { ExtensionStatus } from "./ExtensionStatus";
 import { NAV_GROUPS, type NavItem } from "./nav";
 
-const COLLAPSED_KEY = "lare-sidebar-collapsed";
-
 function readCollapsed(): boolean {
-  try {
-    return localStorage.getItem(COLLAPSED_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return storage.get(STORAGE_KEYS.sidebarCollapsed) === "1";
 }
 
 // The sidebar keeps its full-screen proportions from FULL_WIDTH up, then shrinks with the window
@@ -161,12 +155,11 @@ const MENU_ITEM =
   "lare-press flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-sunken)] focus-visible:bg-[var(--surface-sunken)] focus-visible:outline-none disabled:opacity-50";
 
 function AccountMenu({ collapsed }: { collapsed: boolean }) {
-  const { profile, signOut } = useAuth();
+  const { profile } = useAuth();
+  const { signingOut, signOut } = useSignOut();
   const { theme, setTheme } = useTheme();
-  const { notify } = useNotify();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   const name = profile?.display_name ?? (profile?.handle ? `@${profile.handle}` : "You");
@@ -190,16 +183,6 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
   const go = (to: string) => {
     setOpen(false);
     void navigate(to);
-  };
-
-  const doSignOut = async () => {
-    setSigningOut(true);
-    try {
-      await signOut();
-    } catch (err) {
-      notify({ title: "Couldn't sign out", description: errorMessage(err), variant: "error" });
-      setSigningOut(false);
-    }
   };
 
   return (
@@ -261,7 +244,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
             type="button"
             role="menuitem"
             className={MENU_ITEM}
-            onClick={() => go("/profile")}
+            onClick={() => go(routes.profile)}
           >
             <User className="size-4 text-[var(--text-tertiary)]" aria-hidden />
             Profile
@@ -270,7 +253,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
             type="button"
             role="menuitem"
             className={MENU_ITEM}
-            onClick={() => go("/settings")}
+            onClick={() => go(routes.settings)}
           >
             <Settings className="size-4 text-[var(--text-tertiary)]" aria-hidden />
             Settings
@@ -281,7 +264,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
             role="menuitem"
             disabled={signingOut}
             className={cn(MENU_ITEM, "text-[var(--lare-danger)]")}
-            onClick={() => void doSignOut()}
+            onClick={() => void signOut()}
           >
             <LogOut className="size-4" aria-hidden />
             Sign out
@@ -299,19 +282,15 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const scale = useSidebarScale();
   const counts: Partial<Record<string, number>> = {
-    "/drafts": drafts.data?.length ?? 0,
-    "/friends": requests.data?.length ?? 0,
+    [routes.drafts]: drafts.data?.length ?? 0,
+    [routes.friends]: requests.data?.length ?? 0,
     // What people did. The app's own alerts are toasts and never reach this badge.
-    "/notifications": unread.data ?? 0,
+    [routes.notifications]: unread.data ?? 0,
   };
 
   const toggle = () =>
     setCollapsed((c) => {
-      try {
-        localStorage.setItem(COLLAPSED_KEY, c ? "0" : "1");
-      } catch {
-        // Not persisted; the rail still collapses for this session.
-      }
+      storage.set(STORAGE_KEYS.sidebarCollapsed, c ? "0" : "1");
       return !c;
     });
 

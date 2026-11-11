@@ -1,6 +1,7 @@
 import { cn } from "@lare/ui";
 import { Link } from "react-router";
-import { useExtensionStatus } from "./useExtensionStatus";
+import { routes } from "@/lib/routes";
+import { useExtensionStatus } from "@/lib/useExtensionStatus";
 
 /** Whether the Chrome extension is talking to this app. Links to Settings. */
 export function ExtensionStatus({ collapsed }: { collapsed: boolean }) {
@@ -21,7 +22,7 @@ export function ExtensionStatus({ collapsed }: { collapsed: boolean }) {
   if (collapsed) {
     return (
       <Link
-        to="/settings"
+        to={routes.settings}
         title={`Extension ${label}`}
         aria-label={`Extension ${label}`}
         className="flex size-11 items-center justify-center rounded-[var(--lare-r-2)]"
@@ -33,7 +34,7 @@ export function ExtensionStatus({ collapsed }: { collapsed: boolean }) {
 
   return (
     <Link
-      to="/settings"
+      to={routes.settings}
       className="lare-micro block rounded-[var(--lare-r-2)] px-3 py-1.5 text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
     >
       <span className="flex items-center gap-2">

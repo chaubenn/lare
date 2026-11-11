@@ -106,13 +106,6 @@ export interface TusCredentials {
   headers: Record<string, string>;
   metadata: { filetype: string; title: string };
 }
-/** Response of the `bunny-create-upload` Edge Function. */
-export interface CreateUploadResponse {
-  videoId: string;
-  bunnyVideoId: string;
-  libraryId: number;
-  tus: TusCredentials;
-}
 export interface UploadJob {
   jobId: string;
   path: string;
@@ -141,7 +134,7 @@ export interface WhisperModelStatus {
   downloaded: boolean;
 }
 
-/** Events emitted by the Rust side for long jobs (all keyed by jobId). */
+/** Events emitted by the Rust side. The two progress events carry the `jobId` they belong to. */
 export interface RecorderEvents {
   "recording:state": RecorderStatus;
   "recording:completed": CompletedRecording;
@@ -192,22 +185,14 @@ export const recorder = {
   list: () => invoke<CompletedRecording[]>("recordings_list"),
   delete: (recordingId: string) => invoke<void>("recording_delete", { recordingId }),
 
-  openRecorderWindow: () => invoke<void>("open_recorder_window"),
-  hideRecorderWindow: () => invoke<void>("hide_recorder_window"),
   /** Hide the pill mid-take; the pill shortcut brings it back. */
   tuckRecorderWindow: () => invoke<void>("tuck_recorder_window"),
-  openCameraWindow: () => invoke<void>("open_camera_window"),
-  hideCameraWindow: () => invoke<void>("hide_camera_window"),
-  resizeCameraWindow: (size: number) => invoke<void>("resize_camera_window", { size }),
-  focusMain: () => invoke<void>("focus_main"),
 
   mediaInfo: (path: string) => invoke<MediaInfo>("media_info", { path }),
-  makeThumbnail: (req: { videoPath: string; atMs?: number; maxWidth?: number; output?: string }) =>
+  makeThumbnail: (req: { videoPath: string; atMs?: number; maxWidth?: number }) =>
     invoke<string>("make_thumbnail", { req }),
   upload: (job: UploadJob) => invoke<UploadResult>("upload_to_bunny", { job }),
   prepareUpload: (tus: TusCredentials) => invoke<string>("prepare_bunny_upload", { tus }),
-  rememberUpload: (path: string, uploadUrl: string) =>
-    invoke<void>("remember_upload", { path, uploadUrl }),
 
   whisperModels: () => invoke<WhisperModelStatus[]>("whisper_models"),
   ensureWhisperModel: (jobId: string, model: WhisperModel) =>
@@ -219,7 +204,6 @@ export const recorder = {
     const buf = await invoke<ArrayBuffer>("read_file_bytes", { path });
     return new Uint8Array(buf);
   },
-  deleteFile: (path: string) => invoke<void>("delete_file", { path }),
   pathExists: (path: string) => invoke<boolean>("path_exists", { path }),
 };
 

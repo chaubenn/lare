@@ -1,11 +1,8 @@
 import { DEFAULT_REVIEW_CRITERIA, REVIEW_CRITERIA_MAX_LENGTH } from "@lare/shared";
 import { ChevronDown } from "@lare/ui/icons";
+import { Button, Card, Textarea } from "@lare/ui/primitives";
 import { useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Textarea } from "@/components/ui/Field";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage } from "@/lib/supabase";
+import { notify, notifyError } from "@/lib/notices";
 import { useResetReviewCriteria, useReviewCriteria, useSaveReviewCriteria } from "./queries";
 
 /**
@@ -16,7 +13,6 @@ export function ReviewCriteria() {
   const saved = useReviewCriteria();
   const save = useSaveReviewCriteria();
   const reset = useResetReviewCriteria();
-  const { notify } = useNotify();
   const [draft, setDraft] = useState<string | null>(null);
 
   if (saved.isPending || saved.isError) return null;
@@ -34,12 +30,7 @@ export function ReviewCriteria() {
         setDraft(null);
         notify({ title: "Criteria saved", variant: "success" });
       },
-      onError: (err) =>
-        notify({
-          title: "Couldn't save your criteria",
-          description: errorMessage(err),
-          variant: "error",
-        }),
+      onError: (err) => notifyError("Couldn't save your criteria", err),
     });
 
   const onReset = () =>
@@ -48,12 +39,7 @@ export function ReviewCriteria() {
         setDraft(null);
         notify({ title: "Back to the default criteria" });
       },
-      onError: (err) =>
-        notify({
-          title: "Couldn't reset your criteria",
-          description: errorMessage(err),
-          variant: "error",
-        }),
+      onError: (err) => notifyError("Couldn't reset your criteria", err),
     });
 
   return (

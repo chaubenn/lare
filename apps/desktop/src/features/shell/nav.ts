@@ -9,6 +9,7 @@ import {
   User,
   Users,
 } from "@lare/ui/icons";
+import { routePrefixes, routes } from "@/lib/routes";
 
 export interface NavItem {
   to: string;
@@ -24,7 +25,7 @@ export interface NavItem {
   end?: boolean;
 }
 
-export interface NavGroup {
+interface NavGroup {
   label: string;
   items: NavItem[];
 }
@@ -36,28 +37,28 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ to: "/", label: "Feed", icon: Rss, shortcut: "CmdOrCtrl+1", end: true }],
+    items: [{ to: routes.feed, label: "Feed", icon: Rss, shortcut: "CmdOrCtrl+1", end: true }],
   },
   {
     label: "Create",
     items: [
-      { to: "/drafts", label: "Drafts", icon: SquarePen, shortcut: "CmdOrCtrl+2" },
-      { to: "/sessions", label: "Sessions", icon: Inbox, shortcut: "CmdOrCtrl+3" },
+      { to: routes.drafts, label: "Drafts", icon: SquarePen, shortcut: "CmdOrCtrl+2" },
+      { to: routes.sessions, label: "Sessions", icon: Inbox, shortcut: "CmdOrCtrl+3" },
     ],
   },
   {
     label: "Community",
     items: [
-      { to: "/friends", label: "Friends", icon: Users, shortcut: "CmdOrCtrl+4" },
-      { to: "/leaderboard", label: "Leaderboard", icon: Trophy, shortcut: "CmdOrCtrl+5" },
+      { to: routes.friends, label: "Friends", icon: Users, shortcut: "CmdOrCtrl+4" },
+      { to: routes.leaderboard, label: "Leaderboard", icon: Trophy, shortcut: "CmdOrCtrl+5" },
     ],
   },
   {
     label: "Account",
     items: [
-      { to: "/profile", label: "Profile", icon: User, shortcut: "CmdOrCtrl+6" },
-      { to: "/notifications", label: "Notifications", icon: Bell, shortcut: "CmdOrCtrl+7" },
-      { to: "/settings", label: "Settings", icon: Settings, shortcut: "CmdOrCtrl+8" },
+      { to: routes.profile, label: "Profile", icon: User, shortcut: "CmdOrCtrl+6" },
+      { to: routes.notifications, label: "Notifications", icon: Bell, shortcut: "CmdOrCtrl+7" },
+      { to: routes.settings, label: "Settings", icon: Settings, shortcut: "CmdOrCtrl+8" },
     ],
   },
 ];
@@ -66,15 +67,17 @@ export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 /** Routes that live under a sidebar section without being a section's own path. */
 const SECTION_PREFIXES: Array<[prefix: string, to: string]> = [
-  ["/posts", "/"],
-  ["/u/", "/friends"],
-  ["/requests", "/friends"],
+  [routePrefixes.posts, routes.feed],
+  [routePrefixes.users, routes.friends],
+  [routes.legacyRequests, routes.friends],
 ];
 
 /** The sidebar item a pathname belongs to (for the topbar title and the active state). */
 export function navItemForPath(pathname: string): NavItem | undefined {
   const exact = NAV_ITEMS.find((item) =>
-    item.to === "/" ? pathname === "/" : pathname === item.to || pathname.startsWith(`${item.to}/`),
+    item.to === routes.feed
+      ? pathname === routes.feed
+      : pathname === item.to || pathname.startsWith(`${item.to}/`),
   );
   if (exact) return exact;
   const section = SECTION_PREFIXES.find(([prefix]) => pathname.startsWith(prefix));

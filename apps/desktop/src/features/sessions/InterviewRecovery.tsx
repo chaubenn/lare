@@ -1,15 +1,14 @@
 import { formatDurationHuman } from "@lare/shared";
 import { CircleAlert, RefreshCw, Trash2 } from "@lare/ui/icons";
+import { Button, Card, SectionTitle } from "@lare/ui/primitives";
 import { useState } from "react";
 import { Link } from "react-router";
-import { Button } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
+import { confirm } from "@/components/ui/Confirm";
 import type { RecordingWithMeta } from "@/features/media/hooks";
 import { useRecoveryActions, useUnfinishedInterviews } from "@/features/media/recovery";
-import { useNotify } from "@/features/notifications/notices";
-import { confirm } from "@/lib/confirm";
 import { formatDateTime, plural } from "@/lib/format";
-import { errorMessage } from "@/lib/supabase";
+import { notify, notifyError } from "@/lib/notices";
+import { routes } from "@/lib/routes";
 
 /**
  * Sessions page: interviews recorded on this computer that never finished uploading (Lare quit
@@ -45,7 +44,6 @@ export function UnfinishedInterviewRow({
   showSessionLink?: boolean;
 }) {
   const { retryUpload, discard } = useRecoveryActions();
-  const { notify } = useNotify();
   const [busy, setBusy] = useState<"retry" | "discard" | null>(null);
 
   const doRetry = async () => {
@@ -74,7 +72,7 @@ export function UnfinishedInterviewRow({
       await discard(recording);
       notify({ title: "Recording discarded" });
     } catch (e) {
-      notify({ title: "Couldn't discard it", description: errorMessage(e), variant: "error" });
+      notifyError("Couldn't discard it", e);
     } finally {
       setBusy(null);
     }
@@ -98,7 +96,7 @@ export function UnfinishedInterviewRow({
             <>
               <span aria-hidden> · </span>
               <Link
-                to={`/sessions/${recording.sessionId}`}
+                to={routes.session(recording.sessionId)}
                 className="underline underline-offset-2 hover:text-[var(--text)]"
               >
                 Open session

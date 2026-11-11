@@ -1,9 +1,10 @@
 import type { LeaderboardRow } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Lock } from "@lare/ui/icons";
+import { Avatar } from "@lare/ui/primitives";
 import { Link } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
+import { routes } from "@/lib/routes";
 
 const DIFF = [
   { key: "easy", title: "Easy", color: "var(--skill-easy)" },
@@ -21,7 +22,7 @@ export function LeaderboardItem({
   row: Omit<LeaderboardRow, "rank"> & { rank: number | null; is_private?: boolean };
 }) {
   const name = row.display_name?.trim() || `@${row.handle}`;
-  const href = `/u/${row.handle}`;
+  const href = routes.user(row.handle);
   return (
     <li
       className={cn(

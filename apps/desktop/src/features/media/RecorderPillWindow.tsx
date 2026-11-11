@@ -12,7 +12,7 @@ import { Emblem } from "@lare/ui/brand";
 import { EyeOff, GripVertical, Pause, Play, Trash2 } from "@lare/ui/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type RecorderStatus, recorder } from "@/lib/recorder";
-import { DEFAULT_PILL_SHORTCUT, describeAccelerator } from "@/lib/shortcuts";
+import { DEFAULT_PILL_SHORTCUT, describeAccelerator, isMac } from "@/lib/shortcuts";
 import { useTauriEvent } from "@/lib/tauri";
 
 /**
@@ -35,8 +35,6 @@ function useElapsed(status: RecorderStatus | null, since: number): number {
   const base = status?.recordedMs ?? 0;
   return running ? base + Math.max(0, now - since) : base;
 }
-
-const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 
 /**
  * The keys that hide this pill, as the user has set them (null when they turned the shortcut off).
@@ -119,8 +117,7 @@ function useTooltips() {
 }
 
 /**
- * Window position uses `data-tauri-drag-region` (native Tauri drag). `useDraggable` would
- * fight that and risk breaking recording, so snap/rubber-band stay with the OS drag.
+ * The pill is moved with `data-tauri-drag-region`, the OS's own window drag.
  *
  * The window is taller than the pill: the strip above it is room for tooltips, and Rust lets
  * clicks through it while the pointer is not on the pill itself.

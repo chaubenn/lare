@@ -1,6 +1,6 @@
 [package]
 name = "lare-desktop"
-version = "3.6.0"
+version = "3.7.0"
 description = "Lare desktop app: review drafts, publish posts, and (later) record demo videos and mock interviews."
 edition.workspace = true
 license.workspace = true
@@ -44,10 +44,9 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 futures-util = "0.3"
 futures = { workspace = true }
-anyhow = { workspace = true }
 uuid = { workspace = true }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream", "json", "query"] }
-# HMAC and randomness for the extension pairing handshake (`ws_server`). Already in the tree via rustls.
+# HMAC and randomness for the extension pairing handshake (`local_server::pairing`). Already in the tree via rustls.
 ring = "0.17"
 
 lare-core = { path = "../../../crates/lare-core" }

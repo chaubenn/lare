@@ -1,20 +1,26 @@
 /**
- * Internal runtime messages between the content script / popup and the service
- * worker. Distinct from the desktop protocol in @lare/shared/protocol.
+ * Internal runtime messages between the content script, the side panel and the service worker.
+ * Distinct from the desktop bridge protocol in `@lare/shared`.
+ *
+ * Content scripts from the previous build stay alive in open tabs after an update and keep
+ * talking to the new worker, so a shape that has shipped has to stay accepted (and sent).
  */
 import {
   DistributionSchema,
   EditEventSchema,
   type ExtensionStateSchema,
+  type ProblemInfo,
   ProblemInfoSchema,
   type RecordingState,
   SubmissionInfoSchema,
+  TopicTagSchema,
 } from "@lare/shared";
 import { z } from "zod";
+import { errorText } from "./util";
 
 export const QuestionDetailsSchema = z.object({
   descriptionHtml: z.string().nullable(),
-  topicTags: z.array(z.object({ name: z.string(), slug: z.string() })),
+  topicTags: z.array(TopicTagSchema),
 });
 export type QuestionDetails = z.infer<typeof QuestionDetailsSchema>;
 
@@ -27,36 +33,22 @@ export const CapturedSubmissionSchema = SubmissionInfoSchema.extend({
 });
 export type CapturedSubmission = z.infer<typeof CapturedSubmissionSchema>;
 
-export const AuthInfoSchema = z
-  .object({
-    userId: z.string(),
-    email: z.string().nullable(),
-    handle: z.string().nullable(),
-    displayName: z.string().nullable(),
-    avatarUrl: z.string().nullable(),
-  })
-  .nullable();
-export type AuthInfo = z.infer<typeof AuthInfoSchema>;
+export type AuthInfo = {
+  userId: string;
+  email: string | null;
+  handle: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+} | null;
 
-export const RuntimeRequestSchema = z.discriminatedUnion("type", [
+/**
+ * Requests a LeetCode tab's content script may send. A page is untrusted, so this list is the
+ * security boundary: the worker refuses every other request unless it comes from one of the
+ * extension's own pages.
+ */
+const PAGE_REQUESTS = [
   z.object({ type: z.literal("GET_STATE") }),
-  // Only interviews are started explicitly; practice is tracked passively.
-  z.object({
-    type: z.literal("START_INTERVIEW"),
-    problem: ProblemInfoSchema.nullable(),
-    question: QuestionDetailsSchema.nullable(),
-    facecam: z.boolean().default(false),
-    /** Transcribe the recording and allow an AI review. Off: video only. */
-    graded: z.boolean().default(true),
-    tabId: z.number().nullable().default(null),
-  }),
-  /** Load the content scripts into a LeetCode tab that has none (opened before an update). */
-  z.object({ type: z.literal("INJECT_PAGE"), tabId: z.number() }),
-  z.object({ type: z.literal("PAUSE_SESSION") }),
-  z.object({ type: z.literal("RESUME_SESSION") }),
-  z.object({ type: z.literal("END_SESSION") }),
-  /** Close the interview and throw its recording away, without saving anything. */
-  z.object({ type: z.literal("DISCARD_SESSION") }),
+  z.object({ type: z.literal("PROBE_APP") }),
   z.object({
     type: z.literal("PROBLEM_OPENED"),
     problem: ProblemInfoSchema,
@@ -79,11 +71,31 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
     problem: ProblemInfoSchema.nullable().optional(),
     question: QuestionDetailsSchema.nullable().optional(),
   }),
+] as const;
+
+/** Requests only the extension's own pages (the side panel) may send. */
+const PANEL_REQUESTS = [
+  // Only interviews are started explicitly; practice is tracked passively.
+  z.object({
+    type: z.literal("START_INTERVIEW"),
+    problem: ProblemInfoSchema.nullable(),
+    question: QuestionDetailsSchema.nullable(),
+    facecam: z.boolean().default(false),
+    /** Transcribe the recording and allow an AI review. Off: video only. */
+    graded: z.boolean().default(true),
+    tabId: z.number().nullable().default(null),
+  }),
+  /** Load the content scripts into a LeetCode tab that has none (opened before an update). */
+  z.object({ type: z.literal("INJECT_PAGE"), tabId: z.number() }),
+  z.object({ type: z.literal("PAUSE_SESSION") }),
+  z.object({ type: z.literal("RESUME_SESSION") }),
+  z.object({ type: z.literal("END_SESSION") }),
+  /** Close the interview and throw its recording away, without saving anything. */
+  z.object({ type: z.literal("DISCARD_SESSION") }),
   z.object({ type: z.literal("SIGN_IN"), provider: z.enum(["github", "google"]) }),
   z.object({ type: z.literal("SIGN_IN_OTP"), email: z.string().email() }),
   z.object({ type: z.literal("VERIFY_OTP"), email: z.string().email(), token: z.string() }),
   z.object({ type: z.literal("SIGN_OUT") }),
-  z.object({ type: z.literal("PROBE_APP") }),
   z.object({ type: z.literal("OPEN_APP"), path: z.string().optional() }),
   z.object({ type: z.literal("CANCEL_START") }),
   /** Retry saving every mock interview that ended but could not be saved. */
@@ -93,8 +105,22 @@ export const RuntimeRequestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("PUBLISH_PROBLEMS"), ids: z.array(z.string().uuid()).min(1) }),
   /** Remove tracked problems from the inbox without posting them (all of them when omitted). */
   z.object({ type: z.literal("CLEAR_TRACKED"), ids: z.array(z.string().uuid()).optional() }),
+] as const;
+
+export const RuntimeRequestSchema = z.discriminatedUnion("type", [
+  ...PAGE_REQUESTS,
+  ...PANEL_REQUESTS,
 ]);
 export type RuntimeRequest = z.infer<typeof RuntimeRequestSchema>;
+
+const PAGE_REQUEST_TYPES: ReadonlySet<RuntimeRequest["type"]> = new Set(
+  PAGE_REQUESTS.map((schema) => schema.shape.type.value),
+);
+
+/** Whether a content script in a LeetCode tab is allowed to send this request. */
+export function isPageRequest(req: RuntimeRequest): boolean {
+  return PAGE_REQUEST_TYPES.has(req.type);
+}
 
 export interface RecordingInfo {
   state: RecordingState;
@@ -113,7 +139,7 @@ export interface RuntimeSnapshot {
   recording: RecordingInfo | null;
 }
 
-export function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | null {
+function toSnapshot(res: Partial<RuntimeSnapshot>): RuntimeSnapshot | null {
   if (!res.state) return null;
   return {
     state: res.state,
@@ -134,6 +160,74 @@ export interface StateBroadcast extends RuntimeSnapshot {
   toast?: { kind: "info" | "success" | "error"; text: string } | undefined;
 }
 
+/**
+ * Hand `set` the snapshot carried by a successful response or a `STATE_CHANGED` broadcast.
+ * Anything else (a failed response, some other runtime message, a reply without state) is skipped.
+ */
+export function applySnapshot(msg: unknown, set: (snapshot: RuntimeSnapshot) => void): void {
+  if (typeof msg !== "object" || msg === null) return;
+  const carrier = msg as RuntimeResponse | Partial<StateBroadcast>;
+  if ("ok" in carrier ? !carrier.ok : carrier.type !== "STATE_CHANGED") return;
+  const snapshot = toSnapshot(carrier as Partial<RuntimeSnapshot>);
+  if (snapshot) set(snapshot);
+}
+
+/**
+ * Only the tab being recorded is told the recording state; what goes to any other tab says
+ * `recording: null`.
+ */
+export function forTab<T extends { state?: RuntimeSnapshot["state"] }>(
+  payload: T,
+  tabId: number,
+): T | (T & { recording: null }) {
+  return payload.state?.interview?.tabId === tabId ? payload : { ...payload, recording: null };
+}
+
+/** Side panel -> content script: "what problem is this tab on?". */
+export interface PageProblemReply {
+  problem: ProblemInfo | null;
+  question: QuestionDetails | null;
+}
+
+/** Everything a content script is sent with `chrome.tabs.sendMessage`. */
+export type TabMessage =
+  /** Show or hide the consent dot; answered `{ ok: true }` once it has rendered. */
+  | { type: "LARE_RECORDING_INDICATOR"; visible: boolean }
+  /** Send any buffered edits to the worker now; answered `{ ok: true }` when they are in. */
+  | { type: "LARE_FLUSH_EDITS" }
+  | { type: "LARE_PAGE_PROBLEM" }
+  | StateBroadcast;
+
+type TabReply<M extends TabMessage> = M extends { type: "LARE_PAGE_PROBLEM" }
+  ? PageProblemReply
+  : M extends StateBroadcast
+    ? undefined
+    : { ok?: boolean };
+
+/** Send to a tab's content script and reject when nothing there is listening. */
+export function requestFromTab<M extends TabMessage>(
+  tabId: number,
+  msg: M,
+): Promise<TabReply<M> | undefined> {
+  return chrome.tabs.sendMessage(tabId, msg);
+}
+
+/**
+ * Send to a tab's content script, best effort. A tab with no receiver (closed, navigated away,
+ * opened before the extension loaded) is normal, so that resolves undefined instead of rejecting.
+ */
+export function sendToTab<M extends TabMessage>(
+  tabId: number,
+  msg: M,
+): Promise<TabReply<M> | undefined> {
+  return requestFromTab(tabId, msg).catch(() => undefined);
+}
+
+/** Send a broadcast to the extension's own pages; no side panel open is normal. */
+export function sendToExtensionPages(msg: StateBroadcast): void {
+  chrome.runtime.sendMessage(msg).catch(() => undefined);
+}
+
 export async function sendRuntime(req: RuntimeRequest): Promise<RuntimeResponse> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const res = await new Promise<RuntimeResponse>((resolve) => {
@@ -149,7 +243,7 @@ export async function sendRuntime(req: RuntimeRequest): Promise<RuntimeResponse>
           }
         });
       } catch (e) {
-        resolve({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        resolve({ ok: false, error: errorText(e) });
       }
     });
     if (res.ok) return res;

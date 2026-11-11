@@ -1,6 +1,6 @@
-// The grading criteria the AI review uses when the user has not written their own. Mirrors
+// The grading criteria the AI review uses when the user has not written their own. A copy of
 // DEFAULT_REVIEW_CRITERIA in packages/shared/src/session/ai-review.ts, which the desktop app shows
-// as the starting point. Keep the two identical.
+// as the starting point; packages/shared/src/edgeMirrors.test.ts fails when the two differ.
 
 export const DEFAULT_REVIEW_CRITERIA = [
   "Grade fairly and specifically.",

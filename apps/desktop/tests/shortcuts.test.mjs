@@ -71,7 +71,6 @@ test("keycaps follow the platform", () => {
 });
 
 test("the default shortcut is a three-modifier chord, drawn per platform", () => {
-  assert.equal(DEFAULT_PILL_SHORTCUT, "Control+Alt+Shift+H");
   assert.deepEqual(describeAccelerator(DEFAULT_PILL_SHORTCUT, true), ["⌃", "⌥", "⇧", "H"]);
   assert.deepEqual(describeAccelerator(DEFAULT_PILL_SHORTCUT, false), [
     "Ctrl",

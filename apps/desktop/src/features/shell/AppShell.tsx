@@ -1,14 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useMatches, useNavigate, useNavigationType } from "react-router";
+import { PageActionsSlot } from "@/components/PageSlots";
 import { useLocalCopyCleanup } from "@/features/media/localCopies";
+import { useJobNotices, usePermissionNotices } from "@/features/media/useMediaNotices";
 import { useRecordingEvents } from "@/features/media/useRecordingEvents";
 import { useNotificationStream } from "@/features/notifications/queries";
-import { useNoticeSources } from "@/features/notifications/sources";
 import { useDraftsRealtime } from "@/features/publishing/drafts/queries";
 import { useSearchSync } from "@/features/search/sync";
+import { useUpdateNotices } from "@/lib/updater";
 import { CommandPalette } from "./CommandPalette";
 import { NAV_ITEMS } from "./nav";
-import { PageActionsSlot } from "./PageActions";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -71,8 +72,9 @@ export function AppShell() {
   );
   useDraftsRealtime();
   useNotificationStream();
-  // Jobs, the updater and OS permissions all report to the Notifications page now.
-  useNoticeSources();
+  useJobNotices();
+  useUpdateNotices();
+  usePermissionNotices();
   useRecordingEvents();
   useLocalCopyCleanup();
   useSearchSync();

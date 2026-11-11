@@ -2,36 +2,24 @@
  * desktop settings page. The `avatars` storage bucket, its public-read policy and its
  * owner-scoped write policies already exist (0001_init.sql) -- this is the client side.
  */
+import { rejectImage } from "./media";
 
 export const AVATAR_BUCKET = "avatars";
 
 /** Square side length the resized avatar is encoded at. */
-export const AVATAR_SIZE = 256;
+const AVATAR_SIZE = 256;
 
-export const AVATAR_JPEG_QUALITY = 0.85;
-
-export const AVATAR_INPUT_MIME_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-] as const;
+const AVATAR_JPEG_QUALITY = 0.85;
 
 /** Generous cap on the *input* file -- it gets resized down before upload, so this only
  * exists to reject obviously-wrong files, not to approximate the final upload size. Matches
  * the bucket's own file_size_limit as the real backstop.
  */
-export const MAX_AVATAR_INPUT_BYTES = 20 * 1024 * 1024;
-
-export function isAvatarInputMime(mime: string): boolean {
-  return (AVATAR_INPUT_MIME_TYPES as readonly string[]).includes(mime);
-}
+const MAX_AVATAR_INPUT_BYTES = 20 * 1024 * 1024;
 
 /** Human reason the file was rejected, or null when it is fine to process. */
 export function rejectAvatarInput(file: { type: string; size: number }): string | null {
-  if (!isAvatarInputMime(file.type)) return "Photos must be JPEG, PNG, WebP or GIF.";
-  if (file.size > MAX_AVATAR_INPUT_BYTES) return "Photos must be 20 MB or smaller.";
-  return null;
+  return rejectImage(file, MAX_AVATAR_INPUT_BYTES);
 }
 
 /**

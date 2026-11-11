@@ -8,5 +8,6 @@ description = "Shared types for Lare: extension <-> desktop protocol, session an
 
 [dependencies]
 serde = { workspace = true }
+
+[dev-dependencies]
 serde_json = { workspace = true }
-thiserror = { workspace = true }

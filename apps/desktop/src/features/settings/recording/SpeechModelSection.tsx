@@ -1,13 +1,12 @@
 import { Check, Download } from "@lare/ui/icons";
-import { Progress } from "@lare/ui/primitives";
+import { Button, FieldError, Progress } from "@lare/ui/primitives";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { FieldError } from "@/components/ui/Field";
-import { useWhisperModels, whisperModelsKey } from "@/features/media/hooks";
-import { useNotify } from "@/features/notifications/notices";
+import { useWhisperModels } from "@/features/media/hooks";
+import { errorMessage } from "@/lib/errors";
+import { notify, notifyError } from "@/lib/notices";
+import { queryKeys } from "@/lib/queryKeys";
 import { formatBytes, newJobId, recorder, type WhisperModel } from "@/lib/recorder";
-import { errorMessage } from "@/lib/supabase";
 import { useTauriEvent } from "@/lib/tauri";
 import { type Option, SettingSelect, SubSection, useSettingsPatch } from "./shared";
 
@@ -22,7 +21,6 @@ interface DownloadState {
 
 export function SpeechModelSection() {
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   const models = useWhisperModels();
   const { settings, save } = useSettingsPatch();
 
@@ -49,14 +47,14 @@ export function SpeechModelSection() {
     setDownload({ jobId, label: selectedModel.label, received: 0, total: null });
     try {
       await recorder.ensureWhisperModel(jobId, selectedModel.kind);
-      await queryClient.invalidateQueries({ queryKey: whisperModelsKey });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.recorder.whisperModels });
       notify({
         title: `${selectedModel.label} model ready`,
         description: "Transcription uses it from now on.",
         variant: "success",
       });
     } catch (e) {
-      notify({ title: "Model download failed", description: errorMessage(e), variant: "error" });
+      notifyError("Model download failed", e);
     } finally {
       jobRef.current = null;
       setDownload(null);

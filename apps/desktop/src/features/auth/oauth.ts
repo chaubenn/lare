@@ -6,8 +6,8 @@ import { expectAuthCallback } from "@/lib/tauri";
 export type OAuthProvider = "github" | "google";
 
 /**
- * Start the PKCE flow in the system browser. Supabase redirects to the local Rust server
- * (`http://127.0.0.1:47831/auth/callback`), which forwards the code via the `auth:callback` event.
+ * Start the PKCE flow in the system browser. Supabase redirects to the local Rust server's
+ * `/auth/callback` (see `redirectTo` below), which forwards the code via the `auth:callback` event.
  * The server only takes that callback while a sign-in started here is pending, and only once.
  */
 export async function signInWithProvider(provider: OAuthProvider): Promise<void> {

@@ -1,4 +1,4 @@
-import { Button } from "./Button";
+import { Button } from "@lare/ui/primitives";
 
 /** The footer of a paged list, like the feed's: one button that fetches the next page. */
 export function LoadMore({

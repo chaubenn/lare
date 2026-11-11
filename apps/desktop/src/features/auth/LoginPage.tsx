@@ -1,13 +1,13 @@
 import { Wordmark } from "@lare/ui/brand";
 import { Globe, KeyRound, Mail } from "@lare/ui/icons";
+import { Button, FieldError, Input, Label } from "@lare/ui/primitives";
 import { type FormEvent, useState } from "react";
 import { Navigate } from "react-router";
-import { Button } from "@/components/ui/Button";
-import { FieldError, Input, Label } from "@/components/ui/Field";
 import { PageSpinner } from "@/components/ui/States";
 import { WindowScreen } from "@/components/ui/WindowScreen";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage } from "@/lib/supabase";
+import { errorMessage } from "@/lib/errors";
+import { notify, notifyError } from "@/lib/notices";
+import { routes } from "@/lib/routes";
 import { inTauri } from "@/lib/tauri";
 import { useAuth } from "./AuthProvider";
 import { type OAuthProvider, sendEmailOtp, signInWithProvider, verifyEmailOtp } from "./oauth";
@@ -16,7 +16,7 @@ import { type OAuthProvider, sendEmailOtp, signInWithProvider, verifyEmailOtp } 
 export function LoginPage() {
   const { session } = useAuth();
   if (session === undefined) return <PageSpinner />;
-  if (session) return <Navigate to="/" replace />;
+  if (session) return <Navigate to={routes.feed} replace />;
   return (
     <WindowScreen className="max-w-sm">
       <div className="mb-8 text-center">
@@ -39,7 +39,6 @@ export function LoginPage() {
 
 /** The provider buttons. OAuth needs the desktop app to catch the callback, so the browser gets the email code instead. */
 function LoginForm() {
-  const { notify } = useNotify();
   const [pending, setPending] = useState<OAuthProvider | null>(null);
   const [waiting, setWaiting] = useState<OAuthProvider | null>(null);
 
@@ -49,7 +48,7 @@ function LoginForm() {
       await signInWithProvider(provider);
       setWaiting(provider);
     } catch (err) {
-      notify({ title: "Couldn't start sign-in", description: errorMessage(err), variant: "error" });
+      notifyError("Couldn't start sign-in", err);
     } finally {
       setPending(null);
     }
@@ -95,7 +94,6 @@ function LoginForm() {
 
 /** Two stages in one form: ask for the address, then for the six-digit code sent to it. */
 function EmailOtpForm() {
-  const { notify } = useNotify();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [stage, setStage] = useState<"email" | "code">("email");

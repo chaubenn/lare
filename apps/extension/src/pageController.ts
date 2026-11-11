@@ -26,31 +26,28 @@ import {
 import { BRIDGE_MARK, type MainToIsolated, parseMainToIsolated } from "./bridge";
 import { fetchQuestion, fetchSubmissionDetails, statusLabel } from "./leetcodeApi";
 import {
+  applySnapshot,
   type CapturedSubmission,
+  type PageProblemReply,
   type QuestionDetails,
   type RuntimeSnapshot,
-  type StateBroadcast,
   sendRuntime,
-  toSnapshot,
+  type TabMessage,
 } from "./messages";
+import { titleFromSlug } from "./util";
 
 export interface PageState {
   snapshot: RuntimeSnapshot | null;
-  problem: ProblemInfo | null;
-  question: QuestionDetails | null;
-  monacoReady: boolean;
-}
-
-/** Popup -> content script: "what problem is this tab on?". */
-export const PAGE_PROBLEM_REQUEST = "LARE_PAGE_PROBLEM";
-
-export interface PageProblemReply {
   problem: ProblemInfo | null;
   question: QuestionDetails | null;
 }
 
 const IGNORED_LANGUAGES = new Set(["plaintext", "json", "markdown", "text"]);
 const FLUSH_MS = 2000;
+/** Fallback for SPA navigations the MAIN script might miss. */
+const URL_POLL_MS = 1000;
+/** How often a page that has not seen the desktop app looks for it again. */
+const PROBE_MS = 8000;
 
 type Listener = () => void;
 
@@ -59,11 +56,9 @@ export class PageController {
     snapshot: null,
     problem: null,
     question: null,
-    monacoReady: false,
   };
   private listeners = new Set<Listener>();
 
-  // Monaco bookkeeping
   private primaryModelId: string | null = null;
   private modelLanguage = new Map<string, string>();
   private buffer: EditEvent[] = [];
@@ -75,13 +70,13 @@ export class PageController {
   private lastSnapshotRequestAt = 0;
   private trackedSessionId: string | null = null;
 
-  // Judge bookkeeping
   private pendingSubmissionIds = new Set<number>();
   private handledSubmissionIds = new Set<number>();
   private lastSubmitId: number | null = null;
 
   private currentUrl = "";
   private disposed = false;
+  private readonly intervals: ReturnType<typeof setInterval>[];
 
   constructor() {
     window.addEventListener("message", this.onWindowMessage);
@@ -89,13 +84,14 @@ export class PageController {
     void this.refresh();
     void this.probeApp();
     void this.detectProblem(window.location.href);
-    // Fallback for SPA navigations the MAIN script might miss.
-    setInterval(() => {
-      if (window.location.href !== this.currentUrl) void this.detectProblem(window.location.href);
-    }, 1000);
-    setInterval(() => {
-      if (!this.disposed && !this.state.snapshot?.appConnected) void this.probeApp();
-    }, 8000);
+    this.intervals = [
+      setInterval(() => {
+        if (window.location.href !== this.currentUrl) void this.detectProblem(window.location.href);
+      }, URL_POLL_MS),
+      setInterval(() => {
+        if (!this.state.snapshot?.appConnected) void this.probeApp();
+      }, PROBE_MS),
+    ];
   }
 
   dispose(): void {
@@ -103,6 +99,7 @@ export class PageController {
     window.removeEventListener("message", this.onWindowMessage);
     chrome.runtime.onMessage.removeListener(this.onRuntimeMessage);
     if (this.flushTimer) clearTimeout(this.flushTimer);
+    for (const id of this.intervals) clearInterval(id);
   }
 
   // ---- store ---------------------------------------------------------------
@@ -139,19 +136,17 @@ export class PageController {
 
   // ---- runtime -------------------------------------------------------------
   async refresh(): Promise<void> {
-    const res = await sendRuntime({ type: "GET_STATE" });
-    if (res.ok) {
-      const snapshot = toSnapshot(res);
-      if (snapshot) this.set({ snapshot });
-    }
+    this.adopt(await sendRuntime({ type: "GET_STATE" }));
+  }
+
+  /** Take the snapshot a response or broadcast carries, if it carries one. */
+  private adopt(msg: unknown): void {
+    applySnapshot(msg, (snapshot) => this.set({ snapshot }));
   }
 
   async probeApp(): Promise<boolean> {
     const res = await sendRuntime({ type: "PROBE_APP" });
-    if (res.ok) {
-      const snapshot = toSnapshot(res);
-      if (snapshot) this.set({ snapshot });
-    }
+    this.adopt(res);
     return res.ok ? (res.appConnected ?? false) : false;
   }
 
@@ -160,20 +155,22 @@ export class PageController {
     _sender: chrome.runtime.MessageSender,
     sendResponse: (res: unknown) => void,
   ): boolean | undefined => {
-    const msg = raw as { type?: string } & Partial<Omit<StateBroadcast, "type">>;
+    const msg = raw as TabMessage | null | undefined;
     if (msg?.type === "LARE_FLUSH_EDITS") {
       void this.flush().then(() => sendResponse({ ok: true }));
       return true;
     }
-    // The popup has no view of the page, so it asks the tab which problem is
+    // The side panel has no view of the page, so it asks the tab which problem is
     // open before starting an interview.
-    if (msg?.type === PAGE_PROBLEM_REQUEST) {
-      sendResponse({ problem: this.state.problem, question: this.state.question });
+    if (msg?.type === "LARE_PAGE_PROBLEM") {
+      const reply: PageProblemReply = {
+        problem: this.state.problem,
+        question: this.state.question,
+      };
+      sendResponse(reply);
       return true;
     }
-    if (msg?.type !== "STATE_CHANGED" || !msg.state) return;
-    const snapshot = toSnapshot(msg);
-    if (snapshot) this.set({ snapshot });
+    this.adopt(msg);
     return undefined;
   };
 
@@ -186,7 +183,6 @@ export class PageController {
       return;
     }
     if (this.state.problem?.slug === slug) return;
-    // Reset Monaco bookkeeping for the new problem.
     this.primaryModelId = null;
     this.buffer = [];
     this.needsSnapshot = true;
@@ -218,9 +214,6 @@ export class PageController {
     const msg = parseMainToIsolated(ev.data);
     if (!msg) return;
     switch (msg.kind) {
-      case "monaco-ready":
-        this.set({ monacoReady: true });
-        break;
       case "route":
         void this.detectProblem(msg.url);
         break;
@@ -375,7 +368,7 @@ export class PageController {
       question: onPage ? this.state.question : null,
     });
     if (!res.ok) {
-      // Nothing renders on the page any more; the popup surfaces sync failures.
+      // Nothing on the page reports this.
       console.warn("[lare] could not save submission:", res.error);
     }
   }
@@ -384,8 +377,5 @@ export class PageController {
 function titleFromDocument(slug: string): string {
   const t = document.title.replace(/\s*-\s*LeetCode\s*$/i, "").trim();
   if (t && !/^leetcode$/i.test(t)) return t;
-  return slug
-    .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+  return titleFromSlug(slug);
 }

@@ -5,12 +5,11 @@ import {
   websiteHref,
   websiteLabel,
 } from "@lare/shared";
+import { ActivityChart } from "@lare/ui";
 import { ExternalLink, Lock } from "@lare/ui/icons";
+import { Avatar, SegmentedTabs } from "@lare/ui/primitives";
 import { type ReactNode, useState } from "react";
-import { ActivityGrid } from "@/components/ActivityGrid";
-import { Avatar } from "@/components/ui/Avatar";
 import { LoadMore } from "@/components/ui/LoadMore";
-import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import type { ProfileStats } from "@/lib/json";
 import { openExternal } from "@/lib/open";
@@ -45,7 +44,6 @@ export function ProfileView({
   postsError,
   onRetryPosts,
   morePosts,
-  likedIds,
   postsEmpty,
   locked,
   lockedDescription,
@@ -72,7 +70,6 @@ export function ProfileView({
   onRetryPosts: () => void;
   /** The posts query, for its "Load more" footer. */
   morePosts?: Parameters<typeof LoadMore>[0]["query"];
-  likedIds: Set<string>;
   postsEmpty: ReactNode;
   locked?: boolean;
   lockedDescription?: ReactNode;
@@ -223,7 +220,7 @@ export function ProfileView({
               <div
                 className={`grid items-stretch gap-4 ${activity?.visible && skills?.visible ? "lg:grid-cols-2" : ""}`}
               >
-                {activity?.visible ? <ActivityGrid activity={activity} /> : null}
+                {activity?.visible ? <ActivityChart activity={activity} /> : null}
                 {skills?.visible ? <SkillsPanel skills={skills} /> : null}
               </div>
             </div>

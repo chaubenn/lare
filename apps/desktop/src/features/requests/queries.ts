@@ -1,8 +1,8 @@
 import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
-import { invalidateGraph } from "@/features/friends/queries";
 import { whileOnline } from "@/lib/queryClient";
+import { queryKeys, refresh } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";
 
 function requestsQuery(userId: string) {
@@ -18,12 +18,10 @@ function requestsQuery(userId: string) {
 
 export type FollowRequest = QueryData<ReturnType<typeof requestsQuery>>[number];
 
-export const requestsKey = (userId: string) => ["follow-requests", userId] as const;
-
 export function useFollowRequests() {
   const { userId } = useUser();
   return useQuery({
-    queryKey: requestsKey(userId),
+    queryKey: queryKeys.followRequests.of(userId),
     queryFn: async () => {
       const { data, error } = await requestsQuery(userId);
       if (error) throw error;
@@ -43,10 +41,11 @@ export function useRespondToRequest() {
       if (error) throw error;
     },
     // Accepting adds a follower (lists, counts, the follow-back button); either answer clears the
-    // request from the inbox and from the notification that announced it.
+    // request from the inbox and deletes the notification that announced it (the `follows_notify`
+    // trigger), which can lower the unread count.
     onSuccess: () => {
-      invalidateGraph(queryClient);
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void refresh.followGraph(queryClient);
+      void refresh.notifications(queryClient);
     },
   });
 }

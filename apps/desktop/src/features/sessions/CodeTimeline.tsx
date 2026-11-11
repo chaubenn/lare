@@ -1,30 +1,23 @@
-import { checkpoints, codeAt, type EditLog, LANGUAGE_LABELS } from "@lare/shared";
+import { checkpoints, codeAt, type EditLog } from "@lare/shared";
 import type { SessionProblem } from "@lare/supabase-types";
 import { CodeBlock, cn, DifficultyBadge } from "@lare/ui";
 import { ChevronLeft, ChevronRight, FileCode2 } from "@lare/ui/icons";
+import { Badge, Button, Card, SectionTitle } from "@lare/ui/primitives";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { type ReactNode, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
 import { ErrorState, Spinner } from "@/components/ui/States";
+import { languageLabel } from "@/lib/languages";
 import { epochToMedia, formatMediaTime, type MediaClock, mediaToEpoch } from "./media";
 
-/** Typing pause that separates two checkpoints (mirrors the ai-review function). */
-const CHECKPOINT_PAUSE_MS = 20_000;
 /** Ignore checkpoints within this distance of the current time when stepping. */
 const STEP_EPSILON_S = 0.25;
 
 type CodeProblem = Pick<SessionProblem, "id" | "title" | "difficulty" | "edits_path">;
 
-function languageLabel(lang: string | undefined): string | null {
-  if (!lang) return null;
-  return LANGUAGE_LABELS[lang] ?? lang;
-}
-
 /**
  * Replays a Monaco edit log to show the editor contents at `currentTime`, with prev/next
- * checkpoint stepping (a checkpoint is the code at the end of every typing pause ≥ 20s).
+ * checkpoint stepping. A checkpoint is the code at the end of a typing pause, as `checkpoints`
+ * in `@lare/shared` defines it for the ai-review function too.
  */
 export function CodeTimeline({
   problems,
@@ -142,7 +135,7 @@ function LogView({
 
   const cps = useMemo(() => {
     try {
-      return checkpoints(log.events, CHECKPOINT_PAUSE_MS).map((cp) => ({
+      return checkpoints(log.events).map((cp) => ({
         t: epochToMedia(cp.t, t0),
         code: cp.code,
       }));

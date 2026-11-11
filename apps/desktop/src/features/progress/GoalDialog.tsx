@@ -8,13 +8,9 @@ import {
   type GoalPeriod,
   parseGoalForm,
 } from "@lare/shared";
+import { Button, Input, Label, Modal, SegmentedTabs, Select } from "@lare/ui/primitives";
 import { useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { Input, Label, Select } from "@/components/ui/Field";
-import { Modal } from "@/components/ui/Modal";
-import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage } from "@/lib/supabase";
+import { notify, notifyError } from "@/lib/notices";
 import { useClearGoal, useSaveGoal } from "./queries";
 
 const PERIODS: Array<{ key: GoalPeriod; label: string }> = [
@@ -50,7 +46,6 @@ function GoalForm({ goal, onClose }: { goal: Goal | null; onClose: () => void })
   );
   const save = useSaveGoal();
   const clear = useClearGoal();
-  const { notify } = useNotify();
 
   const parsed = parseGoalForm({ period, target, min_difficulty: minDifficulty });
   const busy = save.isPending || clear.isPending;
@@ -62,12 +57,7 @@ function GoalForm({ goal, onClose }: { goal: Goal | null; onClose: () => void })
         notify({ title: "Goal saved", variant: "success" });
         onClose();
       },
-      onError: (err) =>
-        notify({
-          title: "Couldn't save your goal",
-          description: errorMessage(err),
-          variant: "error",
-        }),
+      onError: (err) => notifyError("Couldn't save your goal", err),
     });
   };
 
@@ -77,12 +67,7 @@ function GoalForm({ goal, onClose }: { goal: Goal | null; onClose: () => void })
         notify({ title: "Goal removed" });
         onClose();
       },
-      onError: (err) =>
-        notify({
-          title: "Couldn't remove your goal",
-          description: errorMessage(err),
-          variant: "error",
-        }),
+      onError: (err) => notifyError("Couldn't remove your goal", err),
     });
 
   return (

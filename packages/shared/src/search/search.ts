@@ -6,6 +6,7 @@
  * transcripts and AI reviews) match whole words. Everything here is pure so it can be tested
  * without the index.
  */
+import type { SessionKind } from "../primitives";
 
 export type SearchKind = "session" | "said" | "post" | "draft" | "person";
 
@@ -35,7 +36,7 @@ export const SEARCH_MIN_QUERY = 2;
 
 export interface SessionSearchInput {
   id: string;
-  kind: "practice" | "interview";
+  kind: SessionKind;
   startedAt: string;
   problems: {
     title: string;

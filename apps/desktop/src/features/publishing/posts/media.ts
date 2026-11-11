@@ -1,6 +1,8 @@
 import { MAX_POST_IMAGES, POST_MEDIA_BUCKET, postMediaPath, rejectPostImage } from "@lare/shared";
 import type { PostMedia } from "@lare/supabase-types";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BUCKETS } from "@/lib/edge";
+import { queryKeys, refresh } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";
 
 export interface PostImage extends PostMedia {
@@ -8,17 +10,14 @@ export interface PostImage extends PostMedia {
   url: string | null;
 }
 
-export const postMediaKey = (postId: string) => ["post-media", postId] as const;
-
 /**
  * After a photo is added, removed, reordered or captioned. Feed and profile cards embed the
  * carousel themselves, so a published post's cards go stale without these too.
  */
 function invalidatePostMedia(queryClient: QueryClient, postId: string) {
   return Promise.all([
-    queryClient.invalidateQueries({ queryKey: postMediaKey(postId) }),
-    queryClient.invalidateQueries({ queryKey: ["feed"] }),
-    queryClient.invalidateQueries({ queryKey: ["user-posts"] }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.postMedia(postId) }),
+    refresh.postCards(queryClient),
   ]);
 }
 
@@ -27,7 +26,7 @@ export interface FeedImage {
   id: string;
   url: string;
   caption: string | null;
-  /** Pixel size, so the slide takes the picture's shape before it has loaded. */
+  /** Pixel size as uploaded; null when it could not be measured. */
   width: number | null;
   height: number | null;
 }
@@ -78,8 +77,7 @@ function orderMedia<T extends { position: number; created_at: string }>(rows: re
 }
 
 /**
- * Attach signed thumbnail/photo/OG-card URLs to a batch of post rows — the same decoration
- * the web feed does, so both apps render the identical card. One signing round-trip per
+ * Attach signed thumbnail and photo URLs to a batch of post rows. One signing round-trip per
  * bucket, whatever the page size.
  */
 export async function decoratePosts<T extends DecoratableRow>(
@@ -88,7 +86,7 @@ export async function decoratePosts<T extends DecoratableRow>(
   if (rows.length === 0) return [];
   const [thumbs, media] = await Promise.all([
     signPaths(
-      "thumbnails",
+      BUCKETS.thumbnails,
       rows.flatMap((r) => [r.videos?.thumbnail_path ?? "", r.demo_videos?.thumbnail_path ?? ""]),
     ),
     signPaths(
@@ -122,7 +120,7 @@ export async function decoratePosts<T extends DecoratableRow>(
 /** Photos attached to a post, in author order, each with a signed URL ready to render. */
 export function usePostMedia(postId: string) {
   return useQuery({
-    queryKey: postMediaKey(postId),
+    queryKey: queryKeys.postMedia(postId),
     enabled: postId.length > 0,
     queryFn: async (): Promise<PostImage[]> => {
       const { data, error } = await supabase

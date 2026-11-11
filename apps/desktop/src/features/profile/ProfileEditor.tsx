@@ -6,23 +6,30 @@ import {
   resizeAvatarImage,
   withCacheBust,
 } from "@lare/shared";
+import {
+  Avatar,
+  Button,
+  FieldError,
+  Input,
+  Label,
+  PageHeader,
+  Textarea,
+  Toggle,
+} from "@lare/ui/primitives";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
-import { PageHeader } from "@/components/ui/Card";
-import { FieldError, Input, Label, Textarea, Toggle } from "@/components/ui/Field";
-import { profileQueryKey, useUser } from "@/features/auth/AuthProvider";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage, supabase } from "@/lib/supabase";
-import { invalidateAuthorViews } from "./queries";
+import { useUser } from "@/features/auth/AuthProvider";
+import { errorMessage } from "@/lib/errors";
+import { notify } from "@/lib/notices";
+import { queryKeys, refresh } from "@/lib/queryKeys";
+import { routes } from "@/lib/routes";
+import { supabase } from "@/lib/supabase";
 
 /** `/profile/edit`: photo, name, handle, bio, website, privacy. Saving returns to the profile. */
 export function ProfileEditor() {
   const { userId, profile, session } = useUser();
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   const [displayName, setDisplayName] = useState(profile?.display_name ?? "");
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [website, setWebsite] = useState(profile?.website ?? "");
@@ -56,12 +63,12 @@ export function ProfileEditor() {
       }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.profile(userId) });
       // Your name and handle sit on every post, comment and list you appear in; going private
       // (or public) changes the lock shown beside you on the global board.
-      invalidateAuthorViews(queryClient);
+      void refresh.authorViews(queryClient);
       notify({ title: "Profile saved", variant: "success" });
-      navigate("/profile");
+      navigate(routes.profile);
     },
     onError: (err) => setError(errorMessage(err)),
   });
@@ -171,7 +178,7 @@ export function ProfileEditor() {
 
         <FieldError>{error}</FieldError>
         <div className="flex items-center justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => navigate("/profile")}>
+          <Button type="button" variant="ghost" onClick={() => navigate(routes.profile)}>
             Cancel
           </Button>
           <Button type="submit" variant="primary" loading={save.isPending} disabled={!dirty}>
@@ -192,7 +199,6 @@ const FIELD = "mt-1 bg-[var(--surface)]!";
 function AvatarUploader() {
   const { userId, profile } = useUser();
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const upload = useMutation({
@@ -216,8 +222,8 @@ function AvatarUploader() {
       if (updateError) throw updateError;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: profileQueryKey(userId) });
-      invalidateAuthorViews(queryClient);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.profile(userId) });
+      void refresh.authorViews(queryClient);
       notify({ title: "Profile picture updated", variant: "success" });
     },
     onError: (err) => notify({ title: errorMessage(err), variant: "error" }),

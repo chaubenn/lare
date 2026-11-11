@@ -4,17 +4,18 @@ import { useEffect } from "react";
 import { useUser } from "@/features/auth/AuthProvider";
 import { type KeysetCursor, keysetFilter, nextCursor } from "@/lib/keyset";
 import { whileOnline } from "@/lib/queryClient";
-import { supabase } from "@/lib/supabase";
+import { queryKeys, refresh } from "@/lib/queryKeys";
+import { supabase, uniqueChannel } from "@/lib/supabase";
 import { notifyDesktop } from "./desktopNotify";
 import { DESKTOP_NOTIFICATION_LINKS } from "./links";
 
-export const NOTIFICATIONS_PAGE_SIZE = 50;
+const NOTIFICATIONS_PAGE_SIZE = 50;
 
 /** Newest first, a page at a time; `data` is every page loaded so far, flattened. */
 export function useNotifications() {
   const { userId } = useUser();
   return useInfiniteQuery({
-    queryKey: ["notifications", userId],
+    queryKey: queryKeys.notifications.of(userId),
     initialPageParam: undefined as KeysetCursor | undefined,
     queryFn: async ({ pageParam }) => {
       let query = supabase.from("notifications").select(NOTIFICATION_SELECT);
@@ -40,7 +41,7 @@ export function useNotifications() {
 export function useUnreadNotificationCount() {
   const { userId } = useUser();
   return useQuery({
-    queryKey: ["notifications-unread", userId],
+    queryKey: queryKeys.notificationsUnread.of(userId),
     refetchInterval: whileOnline(120_000),
     queryFn: async () => {
       const { count, error } = await supabase
@@ -60,10 +61,7 @@ export function useMarkNotificationsRead() {
       const { error } = await supabase.rpc("mark_notifications_read", { ids });
       if (error) throw error;
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      void queryClient.invalidateQueries({ queryKey: ["notifications-unread"] });
-    },
+    onSuccess: () => void refresh.notifications(queryClient),
   });
 }
 
@@ -72,8 +70,7 @@ export function useNotificationStream() {
   const { userId } = useUser();
   const queryClient = useQueryClient();
   useEffect(() => {
-    const channel = supabase
-      .channel(`notifications:${userId}:${crypto.randomUUID()}`)
+    const channel = uniqueChannel(`notifications:${userId}`)
       .on(
         "postgres_changes",
         {
@@ -83,8 +80,7 @@ export function useNotificationStream() {
           filter: `recipient_id=eq.${userId}`,
         },
         (payload) => {
-          void queryClient.invalidateQueries({ queryKey: ["notifications"] });
-          void queryClient.invalidateQueries({ queryKey: ["notifications-unread"] });
+          void refresh.notifications(queryClient);
           const id = (payload.new as { id?: unknown }).id;
           if (typeof id === "string") void announce(id);
         },

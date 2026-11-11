@@ -1,6 +1,6 @@
 import { ErrorState as BaseErrorState } from "@lare/ui/primitives";
 import type { ComponentProps } from "react";
-import { isNetworkError, NETWORK_ERROR_MESSAGE } from "@/lib/supabase";
+import { isNetworkError, NETWORK_ERROR_MESSAGE } from "@/lib/errors";
 
 export { EmptyState, ListSkeleton, PageSpinner, Spinner } from "@lare/ui/primitives";
 

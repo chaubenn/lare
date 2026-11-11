@@ -1,9 +1,9 @@
 {
   "name": "@lare/extension",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "type": "module",
-  "description": "Lare for LeetCode: session timer, problem/submission capture, mock-interview trigger.",
+  "description": "Lare for LeetCode: passive problem/submission tracking and desktop-recorded mock interviews.",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",

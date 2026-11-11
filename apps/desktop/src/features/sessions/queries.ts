@@ -11,11 +11,12 @@ import {
 import { useUser } from "@/features/auth/AuthProvider";
 import { type KeysetCursor, keysetFilter, nextCursor } from "@/lib/keyset";
 import { whileOnline } from "@/lib/queryClient";
+import { queryKeys } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";
 import { fetchEditLog } from "./editLog";
 import { parseTranscriptSegments } from "./media";
 
-export const SESSIONS_PAGE_SIZE = 50;
+const SESSIONS_PAGE_SIZE = 50;
 
 function sessionsQuery(userId: string, cursor?: KeysetCursor) {
   let query = supabase
@@ -35,7 +36,7 @@ export type SessionRow = QueryData<ReturnType<typeof sessionsQuery>>[number];
 export function useSessions() {
   const { userId } = useUser();
   return useInfiniteQuery({
-    queryKey: ["sessions", userId],
+    queryKey: queryKeys.sessions.of(userId),
     initialPageParam: undefined as KeysetCursor | undefined,
     queryFn: async ({ pageParam }) => {
       const { data, error } = await sessionsQuery(userId, pageParam);
@@ -46,17 +47,6 @@ export function useSessions() {
     select: (data) => data.pages.flatMap((page) => page.items),
   });
 }
-
-/* ------------------------------------------------------------------------------------------- */
-/* Session review page: everything is keyed under ["session", id, ...].                        */
-/* ------------------------------------------------------------------------------------------- */
-
-export const sessionKey = (id: string) => ["session", id] as const;
-export const sessionPostKey = (id: string) => ["session", id, "post"] as const;
-export const sessionTranscriptKey = (id: string) => ["session", id, "transcript"] as const;
-export const sessionVideoKey = (id: string) => ["session", id, "video"] as const;
-export const sessionEditLogKey = (id: string, problemId: string) =>
-  ["session", id, "edit-log", problemId] as const;
 
 const SESSION_DETAIL_SELECT =
   "*, session_problems(*, submissions(*)), session_events(t, type)" as const;
@@ -72,12 +62,11 @@ function sessionQuery(id: string, userId: string) {
 
 /** A session with its problems and their submissions. */
 export type SessionDetail = NonNullable<QueryData<ReturnType<typeof sessionQuery>>>;
-export type SessionDetailProblem = SessionDetail["session_problems"][number];
 
 export function useSession(id: string) {
   const { userId } = useUser();
   return useQuery({
-    queryKey: [...sessionKey(id), userId],
+    queryKey: queryKeys.session.detail(id, userId),
     enabled: id.length > 0,
     refetchInterval: (query) => (query.state.data?.status === "active" ? 3000 : false),
     queryFn: async () => {
@@ -98,12 +87,9 @@ function sessionPostQuery(sessionId: string) {
     .maybeSingle();
 }
 
-/** The draft/published post the extension created for a session (one per session). */
-export type SessionPost = NonNullable<QueryData<ReturnType<typeof sessionPostQuery>>>;
-
 export function useSessionPost(sessionId: string) {
   return useQuery({
-    queryKey: sessionPostKey(sessionId),
+    queryKey: queryKeys.session.post(sessionId),
     enabled: sessionId.length > 0,
     queryFn: async () => {
       const { data, error } = await sessionPostQuery(sessionId);
@@ -122,7 +108,7 @@ export interface SessionTranscript {
 /** Whisper transcript for a session (null when the mic was off / transcription has not run). */
 export function useSessionTranscript(sessionId: string) {
   return useQuery({
-    queryKey: sessionTranscriptKey(sessionId),
+    queryKey: queryKeys.session.transcript(sessionId),
     enabled: sessionId.length > 0,
     refetchInterval: whileOnline(5000),
     queryFn: async (): Promise<SessionTranscript | null> => {
@@ -143,7 +129,7 @@ export function useSessionTranscript(sessionId: string) {
  */
 export function useLatestSessionVideo(sessionId: string, enabled = true) {
   return useQuery({
-    queryKey: sessionVideoKey(sessionId),
+    queryKey: queryKeys.session.video(sessionId),
     enabled: enabled && sessionId.length > 0,
     queryFn: async (): Promise<Video | null> => {
       const { data, error } = await supabase
@@ -169,7 +155,7 @@ export function useEditLogs(
 ) {
   return useQueries({
     queries: problems.map((p) => ({
-      queryKey: sessionEditLogKey(sessionId, p.id),
+      queryKey: queryKeys.session.editLog(sessionId, p.id),
       enabled: !!p.edits_path,
       staleTime: Number.POSITIVE_INFINITY,
       queryFn: (): Promise<EditLog> => fetchEditLog(p.edits_path ?? ""),
@@ -181,7 +167,7 @@ export function useEditLogs(
 export function useReviewCriteria() {
   const { userId } = useUser();
   return useQuery({
-    queryKey: ["review-criteria", userId],
+    queryKey: queryKeys.reviewCriteria.of(userId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("review_criteria")
@@ -204,7 +190,7 @@ export function useSaveReviewCriteria() {
         .upsert({ user_id: userId, criteria });
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["review-criteria"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.reviewCriteria.all }),
   });
 }
 
@@ -217,6 +203,6 @@ export function useResetReviewCriteria() {
       const { error } = await supabase.from("review_criteria").delete().eq("user_id", userId);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["review-criteria"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.reviewCriteria.all }),
   });
 }

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { SNAPSHOT_EVERY_EVENTS, SNAPSHOT_EVERY_MS } from "./constants";
 
 /**
  * A single Monaco content change, compacted as a tuple:
@@ -84,13 +83,14 @@ export function finalCode(events: readonly EditEvent[], initial = ""): string {
   return last ? codeAt(events, last.t, initial) : initial;
 }
 
-/** Decide whether the next event should carry a full snapshot. */
-export function shouldSnapshot(
-  eventsSinceSnapshot: number,
-  msSinceSnapshot: number,
-  isFirst: boolean,
-): boolean {
-  if (isFirst) return true;
+const SNAPSHOT_EVERY_EVENTS = 50;
+const SNAPSHOT_EVERY_MS = 30_000;
+
+/**
+ * Whether an edit event should carry the full text as well as its changes. Replay starts from the
+ * latest snapshot, so this bounds how much of a log one lost or corrupt event can spoil.
+ */
+export function shouldSnapshot(eventsSinceSnapshot: number, msSinceSnapshot: number): boolean {
   return eventsSinceSnapshot >= SNAPSHOT_EVERY_EVENTS || msSinceSnapshot >= SNAPSHOT_EVERY_MS;
 }
 

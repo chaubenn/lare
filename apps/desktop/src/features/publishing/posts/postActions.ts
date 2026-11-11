@@ -4,14 +4,11 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNotify } from "@/features/notifications/notices";
 import { copyText } from "@/lib/clipboard";
 import { env } from "@/lib/env";
+import { notify } from "@/lib/notices";
+import { queryKeys, refresh } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";
-import { postKey } from "./queries";
-
-/** Whether the app offers "Copy link"; the page it points at is lare.fyi/p/<slug>. */
-export const SHARE_LINKS = true;
 
 /**
  * Public web address of a post. The short slug is the canonical handle (`/p/<slug>`, see
@@ -23,7 +20,6 @@ export function postUrl(slug: string): string {
 
 /** Copy a post's web link and say whether it worked, in a toast and as the result. */
 export function useCopyPostLink() {
-  const { notify } = useNotify();
   return async (slug: string): Promise<boolean> => {
     const ok = await copyText(postUrl(slug));
     notify(
@@ -45,22 +41,6 @@ export function isPracticePost(sessionClient: string | null | undefined): boolea
   return sessionClient === "inbox";
 }
 
-/** Every list a post, a draft or a tracked problem shows up in. */
-function invalidatePostLists(queryClient: ReturnType<typeof useQueryClient>) {
-  for (const key of [
-    "feed",
-    "user-posts",
-    "profile-stats",
-    "sessions",
-    "session",
-    "drafts",
-    "draft",
-    "tracked",
-  ]) {
-    void queryClient.invalidateQueries({ queryKey: [key] });
-  }
-}
-
 export function useDeletePracticePost() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -69,8 +49,8 @@ export function useDeletePracticePost() {
       if (error) throw error;
     },
     onSuccess: (_data, postId) => {
-      queryClient.removeQueries({ queryKey: postKey(postId) });
-      invalidatePostLists(queryClient);
+      queryClient.removeQueries({ queryKey: queryKeys.post.of(postId) });
+      void refresh.everyPostList(queryClient);
     },
   });
 }
@@ -87,8 +67,8 @@ export function useUnpublishPost() {
       if (error) throw error;
     },
     onSuccess: (_data, postId) => {
-      void queryClient.invalidateQueries({ queryKey: postKey(postId) });
-      invalidatePostLists(queryClient);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.post.of(postId) });
+      void refresh.everyPostList(queryClient);
     },
   });
 }

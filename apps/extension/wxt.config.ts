@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "wxt";
 
 // Public key of ~/.lare/extension-key.pem. Pins the extension id to
@@ -15,6 +16,12 @@ const STORE_BUILD = Boolean(process.env.LARE_STORE_BUILD);
 // from disk straight away, but its service worker keeps running the old build until reloaded; the
 // side panel compares ids to catch that.
 const BUILD_ID = Date.now().toString(36);
+
+// Read from package.json rather than `npm_package_version`, which is only set under a package
+// manager's script runner.
+const { version: EXT_VERSION } = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+) as { version: string };
 
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
@@ -37,6 +44,7 @@ export default defineConfig({
       "scripting",
     ],
     side_panel: { default_path: "sidepanel.html" },
+    // The LeetCode and fixture patterns here and below are spelled again in src/origins.ts.
     host_permissions: [
       "https://leetcode.com/*",
       "https://jndqrvwkwoyvzoqcveev.supabase.co/*",
@@ -75,7 +83,7 @@ export default defineConfig({
   }),
   vite: () => ({
     define: {
-      __EXT_VERSION__: JSON.stringify(process.env.npm_package_version ?? "0.5.1"),
+      __EXT_VERSION__: JSON.stringify(EXT_VERSION),
       __BUILD_ID__: JSON.stringify(BUILD_ID),
     },
   }),

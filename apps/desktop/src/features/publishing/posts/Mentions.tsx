@@ -1,9 +1,9 @@
 import { insertMention, mentionAtCaret, splitMentions } from "@lare/shared";
 import { cn } from "@lare/ui";
+import { Avatar, Textarea } from "@lare/ui/primitives";
 import { type ComponentProps, type KeyboardEvent, useId, useRef, useState } from "react";
 import { Link } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
-import { Textarea } from "@/components/ui/Field";
+import { routes } from "@/lib/routes";
 import { useMentionSuggestions } from "./social";
 
 /** A comment body with each `@handle` linked to that person's profile. */
@@ -18,7 +18,7 @@ export function CommentText({ body }: { body: string }) {
           <Link
             // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and never reorder
             key={i}
-            to={`/u/${segment.handle}`}
+            to={routes.user(segment.handle)}
             className="font-medium text-[var(--accent-text)] hover:underline"
           >
             @{segment.handle}

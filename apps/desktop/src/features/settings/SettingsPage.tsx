@@ -1,23 +1,19 @@
-import { WS_PORT } from "@lare/shared";
+import { EXTENSION_ID, WS_PORT } from "@lare/shared";
 import { LogOut, RefreshCw } from "@lare/ui/icons";
+import { Badge, Button, Card, SectionTitle } from "@lare/ui/primitives";
 import { useEffect, useState } from "react";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
-import { useAuth, useUser } from "@/features/auth/AuthProvider";
+import { confirm } from "@/components/ui/Confirm";
+import { useUser } from "@/features/auth/AuthProvider";
+import { useSignOut } from "@/features/auth/useSignOut";
 import { getJobs, isActive } from "@/features/media/jobs";
-import { useNotify } from "@/features/notifications/notices";
-import { useExtensionStatus } from "@/features/shell/useExtensionStatus";
 import { copyText } from "@/lib/clipboard";
-import { confirm } from "@/lib/confirm";
+import { notify } from "@/lib/notices";
 import { recorder } from "@/lib/recorder";
-import { errorMessage } from "@/lib/supabase";
 import { appVersion, inTauri } from "@/lib/tauri";
 import { checkForUpdate, installUpdate, useUpdateState } from "@/lib/updater";
+import { useExtensionStatus } from "@/lib/useExtensionStatus";
 import { NotificationsPanel } from "./NotificationsPanel";
-import { RecordingPanel } from "./RecordingPanel";
-
-const EXTENSION_ID = "koplffaeeahehnfikinmldhhmmldghhl";
+import { RecordingPanel } from "./recording";
 
 export function SettingsPage() {
   return (
@@ -32,7 +28,6 @@ export function SettingsPage() {
 
 function ExtensionPanel() {
   const { connected, port } = useExtensionStatus();
-  const { notify } = useNotify();
   return (
     <Card>
       <SectionTitle
@@ -72,11 +67,9 @@ function ExtensionPanel() {
 }
 
 function AccountPanel() {
-  const { signOut } = useAuth();
+  const { signingOut, signOut } = useSignOut();
   const { session } = useUser();
-  const { notify } = useNotify();
   const [version, setVersion] = useState<string>("…");
-  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -92,16 +85,6 @@ function AccountPanel() {
     };
   }, []);
 
-  const doSignOut = async () => {
-    setSigningOut(true);
-    try {
-      await signOut();
-    } catch (err) {
-      notify({ title: "Couldn't sign out", description: errorMessage(err), variant: "error" });
-      setSigningOut(false);
-    }
-  };
-
   return (
     <Card>
       <SectionTitle>Account</SectionTitle>
@@ -116,7 +99,7 @@ function AccountPanel() {
             variant="danger"
             size="sm"
             icon={<LogOut className="size-3.5" aria-hidden />}
-            onClick={() => void doSignOut()}
+            onClick={() => void signOut()}
             loading={signingOut}
           >
             Sign out
@@ -133,7 +116,6 @@ function AccountPanel() {
  * processing partway. Refuse while recording; ask first while something is still uploading.
  */
 function useInstallUpdate() {
-  const { notify } = useNotify();
   return async () => {
     const status = await recorder.status().catch(() => null);
     if (status && status.state !== "idle" && status.state !== "error") {

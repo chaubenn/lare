@@ -1,8 +1,8 @@
 import { isActiveGoal } from "@lare/shared";
 import { GoalSummary } from "@lare/ui";
 import { Pencil, Target } from "@lare/ui/icons";
+import { Button } from "@lare/ui/primitives";
 import { useState } from "react";
-import { Button } from "@/components/ui/Button";
 import { GoalDialog } from "./GoalDialog";
 import { useGoalProgress } from "./queries";
 

@@ -10,7 +10,7 @@ import { cn } from "./cn";
 import { Flame } from "./icons";
 
 /** Circular progress; turns the "easy" green once the goal is met. */
-export function GoalRing({
+function GoalRing({
   ratio,
   size = 64,
   stroke = 6,

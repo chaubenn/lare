@@ -81,7 +81,9 @@ describe("codeAt", () => {
     expect(codeAt(events, 99_999)).toBe(
       "class Solution:\n    def twoSum(self, nums, target):\n        return [0, 1]\n",
     );
-    expect(finalCode(events)).toBe(codeAt(events, 61_000));
+    expect(finalCode(events)).toBe(
+      "class Solution:\n    def twoSum(self, nums, target):\n        return [0, 1]\n",
+    );
   });
 
   it("round-trips a random edit sequence against a naive model", () => {
@@ -110,11 +112,10 @@ describe("codeAt", () => {
 });
 
 describe("shouldSnapshot", () => {
-  it("snapshots on the first event, then every N events or M ms", () => {
-    expect(shouldSnapshot(0, 0, true)).toBe(true);
-    expect(shouldSnapshot(10, 1000, false)).toBe(false);
-    expect(shouldSnapshot(50, 1000, false)).toBe(true);
-    expect(shouldSnapshot(1, 30_000, false)).toBe(true);
+  it("asks for a snapshot every 50 events or 30 seconds, whichever comes first", () => {
+    expect(shouldSnapshot(10, 1000)).toBe(false);
+    expect(shouldSnapshot(50, 1000)).toBe(true);
+    expect(shouldSnapshot(1, 30_000)).toBe(true);
   });
 });
 

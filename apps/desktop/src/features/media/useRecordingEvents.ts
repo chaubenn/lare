@@ -5,22 +5,21 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage } from "@/lib/supabase";
+import { errorMessage } from "@/lib/errors";
+import { notify } from "@/lib/notices";
+import { refresh } from "@/lib/queryKeys";
+import { routes } from "@/lib/routes";
 import { useTauriEvent } from "@/lib/tauri";
-import { localCopiesKey } from "./localCopies";
-import { processInterview, publishInstantDemo } from "./pipeline";
+import { processInterview, publishInstantDemo, slotTitle } from "./pipeline";
 import { getRecordingMeta } from "./recordingStore";
 
 export function useRecordingEvents(): void {
   const { userId } = useUser();
   const queryClient = useQueryClient();
-  const { notify } = useNotify();
 
   useTauriEvent("recording:completed", (recording) => {
-    void queryClient.invalidateQueries({ queryKey: ["recorder", "recordings"] });
     // A take that finished is playable from disk before it is uploaded.
-    void queryClient.invalidateQueries({ queryKey: localCopiesKey });
+    void refresh.recordings(queryClient);
     if (recording.purpose === "interview") {
       notify({
         title: "Mock interview recorded",
@@ -38,7 +37,7 @@ export function useRecordingEvents(): void {
           notify({
             title: "Interview processing failed",
             description: `${errorMessage(e)}. The recording is still on this computer: retry it from Sessions.`,
-            href: "/sessions",
+            href: routes.sessions,
             variant: "error",
           });
         });
@@ -54,7 +53,7 @@ export function useRecordingEvents(): void {
           userId,
           postId: recording.postId,
           slot,
-          title: slot === "demo" ? "Summary video" : "Demo video",
+          title: slotTitle(slot),
           queryClient,
         });
       })

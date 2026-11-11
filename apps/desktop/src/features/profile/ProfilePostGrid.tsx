@@ -1,8 +1,9 @@
 import { postStateOf } from "@lare/shared";
 import { Heart, MessageCircle, Play } from "@lare/ui/icons";
+import { KindBadge, PostStateBadge } from "@lare/ui/primitives";
 import { Link } from "react-router";
-import { KindBadge, PostStateBadge } from "@/components/ui/Badge";
 import { DifficultyTag } from "@/components/ui/DifficultyTag";
+import { routes } from "@/lib/routes";
 import type { UserPost } from "./queries";
 
 /**
@@ -31,7 +32,7 @@ function PostRow({ post }: { post: UserPost }) {
 
   return (
     <Link
-      to={`/posts/${post.id}`}
+      to={routes.post(post.id)}
       className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-[var(--surface-sunken)] focus-visible:bg-[var(--surface-sunken)] focus-visible:outline-none"
     >
       <div className="min-w-0 flex-1 space-y-2">

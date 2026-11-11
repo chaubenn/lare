@@ -1,3 +1,5 @@
+import type { SessionKind } from "../primitives";
+
 /** 3725000 -> "1:02:05", 65000 -> "1:05", 5000 -> "0:05" */
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -24,10 +26,7 @@ export function formatDurationHuman(ms: number): string {
  * Whether a session's active time is worth showing. Practice is not timed any more, so only a mock
  * interview carries a duration, and a zero is never shown.
  */
-export function showsActiveTime(
-  kind: "practice" | "interview" | null | undefined,
-  activeMs: number,
-): boolean {
+export function showsActiveTime(kind: SessionKind | null | undefined, activeMs: number): boolean {
   return kind === "interview" && activeMs > 0;
 }
 

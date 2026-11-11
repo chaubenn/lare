@@ -1,13 +1,12 @@
 import { formatDuration, type TranscriptSegment } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Copy, MicOff } from "@lare/ui/icons";
+import { Button, Card, SectionTitle } from "@lare/ui/primitives";
 import { useEffect, useMemo, useRef } from "react";
-import { Button } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
 import { ErrorState, Spinner } from "@/components/ui/States";
-import { useNotify } from "@/features/notifications/notices";
 import { copyText } from "@/lib/clipboard";
 import { plural } from "@/lib/format";
+import { notify } from "@/lib/notices";
 import { activeSegmentIndex, transcriptToText, withKeys } from "./media";
 
 const EMPTY: readonly TranscriptSegment[] = [];
@@ -34,7 +33,6 @@ export function TranscriptList({
   currentTime: number;
   onSeek: (t: number) => void;
 }) {
-  const { notify } = useNotify();
   const listRef = useRef<HTMLOListElement>(null);
   const list = segments ?? EMPTY;
   const keyed = useMemo(() => withKeys(list, (s) => `${s.s}-${s.e}`), [list]);

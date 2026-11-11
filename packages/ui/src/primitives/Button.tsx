@@ -1,25 +1,9 @@
 "use client";
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { cn } from "../cn";
 import { LoaderCircle } from "../icons";
-import {
-  BUTTON_BASE,
-  BUTTON_SIZES,
-  BUTTON_VARIANTS,
-  type ButtonSize,
-  type ButtonVariant,
-} from "./button-styles";
+import { type ButtonSize, type ButtonVariant, buttonClass } from "./button-styles";
 import { Tooltip } from "./Tooltip";
-
-export {
-  BUTTON_BASE,
-  BUTTON_SIZES,
-  BUTTON_VARIANTS,
-  type ButtonSize,
-  type ButtonVariant,
-  buttonClass,
-} from "./button-styles";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -52,7 +36,7 @@ export function Button({
     <button
       type={type}
       disabled={disabled || loading}
-      className={cn(BUTTON_BASE, BUTTON_VARIANTS[variant], BUTTON_SIZES[size], className)}
+      className={buttonClass(variant, size, className)}
       {...rest}
     >
       {loading ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : icon}

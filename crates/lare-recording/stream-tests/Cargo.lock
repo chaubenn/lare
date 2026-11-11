@@ -636,7 +636,6 @@ dependencies = [
  "base64 0.22.1",
  "reqwest",
  "serde",
- "serde_json",
  "thiserror",
  "tokio",
  "tracing",

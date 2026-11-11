@@ -7,12 +7,9 @@ use lare_transcribe::{ModelKind, Progress, ensure_model};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
-    let kind = match args.next().as_deref() {
-        Some("tiny-en") => ModelKind::TinyEn,
-        Some("base-en") => ModelKind::BaseEn,
-        Some("small-en") => ModelKind::SmallEn,
-        Some("medium-en") => ModelKind::MediumEn,
-        other => anyhow::bail!("unknown model {other:?} (expected tiny-en|base-en|small-en|medium-en)"),
+    let name = args.next();
+    let Some(kind) = name.as_deref().and_then(ModelKind::from_name) else {
+        anyhow::bail!("unknown model {name:?} (expected tiny-en|base-en|small-en|medium-en)");
     };
     let dir = args
         .next()

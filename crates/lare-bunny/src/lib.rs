@@ -2,8 +2,8 @@
 //!
 //! The desktop app never holds the Bunny API key: it asks the `bunny-create-upload`
 //! Edge Function for [`TusCredentials`] (a pre-signed `AuthorizationSignature`) and then
-//! streams the file to `https://video.bunnycdn.com/tusupload` in chunks. Interrupted
-//! uploads resume from the server-reported offset.
+//! streams the recording to `https://video.bunnycdn.com/tusupload` in chunks while it is still
+//! being written. Interrupted uploads resume from the server-reported offset.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -15,16 +15,6 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 pub const DEFAULT_CHUNK_SIZE: usize = 8 * 1024 * 1024;
 const MAX_RETRIES: usize = 6;
-
-/// Returned by the `bunny-create-upload` Edge Function.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateUploadResponse {
-    pub video_id: String,
-    pub bunny_video_id: String,
-    pub library_id: u64,
-    pub tus: TusCredentials,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TusCredentials {
@@ -91,41 +81,23 @@ fn resolve_location(endpoint: &str, location: &str) -> String {
     }
 }
 
-/// Create a new TUS upload and return its URL.
-pub async fn create_upload(
-    client: &reqwest::Client,
-    creds: &TusCredentials,
-    total_len: u64,
-) -> Result<String, BunnyError> {
-    create_with_length(client, creds, Some(total_len)).await
-}
-
 /// Create at record start; persist the returned URL for retry before producing bytes.
 pub async fn create_deferred_upload(
     client: &reqwest::Client,
     creds: &TusCredentials,
-) -> Result<String, BunnyError> {
-    create_with_length(client, creds, None).await
-}
-
-async fn create_with_length(
-    client: &reqwest::Client,
-    creds: &TusCredentials,
-    total_len: Option<u64>,
 ) -> Result<String, BunnyError> {
     let metadata = format!(
         "filetype {},title {}",
         b64(&creds.metadata.filetype),
         b64(&creds.metadata.title)
     );
-    let req = apply_auth(client.post(&creds.endpoint), creds)
+    // The length is declared by the final PATCH, once the recording has stopped growing.
+    let res = apply_auth(client.post(&creds.endpoint), creds)
         .header("Upload-Metadata", metadata)
-        .header("Content-Length", "0");
-    let req = match total_len {
-        Some(len) => req.header("Upload-Length", len.to_string()),
-        None => req.header("Upload-Defer-Length", "1"),
-    };
-    let res = req.send().await?;
+        .header("Content-Length", "0")
+        .header("Upload-Defer-Length", "1")
+        .send()
+        .await?;
     let status = res.status();
     if !status.is_success() {
         let body = res.text().await.unwrap_or_default();
@@ -150,166 +122,18 @@ async fn create_with_length(
     Ok(url)
 }
 
-/// Ask the server how many bytes it already has.
-pub async fn current_offset(
-    client: &reqwest::Client,
-    creds: &TusCredentials,
-    upload_url: &str,
-) -> Result<u64, BunnyError> {
-    let res = apply_auth(client.head(upload_url), creds).send().await?;
-    match res.status().as_u16() {
-        404 | 410 | 403 => return Err(BunnyError::Gone),
-        s if s >= 400 => {
-            return Err(BunnyError::Exhausted {
-                attempts: 1,
-                last: format!("HEAD returned {s}"),
-            });
-        }
-        _ => {}
-    }
-    let offset = res
-        .headers()
-        .get("Upload-Offset")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u64>().ok())
-        .ok_or_else(|| BunnyError::Protocol("missing Upload-Offset".into()))?;
-    Ok(offset)
+/// The upload no longer exists on the server, or these credentials may no longer write to it.
+fn is_gone(status: reqwest::StatusCode) -> bool {
+    matches!(status.as_u16(), 401 | 403 | 404 | 410)
 }
 
-/// Upload `path` to Bunny via TUS. Pass `resume_url` (from a previous attempt) to
-/// continue an interrupted upload. Returns the upload URL (persist it for resume).
-pub async fn upload_file<F>(
-    client: &reqwest::Client,
-    path: &Path,
-    creds: &TusCredentials,
-    resume_url: Option<&str>,
-    chunk_size: usize,
-    mut on_progress: F,
-) -> Result<String, BunnyError>
-where
-    F: FnMut(UploadProgress),
-{
-    let mut file = tokio::fs::File::open(path).await?;
-    let total = file.metadata().await?.len();
+fn header_u64(headers: &reqwest::header::HeaderMap, name: &str) -> Option<u64> {
+    headers.get(name)?.to_str().ok()?.parse().ok()
+}
 
-    // Resume if possible, otherwise create.
-    let (upload_url, mut offset) = match resume_url {
-        Some(url) => match current_offset(client, creds, url).await {
-            Ok(off) if off <= total => (url.to_string(), off),
-            Ok(off) => {
-                return Err(BunnyError::OffsetMismatch {
-                    server: off,
-                    local: total,
-                });
-            }
-            Err(BunnyError::Gone) => (create_upload(client, creds, total).await?, 0),
-            Err(e) => return Err(e),
-        },
-        None => (create_upload(client, creds, total).await?, 0),
-    };
-    on_progress(UploadProgress {
-        uploaded: offset,
-        total,
-    });
-
-    let mut buf = vec![0u8; chunk_size.max(64 * 1024)];
-    let mut attempts = 0usize;
-    let mut last_err = String::new();
-
-    while offset < total {
-        file.seek(std::io::SeekFrom::Start(offset)).await?;
-        let want = ((total - offset) as usize).min(buf.len());
-        let mut read = 0usize;
-        while read < want {
-            let n = file.read(&mut buf[read..want]).await?;
-            if n == 0 {
-                break;
-            }
-            read += n;
-        }
-        let chunk = buf[..read].to_vec();
-        if read == 0 {
-            return Err(BunnyError::Protocol("file truncated during upload".into()));
-        }
-
-        let res = apply_auth(client.patch(&upload_url), creds)
-            .header("Upload-Offset", offset.to_string())
-            .header("Content-Type", "application/offset+octet-stream")
-            .header("Content-Length", chunk.len().to_string())
-            .body(chunk)
-            .send()
-            .await;
-
-        match res {
-            Ok(res) if res.status().is_success() => {
-                let new_offset = res
-                    .headers()
-                    .get("Upload-Offset")
-                    .and_then(|v| v.to_str().ok())
-                    .and_then(|v| v.parse::<u64>().ok())
-                    .ok_or_else(|| BunnyError::Protocol("missing Upload-Offset".into()))?;
-                if new_offset != offset + read as u64 {
-                    return Err(BunnyError::OffsetMismatch {
-                        server: new_offset,
-                        local: offset + read as u64,
-                    });
-                }
-                offset = new_offset;
-                attempts = 0;
-                on_progress(UploadProgress {
-                    uploaded: offset,
-                    total,
-                });
-            }
-            Ok(res) => {
-                let status = res.status();
-                if matches!(status.as_u16(), 404 | 410) {
-                    return Err(BunnyError::Gone);
-                }
-                last_err = format!("PATCH returned {status}");
-                attempts += 1;
-                if status.as_u16() == 409 {
-                    // Offset conflict: re-sync with the server.
-                    let server = current_offset(client, creds, &upload_url).await?;
-                    if server > total {
-                        return Err(BunnyError::OffsetMismatch {
-                            server,
-                            local: offset,
-                        });
-                    }
-                    offset = server;
-                }
-            }
-            Err(e) => {
-                last_err = e.to_string();
-                attempts += 1;
-                // Network hiccup: find out what actually landed.
-                if let Ok(server) = current_offset(client, creds, &upload_url).await {
-                    if server > total {
-                        return Err(BunnyError::OffsetMismatch {
-                            server,
-                            local: total,
-                        });
-                    }
-                    offset = server;
-                }
-            }
-        }
-
-        if attempts > 0 {
-            if attempts >= MAX_RETRIES {
-                return Err(BunnyError::Exhausted {
-                    attempts,
-                    last: last_err,
-                });
-            }
-            let backoff = Duration::from_millis(500 * 2u64.pow(attempts as u32 - 1));
-            tracing::warn!(attempt = attempts, ?backoff, error = %last_err, "tus chunk failed, retrying");
-            tokio::time::sleep(backoff).await;
-        }
-    }
-
-    Ok(upload_url)
+/// Delay before retry number `attempt` (counted from 1): 500ms, doubling each time.
+fn backoff(attempt: usize) -> Duration {
+    Duration::from_millis(500 * 2u64.pow(attempt as u32 - 1))
 }
 
 /// Tail an APPEND-ONLY file (e.g. fragmented MP4), never a muxer that rewrites headers.
@@ -348,17 +172,13 @@ where
         let step: Result<bool, BunnyError> = async {
             // HEAD on every attempt resolves even a PATCH that landed but lost its response.
             let head = apply_auth(client.head(upload_url), creds).send().await?;
-            if matches!(head.status().as_u16(), 401 | 403 | 404 | 410) {
+            if is_gone(head.status()) {
                 return Err(BunnyError::Gone);
             }
             if !head.status().is_success() {
                 return Err(BunnyError::Protocol(format!("HEAD {}", head.status())));
             }
-            let offset = head
-                .headers()
-                .get("Upload-Offset")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.parse::<u64>().ok())
+            let offset = header_u64(head.headers(), "Upload-Offset")
                 .ok_or_else(|| BunnyError::Protocol("missing Upload-Offset".into()))?;
             if offset > total || offset < acknowledged {
                 return Err(BunnyError::OffsetMismatch {
@@ -371,12 +191,7 @@ where
                 uploaded: offset,
                 total,
             });
-            let declared = head
-                .headers()
-                .get("Upload-Length")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.parse::<u64>().ok());
-            if let Some(length) = declared {
+            if let Some(length) = header_u64(head.headers(), "Upload-Length") {
                 if !done || length != total {
                     return Err(BunnyError::Protocol("unexpected declared length".into()));
                 }
@@ -400,18 +215,13 @@ where
                 request = request.header("Upload-Length", total.to_string());
             }
             let response = request.send().await?;
-            if matches!(response.status().as_u16(), 401 | 403 | 404 | 410) {
+            if is_gone(response.status()) {
                 return Err(BunnyError::Gone);
             }
             if !response.status().is_success() {
                 return Err(BunnyError::Protocol(format!("PATCH {}", response.status())));
             }
-            let next = response
-                .headers()
-                .get("Upload-Offset")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.parse::<u64>().ok());
-            if next != Some(offset + count as u64) {
+            if header_u64(response.headers(), "Upload-Offset") != Some(offset + count as u64) {
                 return Err(BunnyError::Protocol("invalid PATCH offset".into()));
             }
             acknowledged = offset + count as u64;
@@ -446,8 +256,7 @@ where
                         last: error.to_string(),
                     });
                 }
-                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempts as u32 - 1)))
-                    .await;
+                tokio::time::sleep(backoff(attempts)).await;
             }
         }
     }

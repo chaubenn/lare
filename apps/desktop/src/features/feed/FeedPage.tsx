@@ -1,11 +1,11 @@
 import { Rss } from "@lare/ui/icons";
+import { Button, SegmentedTabs } from "@lare/ui/primitives";
 import { Link, useSearchParams } from "react-router";
-import { Button } from "@/components/ui/Button";
-import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { PageBlurb } from "@/components/PageSlots";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useViewerLikes } from "@/features/publishing/posts/social";
-import { PageBlurb } from "@/features/shell/PageBlurb";
+import { routes } from "@/lib/routes";
 import { FeedSidebar } from "./FeedSidebar";
 import { PostCard } from "./PostCard";
 import { type FeedScope, useFeed } from "./queries";
@@ -63,7 +63,7 @@ export function FeedPage() {
                   <>
                     Posts from the people you follow show up here.{" "}
                     <Link
-                      to="/friends?tab=find"
+                      to={routes.findFriends}
                       className="text-zinc-200 underline underline-offset-2"
                     >
                       Find people to follow
@@ -72,7 +72,7 @@ export function FeedPage() {
                 ) : (
                   <>
                     Nobody has published a public session yet. Publish a draft to see it here.{" "}
-                    <Link to="/drafts" className="text-zinc-200 underline underline-offset-2">
+                    <Link to={routes.drafts} className="text-zinc-200 underline underline-offset-2">
                       Go to drafts
                     </Link>
                   </>

@@ -10,8 +10,7 @@ import {
   isSubmitGraphql,
   isSubmitUrl,
   looksLikeCheckPayload,
-  SNAPSHOT_EVERY_EVENTS,
-  SNAPSHOT_EVERY_MS,
+  shouldSnapshot,
   submissionIdFromPayload,
 } from "@lare/shared";
 import {
@@ -21,6 +20,7 @@ import {
   isIsolatedToMain,
   type MainToIsolated,
 } from "@/src/bridge";
+import { contentScriptMatches } from "@/src/origins";
 
 // Minimal structural types for the parts of Monaco we touch.
 interface MonacoChange {
@@ -48,14 +48,8 @@ interface MonacoNamespace {
   };
 }
 
-// All of leetcode.com, not just problem URLs: LeetCode navigates in-page, so a script that only
-// loads on /problems/* never arrives when a problem is opened from the list or the home page.
-const MATCHES = ["https://leetcode.com/*"];
-const fixtureOrigin = import.meta.env.WXT_DEV_FIXTURE_ORIGIN;
-if (import.meta.env.MODE !== "production" && fixtureOrigin) MATCHES.push(`${fixtureOrigin}/*`);
-
 export default defineContentScript({
-  matches: MATCHES,
+  matches: contentScriptMatches(),
   world: "MAIN",
   allFrames: true,
   runAt: "document_start",
@@ -90,7 +84,7 @@ export default defineContentScript({
       try {
         post({ kind, url: abs, body: JSON.parse(bodyText) });
       } catch {
-        // non-JSON body; ignore
+        // Not JSON, so not a judge response.
       }
     };
 
@@ -173,7 +167,7 @@ export default defineContentScript({
             .catch(() => undefined);
         }
       } catch {
-        // ignore
+        // The tap must never break the page's own fetch.
       }
       return res;
     } as typeof window.fetch;
@@ -210,11 +204,7 @@ export default defineContentScript({
           }
           const kind = kindFromUrlAndRequest(abs, reqBody) ?? kindFromResponse(abs, text);
           if (!kind) return;
-          try {
-            consider(url, text, kind);
-          } catch {
-            // ignore
-          }
+          consider(url, text, kind);
         })();
       });
       return xhrSend.call(this, body);
@@ -270,8 +260,7 @@ export default defineContentScript({
         const c = counters.get(model) ?? { events: 0, lastSnapshotAt: 0 };
         c.events += 1;
         const now = Date.now();
-        const snapshot =
-          c.events >= SNAPSHOT_EVERY_EVENTS || now - c.lastSnapshotAt >= SNAPSHOT_EVERY_MS;
+        const snapshot = shouldSnapshot(c.events, now - c.lastSnapshotAt);
         if (snapshot) {
           c.events = 0;
           c.lastSnapshotAt = now;
@@ -299,7 +288,6 @@ export default defineContentScript({
       monacoRef = monaco;
       for (const m of monaco.editor.getModels()) attachModel(m);
       monaco.editor.onDidCreateModel(attachModel);
-      post({ kind: "monaco-ready" });
     };
 
     let tries = 0;

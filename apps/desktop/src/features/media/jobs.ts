@@ -1,17 +1,16 @@
 /**
- * In-memory registry of long-running recording jobs (upload, export, transcription, interview
+ * In-memory registry of long-running recording jobs (upload, transcription, interview
  * processing). Pages subscribe with `useJobs()`; the pipeline updates entries as it progresses.
  */
 
 import { useSyncExternalStore } from "react";
+import { newJobId } from "@/lib/recorder";
 
-export type JobKind = "publish" | "export" | "transcribe" | "interview";
+export type JobKind = "publish" | "transcribe" | "interview";
 export type JobStage =
   | "queued"
-  | "thumbnail"
   | "create"
   | "upload"
-  | "export"
   | "transcribe"
   | "captions"
   | "attach"
@@ -45,7 +44,7 @@ function emit() {
   for (const l of listeners) l();
 }
 
-export function upsertJob(job: Job): void {
+function upsertJob(job: Job): void {
   const idx = jobs.findIndex((j) => j.id === job.id);
   const next = [...jobs];
   if (idx >= 0) next[idx] = job;
@@ -68,19 +67,14 @@ export function removeJob(id: string): void {
   emit();
 }
 
-export function clearFinishedJobs(): void {
-  jobs = jobs.filter((j) => j.stage !== "done" && j.stage !== "error");
-  emit();
-}
-
 export function createJob(
-  id: string,
   kind: JobKind,
   label: string,
   refs: Partial<Pick<Job, "recordingId" | "postId" | "sessionId" | "videoId">> = {},
 ): Job {
   const job: Job = {
-    id,
+    // The id is what the Rust side stamps on this job's progress events.
+    id: newJobId(kind),
     kind,
     label,
     stage: "queued",
@@ -124,10 +118,8 @@ export function isActive(job: Job): boolean {
 
 export const STAGE_LABEL: Record<JobStage, string> = {
   queued: "Queued",
-  thumbnail: "Making thumbnail",
   create: "Creating video",
   upload: "Uploading",
-  export: "Rendering",
   transcribe: "Transcribing",
   captions: "Adding captions",
   attach: "Attaching to post",

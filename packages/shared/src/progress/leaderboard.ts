@@ -5,10 +5,8 @@
  * labels the week.
  */
 import { z } from "zod";
-import { formatWeekRange } from "../session/activity";
-
-const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const Count = z.number().int().nonnegative();
+import { CountSchema as Count, IsoDateSchema } from "../primitives";
+import { formatWeekRange } from "./activity";
 
 export const LeaderboardRowSchema = z.object({
   user_id: z.string(),

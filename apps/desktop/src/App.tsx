@@ -1,8 +1,8 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { RouterProvider } from "react-router";
-import { Splash } from "@/components/Splash";
 import { AuthProvider } from "@/features/auth/AuthProvider";
+import { Splash } from "@/features/shell/Splash";
 import { envError } from "@/lib/env";
 import { queryClient } from "@/lib/queryClient";
 import { ThemeProvider } from "@/lib/theme";

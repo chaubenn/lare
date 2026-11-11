@@ -15,6 +15,7 @@ import {
   type SearchKind,
   sessionSearchDoc,
   sessionSearchTitle,
+  TopicTagSchema,
   transcriptSearchDoc,
 } from "@lare/shared";
 import { useEffect } from "react";
@@ -32,7 +33,7 @@ const RESYNC_MS = 10 * 60_000;
 const MIN_RESYNC_MS = 60_000;
 const WHOLE_KINDS: SearchKind[] = ["session", "post", "draft", "person"];
 
-const TagsSchema = z.array(z.object({ name: z.string(), slug: z.string() })).catch([]);
+const TagsSchema = z.array(TopicTagSchema).catch([]);
 const MomentsSchema = z.array(z.object({ quote: z.string(), comment: z.string() })).catch([]);
 const NextStepsSchema = z.array(z.string()).catch([]);
 

@@ -1,32 +1,23 @@
 import { Check, Lock, Search, UserPlus, Users, X } from "@lare/ui/icons";
+import { Avatar, Button, CountBadge, SegmentedTabs } from "@lare/ui/primitives";
 import { type ReactNode, useDeferredValue, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
-import { CountBadge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { PageBlurb } from "@/components/PageSlots";
 import { EmptyState, ErrorState, ListSkeleton, PageSpinner } from "@/components/ui/States";
-import { useNotify } from "@/features/notifications/notices";
+import { FollowButton } from "@/features/profile/FollowButton";
+import { type FollowState, type PersonSummary, useFollowStates } from "@/features/profile/follows";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { useProfileStats } from "@/features/profile/queries";
+import { personName } from "@/features/profile/UserRow";
 import {
   type FollowRequest,
   useFollowRequests,
   useRespondToRequest,
 } from "@/features/requests/queries";
-import { PageBlurb } from "@/features/shell/PageBlurb";
-import { errorMessage } from "@/lib/supabase";
-import { FollowButton } from "./FollowButton";
+import { notify, notifyError } from "@/lib/notices";
+import { routes } from "@/lib/routes";
 import { FriendsSidebar, useSuggestedPeople } from "./FriendsSidebar";
-import {
-  type FollowState,
-  type PersonSummary,
-  useFollowers,
-  useFollowing,
-  useFollowStates,
-  useProfileSearch,
-} from "./queries";
-import { personName } from "./UserRow";
+import { useFollowers, useFollowing, useProfileSearch } from "./queries";
 
 const TABS = ["following", "followers", "requests", "find"] as const;
 type Tab = (typeof TABS)[number];
@@ -46,7 +37,7 @@ export function FriendsPage() {
   const setTab = (key: Tab) => setParams({ tab: key });
 
   // The leaderboard has its own sidebar entry now; keep old links to the tab working.
-  if (raw === "leaderboard") return <Navigate to="/leaderboard" replace />;
+  if (raw === "leaderboard") return <Navigate to={routes.leaderboard} replace />;
 
   return (
     // Same shape as the feed: the side column starts level with the lists, not the title.
@@ -103,7 +94,7 @@ function PersonCard({
   stats?: boolean;
 }) {
   const name = personName(person);
-  const href = person.handle ? `/u/${person.handle}` : undefined;
+  const href = person.handle ? routes.user(person.handle) : undefined;
   return (
     <li className="flex min-w-0 flex-col rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)] transition-colors hover:border-[var(--border-strong)]">
       <div className="flex items-start gap-3 p-4 pb-3">
@@ -196,12 +187,12 @@ function SectionHeading({ children }: { children: ReactNode }) {
 }
 
 /** Under the lists, so the page always offers somewhere to go next. */
-function Suggested({ title = "People to follow" }: { title?: string }) {
+function Suggested() {
   const { people, isPending } = useSuggestedPeople(6);
   if (isPending || people.length === 0) return null;
   return (
     <section className="mt-8">
-      <SectionHeading>{title}</SectionHeading>
+      <SectionHeading>People to follow</SectionHeading>
       <PeopleGrid>
         {people.map((person) => (
           <PersonCard key={person.id} person={person} state="none" />
@@ -334,7 +325,6 @@ function RequestsTab() {
 
 function RequestCard({ request }: { request: FollowRequest }) {
   const respond = useRespondToRequest();
-  const { notify } = useNotify();
   const person = request.profiles as PersonSummary;
   const name = personName(person);
 
@@ -344,12 +334,7 @@ function RequestCard({ request }: { request: FollowRequest }) {
       {
         onSuccess: () =>
           notify({ title: accept ? `Accepted ${name}` : `Declined ${name}`, variant: "success" }),
-        onError: (err) =>
-          notify({
-            title: "Couldn't update request",
-            description: errorMessage(err),
-            variant: "error",
-          }),
+        onError: (err) => notifyError("Couldn't update request", err),
       },
     );
 

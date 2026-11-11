@@ -1,6 +1,7 @@
 import { parseGlobalLeaderboard, parseLeaderboard } from "@lare/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/features/auth/AuthProvider";
+import { queryKeys } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";
 
 export type WeekOffset = 0 | -1;
@@ -9,7 +10,7 @@ export type WeekOffset = 0 | -1;
 export function useWeeklyLeaderboard(weekOffset: WeekOffset) {
   const { userId } = useUser();
   return useQuery({
-    queryKey: ["weekly-leaderboard", userId, weekOffset],
+    queryKey: queryKeys.weeklyLeaderboard.of(userId, weekOffset),
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("weekly_leaderboard", { week_offset: weekOffset });
@@ -20,13 +21,14 @@ export function useWeeklyLeaderboard(weekOffset: WeekOffset) {
 }
 
 /**
- * Everyone with a public account, ranked by distinct problems solved in the week. A private
- * viewer gets their own standing back too, but is never listed for anyone else.
+ * Everyone who solved something in the week, ranked by distinct problems solved. Private accounts
+ * are listed too, with `is_private` set (migration 0022); the viewer's own row comes back even
+ * when it is past the cut-off.
  */
 export function useGlobalLeaderboard(weekOffset: WeekOffset) {
   const { userId } = useUser();
   return useQuery({
-    queryKey: ["global-leaderboard", userId, weekOffset],
+    queryKey: queryKeys.globalLeaderboard.of(userId, weekOffset),
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("global_leaderboard", { week_offset: weekOffset });

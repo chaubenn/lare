@@ -2,6 +2,7 @@ import type { Post } from "@lare/supabase-types";
 import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { parseAiReview } from "@/lib/json";
+import { queryKeys, refresh } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";
 
 const POST_DETAIL_SELECT =
@@ -13,11 +14,9 @@ function postQuery(id: string) {
 
 export type PostDetail = NonNullable<QueryData<ReturnType<typeof postQuery>>>;
 
-export const postKey = (id: string) => ["post", id] as const;
-
 export function usePost(id: string) {
   return useQuery({
-    queryKey: postKey(id),
+    queryKey: queryKeys.post.of(id),
     queryFn: async () => {
       const { data, error } = await postQuery(id);
       if (error) throw error;
@@ -29,7 +28,7 @@ export function usePost(id: string) {
 /** AI review for a session; RLS returns nothing when the viewer may not see insights. */
 export function useInterviewReview(sessionId: string | null | undefined) {
   return useQuery({
-    queryKey: ["interview-review", sessionId],
+    queryKey: queryKeys.interviewReview(sessionId),
     enabled: !!sessionId,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -43,56 +42,59 @@ export function useInterviewReview(sessionId: string | null | undefined) {
   });
 }
 
+/** What the draft form and the post editor both edit. */
 export interface PostEdit {
   id: string;
   title: string;
   body: string;
   visibility: Post["visibility"];
+  /** Show the attached video as a slide on the post. */
   showVideo: boolean;
   /** Show the interview's summary video as a slide, ahead of the full recording. */
   showDemoVideo: boolean;
 }
 
-/** Edit an already published post. RLS restricts the update to its owner. */
-/** Removes the post only; the session it came from stays in the account. */
+/** The columns the form owns, shared by "save draft", "publish" and editing a published post. */
+export function postPatch(edit: PostEdit) {
+  return {
+    title: edit.title.trim() || null,
+    body: edit.body.trim() || null,
+    visibility: edit.visibility,
+    show_video: edit.showVideo,
+    show_demo_video: edit.showDemoVideo,
+    // Posts have no cover image any more: the first image, if any, simply comes first.
+    cover_media_id: null,
+  };
+}
+
+/** Delete a post or a draft. The session it came from stays in the account. */
+export async function deletePost(id: string): Promise<void> {
+  const { error } = await supabase.from("posts").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export function useDeletePost() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("posts").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: deletePost,
     onSuccess: (_data, id) => {
-      queryClient.removeQueries({ queryKey: postKey(id) });
-      for (const key of ["feed", "user-posts", "profile-stats", "sessions", "drafts"]) {
-        void queryClient.invalidateQueries({ queryKey: [key] });
-      }
+      queryClient.removeQueries({ queryKey: queryKeys.post.of(id) });
+      void refresh.publishedPostLists(queryClient);
     },
   });
 }
 
+/** Edit an already published post. RLS restricts the update to its owner. */
 export function useUpdatePost() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, title, body, visibility, showVideo, showDemoVideo }: PostEdit) => {
-      const { error } = await supabase
-        .from("posts")
-        .update({
-          title: title.trim() || null,
-          body: body.trim() || null,
-          visibility,
-          show_video: showVideo,
-          show_demo_video: showDemoVideo,
-          // Posts have no cover image any more: the first image, if any, simply comes first.
-          cover_media_id: null,
-        })
-        .eq("id", id);
+    mutationFn: async (edit: PostEdit) => {
+      const { error } = await supabase.from("posts").update(postPatch(edit)).eq("id", edit.id);
       if (error) throw error;
     },
     onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: postKey(vars.id) });
-      void queryClient.invalidateQueries({ queryKey: ["feed"] });
-      void queryClient.invalidateQueries({ queryKey: ["user-posts"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.post.of(vars.id) });
+      void refresh.postCards(queryClient);
     },
   });
 }

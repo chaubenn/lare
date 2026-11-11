@@ -12,6 +12,7 @@
  *   so a restarted service worker resumes exactly where it left off.
  */
 import { z } from "zod";
+import { SessionKindSchema } from "../primitives";
 import { ProblemInfoSchema, SubmissionInfoSchema } from "./protocol";
 import { TimerEventSchema } from "./timer";
 
@@ -59,7 +60,7 @@ export const EMPTY_TRACKING_STATE: TrackingState = { inboxSessionId: null, probl
 
 export const ActiveSessionSchema = z.object({
   sessionId: z.string(),
-  kind: z.enum(["practice", "interview"]),
+  kind: SessionKindSchema,
   scope: z.enum(["session", "problem"]),
   startedAt: z.number(),
   events: z.array(TimerEventSchema),
@@ -92,11 +93,6 @@ export const ExtensionStateSchema = z.object({
   /** Last known desktop connection state (for UI only). */
   appConnected: z.boolean().default(false),
   /**
-   * Legacy: ids of ended interviews whose save failed, written by builds that kept the session in
-   * `interview` (blocking every other action) until it saved. Superseded by `unsaved`.
-   */
-  pendingSync: z.array(z.string()).default([]),
-  /**
    * Interviews that ended but could not be saved yet. Kept out of `interview` so a failed save
    * never blocks a new interview, signing out or discarding; retried in the background.
    */
@@ -109,6 +105,5 @@ export const EMPTY_EXTENSION_STATE: ExtensionState = {
   interview: null,
   tracking: EMPTY_TRACKING_STATE,
   appConnected: false,
-  pendingSync: [],
   unsaved: [],
 };

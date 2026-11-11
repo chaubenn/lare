@@ -2,26 +2,19 @@ import { formatDurationHuman } from "@lare/shared";
 import type { SessionProblem, Submission } from "@lare/supabase-types";
 import { cn, DifficultyBadge } from "@lare/ui";
 import { Check, ExternalLink } from "@lare/ui/icons";
+import { Badge, Button } from "@lare/ui/primitives";
 import { useMemo, useState } from "react";
 import { ProblemDescription } from "@/components/ProblemDescription";
 import { SubmissionCard } from "@/components/SubmissionCard";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { parseTopicTags } from "@/lib/json";
 import { leetCodeProblemUrl } from "@/lib/links";
 import { openExternal } from "@/lib/open";
 import { defaultSubmissionIndex, submissionsInAttemptOrder } from "@/lib/submissions";
 
-export type ProblemWithSubmissions = SessionProblem & { submissions: Submission[] };
+type ProblemWithSubmissions = SessionProblem & { submissions: Submission[] };
 
 /** One problem from a session: what it asked, its topic tags, and the attempts made at it. */
-export function ProblemSection({
-  problem,
-  defaultShowCode = false,
-}: {
-  problem: ProblemWithSubmissions;
-  defaultShowCode?: boolean;
-}) {
+export function ProblemSection({ problem }: { problem: ProblemWithSubmissions }) {
   const tags = useMemo(() => parseTopicTags(problem.topic_tags), [problem.topic_tags]);
   // Built from the slug, never the stored `url`: the row is written by the post's author, and
   // a button labelled "LeetCode" must not open some other site.
@@ -95,7 +88,7 @@ export function ProblemSection({
           role="tabpanel"
           aria-label={`Submission ${ordered.indexOf(active) + 1}`}
         >
-          <SubmissionCard submission={active} defaultShowCode={defaultShowCode} />
+          <SubmissionCard submission={active} />
         </div>
       ) : (
         <p className="mt-3 text-sm text-[var(--text-tertiary)]">

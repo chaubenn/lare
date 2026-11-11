@@ -1,11 +1,10 @@
 import { MonitorX } from "@lare/ui/icons";
+import { Button } from "@lare/ui/primitives";
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "@/components/ui/Button";
+import { confirm } from "@/components/ui/Confirm";
 import { usePermissions } from "@/features/media/hooks";
-import { useNotify } from "@/features/notifications/notices";
-import { confirm } from "@/lib/confirm";
+import { notify, notifyError } from "@/lib/notices";
 import { recorder } from "@/lib/recorder";
-import { errorMessage } from "@/lib/supabase";
 import { SubSection } from "./shared";
 
 /**
@@ -16,7 +15,6 @@ import { SubSection } from "./shared";
  */
 export function ScreenSharingSection() {
   const permissions = usePermissions();
-  const { notify } = useNotify();
   const clear = useMutation({
     mutationFn: async () => {
       const ok = await confirm({
@@ -38,12 +36,7 @@ export function ScreenSharingSection() {
         variant: "success",
       });
     },
-    onError: (e) =>
-      notify({
-        title: "Couldn't clear screen sharing",
-        description: errorMessage(e),
-        variant: "error",
-      }),
+    onError: (e) => notifyError("Couldn't clear screen sharing", e),
   });
 
   // macOS is the only platform that gates (and indicates) screen recording this way.

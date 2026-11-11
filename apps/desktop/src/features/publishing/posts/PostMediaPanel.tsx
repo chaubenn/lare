@@ -1,11 +1,10 @@
 import { MAX_POST_IMAGES, POST_IMAGE_MIME_TYPES } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { ChevronLeft, ChevronRight, ImagePlus, Trash2 } from "@lare/ui/icons";
+import { Button, Card, SectionTitle } from "@lare/ui/primitives";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage } from "@/lib/supabase";
+import { IMAGE_CAPTION_MAX } from "@/features/publishing/drafts/validation";
+import { notify, notifyError } from "@/lib/notices";
 import {
   type PostImage,
   usePostMedia,
@@ -31,7 +30,6 @@ export function PostMediaPanel({
   userId: string;
   disabled?: boolean;
 }) {
-  const { notify } = useNotify();
   const fileInput = useRef<HTMLInputElement>(null);
   const media = usePostMedia(postId);
   const upload = useUploadPostImages(postId, userId);
@@ -49,8 +47,7 @@ export function PostMediaPanel({
     reorder.isPending ||
     caption.isPending;
 
-  const fail = (title: string) => (e: unknown) =>
-    notify({ title, description: errorMessage(e), variant: "error" });
+  const fail = (title: string) => (e: unknown) => notifyError(title, e);
 
   const move = (index: number, delta: number) => {
     const next = [...images];
@@ -206,7 +203,7 @@ export function PostMediaPanel({
               </div>
               <input
                 defaultValue={image.caption ?? ""}
-                maxLength={280}
+                maxLength={IMAGE_CAPTION_MAX}
                 placeholder="Caption"
                 aria-label="Image caption"
                 disabled={busy}

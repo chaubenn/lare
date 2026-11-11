@@ -1,8 +1,8 @@
 import { activeMs, formatDuration, timerStatus } from "@lare/shared";
 import { Emblem } from "@lare/ui/brand";
 import { useCallback, useEffect, useState } from "react";
-import { type RuntimeSnapshot, type StateBroadcast, sendRuntime, toSnapshot } from "@/src/messages";
-import { PAGE_PROBLEM_REQUEST, type PageProblemReply } from "@/src/pageController";
+import { applySnapshot, type RuntimeSnapshot, sendRuntime, sendToTab } from "@/src/messages";
+import { isLeetcodeUrl } from "@/src/origins";
 import { type Theme, useTheme } from "@/src/theme";
 
 type Tab = "tracking" | "interview";
@@ -61,28 +61,13 @@ export function App() {
   const [, setTick] = useState(0);
 
   const refresh = useCallback(async () => {
-    const res = await sendRuntime({ type: "GET_STATE" });
-    if (res.ok) {
-      const next = toSnapshot(res);
-      if (next) setSnap(next);
-    }
+    applySnapshot(await sendRuntime({ type: "GET_STATE" }), setSnap);
   }, []);
 
   useEffect(() => {
     void refresh();
-    void sendRuntime({ type: "PROBE_APP" }).then((res) => {
-      if (res.ok) {
-        const next = toSnapshot(res);
-        if (next) setSnap(next);
-      }
-    });
-    const listener = (raw: unknown) => {
-      const msg = raw as Partial<StateBroadcast>;
-      if (msg?.type === "STATE_CHANGED") {
-        const next = toSnapshot(msg);
-        if (next) setSnap(next);
-      }
-    };
+    void sendRuntime({ type: "PROBE_APP" }).then((res) => applySnapshot(res, setSnap));
+    const listener = (raw: unknown) => applySnapshot(raw, setSnap);
     chrome.runtime.onMessage.addListener(listener);
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => {
@@ -97,10 +82,7 @@ export function App() {
     try {
       const res = await fn();
       if (!res.ok) setError(res.error);
-      else {
-        const next = toSnapshot(res);
-        if (next) setSnap(next);
-      }
+      else applySnapshot(res, setSnap);
       return res;
     } finally {
       setBusy(false);
@@ -119,14 +101,10 @@ export function App() {
       return;
     }
     const tabId = tab.id;
-    const ask = () =>
-      chrome.tabs
-        .sendMessage(tabId, { type: PAGE_PROBLEM_REQUEST })
-        .then((r) => r as PageProblemReply | undefined)
-        .catch(() => undefined);
+    const ask = () => sendToTab(tabId, { type: "LARE_PAGE_PROBLEM" });
     let reply = await ask();
     // A LeetCode tab opened before the extension loaded has no content script: add it, ask again.
-    if (!reply?.problem && tab.url?.startsWith("https://leetcode.com/")) {
+    if (!reply?.problem && isLeetcodeUrl(tab.url)) {
       await sendRuntime({ type: "INJECT_PAGE", tabId });
       for (let attempt = 0; attempt < 10 && !reply?.problem; attempt++) {
         await new Promise((r) => setTimeout(r, 300));
@@ -154,9 +132,8 @@ export function App() {
   const auth = snap?.auth ?? null;
   const status = interview ? timerStatus(interview.events) : "idle";
   const sessionId = interview?.sessionId ?? null;
-  // Everything this device has noticed that hasn't been posted yet. Posting (and
-  // clearing) happens in the desktop app, which reads the real inbox from the
-  // server — this list is just a local, at-a-glance echo of it.
+  // Everything this device has noticed that hasn't been posted yet: a local, at-a-glance echo
+  // of the server inbox, which the desktop app reads directly.
   const tracked = snap?.state.tracking.problems ?? [];
   // Ended interviews whose save failed. They no longer hold up anything else; the background
   // keeps retrying them until they save or are discarded here.

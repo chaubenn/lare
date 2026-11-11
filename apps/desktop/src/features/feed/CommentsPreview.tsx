@@ -1,12 +1,12 @@
+import { Avatar } from "@lare/ui/primitives";
 import { Link } from "react-router";
-import { Avatar } from "@/components/ui/Avatar";
 import { CommentText } from "@/features/publishing/posts/Mentions";
 import type { PostComment } from "@/features/publishing/posts/social";
+import { routes } from "@/lib/routes";
 
 /**
  * Instagram-style inline preview: the first few comments render right under the post, no
- * expand needed. When there are more, a "View all" link leads to the full thread. Mirrors
- * the web feed's preview.
+ * expand needed. When there are more, a "View all" link leads to the full thread.
  */
 export function CommentsPreview({
   postId,
@@ -23,7 +23,7 @@ export function CommentsPreview({
     <div className="mt-3 space-y-2.5 border-t border-zinc-800/60 pt-3">
       {totalCount > comments.length && (
         <Link
-          to={`/posts/${postId}`}
+          to={routes.post(postId)}
           className="block text-xs text-[var(--text-tertiary)] transition-colors hover:text-zinc-300"
         >
           View all {totalCount} comments
@@ -45,7 +45,7 @@ function CommentPreview({ comment }: { comment: PostComment }) {
   return (
     <li className="flex gap-2.5">
       {author?.handle ? (
-        <Link to={`/u/${author.handle}`} className="shrink-0">
+        <Link to={routes.user(author.handle)} className="shrink-0">
           <Avatar url={author.avatar_url} name={name} size={28} />
         </Link>
       ) : (
@@ -53,7 +53,10 @@ function CommentPreview({ comment }: { comment: PostComment }) {
       )}
       <p className="line-clamp-2 min-w-0 flex-1 text-sm leading-relaxed text-zinc-300">
         {author?.handle ? (
-          <Link to={`/u/${author.handle}`} className="font-semibold text-zinc-200 hover:underline">
+          <Link
+            to={routes.user(author.handle)}
+            className="font-semibold text-zinc-200 hover:underline"
+          >
             {name}
           </Link>
         ) : (

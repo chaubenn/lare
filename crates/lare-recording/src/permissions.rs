@@ -21,6 +21,15 @@ pub struct Permissions {
     pub microphone: PermissionStatus,
 }
 
+/// One of the capabilities above, as the webview names it when asking for one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionKind {
+    ScreenRecording,
+    Camera,
+    Microphone,
+}
+
 impl Permissions {
     pub fn recording_capable(&self) -> bool {
         matches!(
@@ -107,9 +116,15 @@ pub async fn request_camera() -> PermissionStatus {
     #[cfg(target_os = "macos")]
     {
         tracing::info!(target: "lare_permissions", "requesting camera access");
-        match cidre::av::CaptureDevice::request_access_for_media_type(cidre::av::MediaType::video()).await {
-            Ok(granted) => tracing::info!(target: "lare_permissions", "camera requestAccess returned {granted}"),
-            Err(_) => tracing::warn!(target: "lare_permissions", "camera requestAccess threw an exception"),
+        match cidre::av::CaptureDevice::request_access_for_media_type(cidre::av::MediaType::video())
+            .await
+        {
+            Ok(granted) => {
+                tracing::info!(target: "lare_permissions", "camera requestAccess returned {granted}")
+            }
+            Err(_) => {
+                tracing::warn!(target: "lare_permissions", "camera requestAccess threw an exception")
+            }
         }
     }
     camera()
@@ -119,9 +134,15 @@ pub async fn request_microphone() -> PermissionStatus {
     #[cfg(target_os = "macos")]
     {
         tracing::info!(target: "lare_permissions", "requesting microphone access");
-        match cidre::av::CaptureDevice::request_access_for_media_type(cidre::av::MediaType::audio()).await {
-            Ok(granted) => tracing::info!(target: "lare_permissions", "microphone requestAccess returned {granted}"),
-            Err(_) => tracing::warn!(target: "lare_permissions", "microphone requestAccess threw an exception"),
+        match cidre::av::CaptureDevice::request_access_for_media_type(cidre::av::MediaType::audio())
+            .await
+        {
+            Ok(granted) => {
+                tracing::info!(target: "lare_permissions", "microphone requestAccess returned {granted}")
+            }
+            Err(_) => {
+                tracing::warn!(target: "lare_permissions", "microphone requestAccess threw an exception")
+            }
         }
     }
     microphone()
@@ -164,11 +185,16 @@ pub fn reset_screen_recording(_bundle_id: &str) -> Result<(), String> {
 }
 
 /// Deep link into the relevant macOS privacy pane.
-pub fn settings_url(which: &str) -> Option<&'static str> {
+pub fn settings_url(which: PermissionKind) -> &'static str {
     match which {
-        "screen_recording" => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"),
-        "camera" => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"),
-        "microphone" => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"),
-        _ => None,
+        PermissionKind::ScreenRecording => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        }
+        PermissionKind::Camera => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+        }
+        PermissionKind::Microphone => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        }
     }
 }

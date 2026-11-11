@@ -76,7 +76,7 @@
 }
 
 body {
-  /* styles.css sets text-zinc-100 on body; the theme text colour supersedes it. */
+  /* index.html puts text-zinc-100 on body; the theme text colour supersedes it. */
   color: var(--text);
 }
 

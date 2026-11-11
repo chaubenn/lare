@@ -1,8 +1,8 @@
 import type { AiReview } from "@lare/shared";
 import { formatDuration, AI_SCORE_LABELS as SCORE_LABELS } from "@lare/shared";
 import { cn } from "@lare/ui";
+import { SegmentedTabs } from "@lare/ui/primitives";
 import { useState } from "react";
-import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 
 type DetailTab = "scores" | "moments" | "code" | "next";
 

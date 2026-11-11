@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 import { supabase } from "@/lib/supabase";
-import { sessionPostKey } from "./queries";
 
 /**
  * A draft for an ended session that has no post (the extension never made one, or it was
@@ -18,9 +18,9 @@ export function useCreateSessionDraft() {
       return data;
     },
     onSuccess: (_postId, sessionId) => {
-      void queryClient.invalidateQueries({ queryKey: sessionPostKey(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
-      void queryClient.invalidateQueries({ queryKey: ["drafts"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.session.post(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.drafts.all });
     },
   });
 }

@@ -1,5 +1,6 @@
-// Strict JSON schema for OpenAI structured outputs. Mirrors AiReviewSchema in
-// packages/shared/src/ai-review.ts (all fields required, additionalProperties false).
+// Strict JSON schema for OpenAI structured outputs (all fields required, additionalProperties
+// false). A hand copy of AiReviewSchema in packages/shared/src/session/ai-review.ts, which Deno
+// cannot import; packages/shared/src/edgeMirrors.test.ts fails when the two differ.
 
 const score = {
   type: "object",

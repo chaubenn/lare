@@ -17,7 +17,6 @@ export function Tooltip({
 }: {
   label: string;
   children: ReactNode;
-  side?: "top" | "bottom";
   align?: Align;
   className?: string;
 }) {

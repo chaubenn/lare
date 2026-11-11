@@ -1,4 +1,5 @@
-// Deno mirror of packages/shared/src/edits.ts (replay + checkpoints). Keep in sync.
+// Deno copy of the replay and checkpoint code in packages/shared/src/session/edits.ts.
+// packages/shared/src/edgeMirrors.test.ts runs both over the same logs and fails when they differ.
 
 export type EditChange = [number, number, string];
 export interface EditEvent {
@@ -86,8 +87,9 @@ export async function gunzipJson<T>(bytes: Uint8Array, maxBytes: number): Promis
 }
 
 // ---------------------------------------------------------------------------
-// Media time (mirror of packages/shared/src/timer.ts). Recordings skip paused stretches, so
-// media time = wall-clock since t0 minus the pauses that happened before it.
+// Media time (copy of packages/shared/src/session/timer.ts, covered by the same test).
+// Recordings skip paused stretches, so media time = wall-clock since t0 minus the pauses that
+// happened before it.
 // ---------------------------------------------------------------------------
 
 export interface PauseInterval {

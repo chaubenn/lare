@@ -1,7 +1,7 @@
 import { focusManager, onlineManager, QueryClient } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSyncExternalStore } from "react";
-import { isNetworkError } from "./supabase";
+import { isNetworkError } from "./errors";
 import { inTauri } from "./tauri";
 
 // TanStack assumes it is online until the first `offline` event, so a launch with no network

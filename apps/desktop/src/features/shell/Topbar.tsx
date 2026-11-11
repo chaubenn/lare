@@ -1,12 +1,12 @@
 import { ArrowLeft, Command, Search } from "@lare/ui/icons";
 import { useLocation } from "react-router";
+import { TopbarBlurbSlot } from "@/components/PageSlots";
 import { useOnline } from "@/lib/queryClient";
+import { routes } from "@/lib/routes";
+import { isMac } from "@/lib/shortcuts";
 import { useGoBack } from "@/lib/useGoBack";
 import { navItemForPath } from "./nav";
-import { TopbarBlurbSlot } from "./PageBlurb";
 import { drawsWindowControls, WindowControls } from "./WindowControls";
-
-const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 
 /**
  * Medesk's header: the page's name on the left and quick search on the right. It is the only
@@ -16,7 +16,7 @@ const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform
 export function Topbar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const { pathname } = useLocation();
   const page = navItemForPath(pathname);
-  const goBack = useGoBack(page?.to ?? "/");
+  const goBack = useGoBack(page?.to ?? routes.feed);
   const isDetail = Boolean(page) && pathname !== page?.to;
 
   return (

@@ -1,12 +1,14 @@
+import { Button, FieldError } from "@lare/ui/primitives";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { FieldError } from "@/components/ui/Field";
 import { Spinner } from "@/components/ui/States";
-import { captureAccelerator, DEFAULT_PILL_SHORTCUT, describeAccelerator } from "@/lib/shortcuts";
-import { errorMessage } from "@/lib/supabase";
+import { errorMessage } from "@/lib/errors";
+import {
+  captureAccelerator,
+  DEFAULT_PILL_SHORTCUT,
+  describeAccelerator,
+  isMac,
+} from "@/lib/shortcuts";
 import { SubSection, useSettingsPatch } from "./shared";
-
-const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 
 function Keycaps({ accelerator }: { accelerator: string }) {
   return (

@@ -1,4 +1,6 @@
-//! Extension <-> desktop WebSocket protocol (mirrors packages/shared/src/protocol.ts).
+//! Extension <-> desktop WebSocket protocol. The TypeScript side is
+//! `packages/shared/src/session/protocol.ts`; both are tested against the frames in
+//! `packages/shared/fixtures/bridge.json` (`tests/bridge_fixtures.rs` here).
 
 use serde::{Deserialize, Serialize};
 
@@ -192,73 +194,4 @@ pub enum AppToExt {
     Error { code: ErrorCode, message: String },
     #[serde(rename = "pong")]
     Pong { at: u64 },
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn session_start_wire_format_matches_ts() {
-        let raw = r#"{"type":"session.start","sessionId":"s1","kind":"interview","scope":"problem","startedAt":1700000000000,"problem":{"slug":"two-sum","frontendId":"1","title":"Two Sum","difficulty":"Easy","url":"https://leetcode.com/problems/two-sum/","language":"python"},"facecam":true,"mic":true}"#;
-        let msg: ExtToApp = serde_json::from_str(raw).unwrap();
-        match &msg {
-            ExtToApp::SessionStart { session_id, kind, facecam, problem, .. } => {
-                assert_eq!(session_id, "s1");
-                assert_eq!(*kind, SessionKind::Interview);
-                assert!(*facecam);
-                assert_eq!(problem.as_ref().unwrap().difficulty, Some(Difficulty::Easy));
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-        let back = serde_json::to_string(&msg).unwrap();
-        assert!(back.contains(r#""type":"session.start""#));
-        assert!(back.contains(r#""startedAt":1700000000000"#));
-    }
-
-    #[test]
-    fn app_messages_serialize_with_camel_case() {
-        let m = AppToExt::HelloAck {
-            protocol: 1,
-            app_version: "0.1.0".into(),
-            user_id: None,
-            recording_capable: true,
-            recording: None,
-        };
-        let s = serde_json::to_string(&m).unwrap();
-        assert_eq!(
-            s,
-            r#"{"type":"hello.ack","protocol":1,"appVersion":"0.1.0","userId":null,"recordingCapable":true,"recording":null}"#
-        );
-        // An ack from an app that predates `recording` still parses.
-        let old: AppToExt = serde_json::from_str(
-            r#"{"type":"hello.ack","protocol":2,"appVersion":"0.1.0","userId":null,"recordingCapable":true}"#,
-        )
-        .unwrap();
-        assert!(matches!(old, AppToExt::HelloAck { recording: None, .. }));
-        let live = AppToExt::HelloAck {
-            protocol: 3,
-            app_version: "0.1.0".into(),
-            user_id: None,
-            recording_capable: true,
-            recording: Some(RecordingSnapshot {
-                session_id: Some("s1".into()),
-                state: RecordingState::Recording,
-                started_at: Some(42),
-            }),
-        };
-        assert!(
-            serde_json::to_string(&live)
-                .unwrap()
-                .contains(r#""recording":{"sessionId":"s1","state":"recording","startedAt":42}"#)
-        );
-        let e = AppToExt::Error {
-            code: ErrorCode::NotSignedIn,
-            message: "sign in".into(),
-        };
-        assert_eq!(
-            serde_json::to_string(&e).unwrap(),
-            r#"{"type":"error","code":"not_signed_in","message":"sign in"}"#
-        );
-    }
 }

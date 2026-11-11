@@ -1,14 +1,23 @@
 import type { Post } from "@lare/supabase-types";
 import { Eye, Trash2 } from "@lare/ui/icons";
+import {
+  Button,
+  Card,
+  Input,
+  Label,
+  PageHeader,
+  SectionTitle,
+  Select,
+  Textarea,
+  Toggle,
+} from "@lare/ui/primitives";
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
-import { Button } from "@/components/ui/Button";
-import { Card, PageHeader, SectionTitle } from "@/components/ui/Card";
-import { Input, Label, Select, Textarea, Toggle } from "@/components/ui/Field";
+import { Link, useParams } from "react-router";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage } from "@/lib/supabase";
+import { POST_BODY_MAX, POST_TITLE_MAX } from "@/features/publishing/drafts/validation";
+import { notify, notifyError } from "@/lib/notices";
+import { routes } from "@/lib/routes";
 import { useGoBack } from "@/lib/useGoBack";
 import { PostMediaPanel } from "./PostMediaPanel";
 import { PostPreview, usePreviewSlides } from "./PostPreview";
@@ -29,7 +38,7 @@ export function PostEditPage() {
         title="You can't edit this post"
         description="It may have been deleted, or it belongs to someone else."
         action={
-          <Link to={`/posts/${id}`} className="text-sm text-zinc-200 underline underline-offset-2">
+          <Link to={routes.post(id)} className="text-sm text-zinc-200 underline underline-offset-2">
             Back to the post
           </Link>
         }
@@ -44,12 +53,10 @@ export function PostEditPage() {
  * as they are uploaded; the fields save on "Save changes", the same split the web editor uses.
  */
 function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
-  const { notify } = useNotify();
-  const _navigate = useNavigate();
   const update = useUpdatePost();
   const remove = useDeletePostFlow(post.id, post.sessions?.client);
   const busy = update.isPending || remove.isPending;
-  const postHref = `/posts/${post.id}`;
+  const postHref = routes.post(post.id);
   const goBack = useGoBack(postHref);
 
   const [title, setTitle] = useState(post.title ?? "");
@@ -78,8 +85,7 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
           notify({ title: "Post updated", variant: "success" });
           goBack();
         },
-        onError: (e) =>
-          notify({ title: "Couldn't save", description: errorMessage(e), variant: "error" }),
+        onError: (e) => notifyError("Couldn't save", e),
       },
     );
   };
@@ -120,12 +126,12 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
               className="mt-1"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              maxLength={140}
+              maxLength={POST_TITLE_MAX}
               placeholder="Give this session a title"
             />
           </div>
           <div>
-            <Label htmlFor="post-body" hint={`${body.length}/5000`}>
+            <Label htmlFor="post-body" hint={`${body.length}/${POST_BODY_MAX}`}>
               Caption
             </Label>
             <Textarea
@@ -133,7 +139,7 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
               className="mt-1 min-h-48"
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              maxLength={5000}
+              maxLength={POST_BODY_MAX}
               placeholder="What did you learn? What was the approach?"
             />
           </div>

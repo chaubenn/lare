@@ -2,9 +2,10 @@ import type { Database } from "@lare/supabase-types";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { chromeStorageAdapter } from "./storage";
 
-export const SUPABASE_URL: string = import.meta.env.WXT_SUPABASE_URL;
-export const SUPABASE_KEY: string = import.meta.env.WXT_SUPABASE_PUBLISHABLE_KEY;
-export const SITE_URL: string = import.meta.env.WXT_SITE_URL ?? "https://lare.fyi";
+const SUPABASE_URL: string = import.meta.env.WXT_SUPABASE_URL;
+const SUPABASE_KEY: string = import.meta.env.WXT_SUPABASE_PUBLISHABLE_KEY;
+/** How this client names itself: the `x-lare-client` header and `sessions.client`. */
+export const CLIENT_TAG = `extension/${__EXT_VERSION__}`;
 
 let client: SupabaseClient<Database> | null = null;
 
@@ -19,7 +20,7 @@ export function getSupabase(): SupabaseClient<Database> {
         flowType: "pkce",
       },
       global: {
-        headers: { "x-lare-client": `extension/${__EXT_VERSION__}` },
+        headers: { "x-lare-client": CLIENT_TAG },
       },
     });
   }

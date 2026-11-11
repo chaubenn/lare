@@ -1,15 +1,14 @@
-import type { Post } from "@lare/supabase-types";
 import type { QueryData } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useUser } from "@/features/auth/AuthProvider";
-import { postMediaKey } from "@/features/publishing/posts/media";
-import { postKey } from "@/features/publishing/posts/queries";
+import { deletePost, type PostEdit, postPatch } from "@/features/publishing/posts/queries";
 import { whileOnline } from "@/lib/queryClient";
-import { supabase } from "@/lib/supabase";
+import { queryKeys, refresh } from "@/lib/queryKeys";
+import { supabase, uniqueChannel } from "@/lib/supabase";
 
 /** Post + the whole session it summarises (problems and their submissions). */
-export const DRAFT_SELECT = "*, sessions(*, session_problems(*, submissions(*)))" as const;
+const DRAFT_SELECT = "*, sessions(*, session_problems(*, submissions(*)))" as const;
 
 function draftsQuery(userId: string) {
   return supabase
@@ -25,11 +24,6 @@ function draftQuery(id: string) {
 }
 
 export type Draft = QueryData<ReturnType<typeof draftsQuery>>[number];
-export type DraftSession = NonNullable<Draft["sessions"]>;
-
-export const draftsKey = (userId: string) => ["drafts", userId] as const;
-export const draftKey = (id: string) => ["draft", id] as const;
-export const trackedKey = (userId: string) => ["tracked", userId] as const;
 
 /**
  * Problems the extension has tracked passively and that have not been posted yet.
@@ -51,7 +45,7 @@ export type TrackedProblemRow = QueryData<ReturnType<typeof trackedQuery>>[numbe
 export function useTrackedProblems() {
   const { userId } = useUser();
   return useQuery({
-    queryKey: trackedKey(userId),
+    queryKey: queryKeys.tracked.of(userId),
     queryFn: async () => {
       const { data, error } = await trackedQuery(userId);
       if (error) throw error;
@@ -73,24 +67,18 @@ export function usePublishTracked() {
   const queryClient = useQueryClient();
   const { userId } = useUser();
   return useMutation({
-    mutationFn: async ({
-      sessionProblemIds,
-      title,
-    }: {
-      sessionProblemIds: string[];
-      title?: string | null;
-    }) => {
+    mutationFn: async ({ sessionProblemIds }: { sessionProblemIds: string[] }) => {
       const { data, error } = await supabase.rpc("publish_practice_problems", {
         problem_ids: sessionProblemIds,
-        post_title: title ?? null,
+        post_title: null,
       });
       if (error) throw error;
       if (!data) throw new Error("No post was created");
       return data;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: trackedKey(userId) });
-      void queryClient.invalidateQueries({ queryKey: draftsKey(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tracked.of(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.drafts.of(userId) });
     },
   });
 }
@@ -105,7 +93,7 @@ export function useClearTracked() {
       if (error) throw error;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: trackedKey(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tracked.of(userId) });
     },
   });
 }
@@ -113,7 +101,7 @@ export function useClearTracked() {
 export function useDrafts() {
   const { userId } = useUser();
   return useQuery({
-    queryKey: draftsKey(userId),
+    queryKey: queryKeys.drafts.of(userId),
     queryFn: async () => {
       const { data, error } = await draftsQuery(userId);
       if (error) throw error;
@@ -124,7 +112,7 @@ export function useDrafts() {
 
 export function useDraft(id: string) {
   return useQuery({
-    queryKey: draftKey(id),
+    queryKey: queryKeys.draft.of(id),
     queryFn: async () => {
       const { data, error } = await draftQuery(id);
       if (error) throw error;
@@ -141,15 +129,14 @@ export function useDraftsRealtime() {
   const { userId } = useUser();
   const queryClient = useQueryClient();
   useEffect(() => {
-    const channel = supabase
-      .channel(`posts:${userId}:${crypto.randomUUID()}`)
+    const channel = uniqueChannel(`posts:${userId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "posts", filter: `user_id=eq.${userId}` },
         () => {
-          void queryClient.invalidateQueries({ queryKey: ["drafts"] });
-          void queryClient.invalidateQueries({ queryKey: ["draft"] });
-          void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.drafts.all });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.draft.all });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
         },
       )
       .subscribe();
@@ -176,41 +163,17 @@ export function useSetPostExtras(postId: string) {
       if (error) throw error;
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: draftKey(postId) });
-      void queryClient.invalidateQueries({ queryKey: draftsKey(userId) });
-      void queryClient.invalidateQueries({ queryKey: postMediaKey(postId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.draft.of(postId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.drafts.of(userId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.postMedia(postId) });
     },
   });
-}
-
-export interface PublishInput {
-  id: string;
-  title: string;
-  body: string;
-  visibility: Post["visibility"];
-  /** Show the attached demo video as a slide on the post. */
-  showVideo: boolean;
-  /** Show the interview's summary video as a slide, ahead of the full recording. */
-  showDemoVideo: boolean;
-}
-
-/** The columns the draft form owns, shared by "save draft" and "publish". */
-function postPatch(edit: PublishInput) {
-  return {
-    title: edit.title.trim() || null,
-    body: edit.body.trim() || null,
-    visibility: edit.visibility,
-    show_video: edit.showVideo,
-    show_demo_video: edit.showDemoVideo,
-    // Posts have no cover image any more: the first image, if any, simply comes first.
-    cover_media_id: null,
-  };
 }
 
 export function usePublishDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (edit: PublishInput) => {
+    mutationFn: async (edit: PostEdit) => {
       const { data, error } = await supabase
         .from("posts")
         // `published_at` is stamped by the server on publish; a client value would be ignored.
@@ -222,14 +185,9 @@ export function usePublishDraft() {
       return data;
     },
     onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: ["drafts"] });
-      void queryClient.invalidateQueries({ queryKey: draftKey(vars.id) });
-      void queryClient.invalidateQueries({ queryKey: postKey(vars.id) });
-      void queryClient.invalidateQueries({ queryKey: ["feed"] });
-      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
-      // The new post goes on the profile grid and into its post count.
-      void queryClient.invalidateQueries({ queryKey: ["user-posts"] });
-      void queryClient.invalidateQueries({ queryKey: ["profile-stats"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.draft.of(vars.id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.post.of(vars.id) });
+      void refresh.publishedPostLists(queryClient);
     },
   });
 }
@@ -238,7 +196,7 @@ export function useSaveDraft() {
   const queryClient = useQueryClient();
   return useMutation({
     scope: { id: "desktop-draft-save" },
-    mutationFn: async (edit: PublishInput) => {
+    mutationFn: async (edit: PostEdit) => {
       const { error } = await supabase
         .from("posts")
         .update(postPatch(edit))
@@ -249,8 +207,8 @@ export function useSaveDraft() {
       if (error) throw error;
     },
     onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({ queryKey: draftKey(vars.id) });
-      void queryClient.invalidateQueries({ queryKey: ["drafts"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.draft.of(vars.id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.drafts.all });
     },
   });
 }
@@ -258,13 +216,10 @@ export function useSaveDraft() {
 export function useDeleteDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("posts").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: deletePost,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["drafts"] });
-      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.drafts.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
     },
   });
 }

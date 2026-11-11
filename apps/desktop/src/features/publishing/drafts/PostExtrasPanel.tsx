@@ -1,7 +1,5 @@
-import { Card, SectionTitle } from "@/components/ui/Card";
-import { Toggle } from "@/components/ui/Field";
-import { useNotify } from "@/features/notifications/notices";
-import { errorMessage } from "@/lib/supabase";
+import { Card, SectionTitle, Toggle } from "@lare/ui/primitives";
+import { notifyError } from "@/lib/notices";
 import { type Draft, type PostExtras, useSetPostExtras } from "./queries";
 
 /**
@@ -9,7 +7,6 @@ import { type Draft, type PostExtras, useSetPostExtras } from "./queries";
  * post rather than something they have to fill in. Each switch saves on the spot.
  */
 export function PostExtrasPanel({ draft }: { draft: Draft }) {
-  const { notify } = useNotify();
   const extras = useSetPostExtras(draft.id);
   const isInterview = draft.sessions?.kind === "interview" && draft.sessions.graded;
   // AI insights are the only extra, and only a graded mock interview has any.
@@ -17,8 +14,7 @@ export function PostExtrasPanel({ draft }: { draft: Draft }) {
 
   const set = (patch: Partial<PostExtras>) =>
     extras.mutate(patch, {
-      onError: (e) =>
-        notify({ title: "Couldn't update", description: errorMessage(e), variant: "error" }),
+      onError: (e) => notifyError("Couldn't update", e),
     });
 
   return (

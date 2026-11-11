@@ -32,6 +32,8 @@ use axum::{
 };
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
+use crate::sync::lock;
+
 /// How much of the file to hand over per chunk while streaming a range.
 const CHUNK: usize = 256 * 1024;
 
@@ -49,7 +51,7 @@ impl PreviewFiles {
     /// Token for `path`, minting one if this is the first time it has been asked for. Stable per
     /// path so a re-render does not change the `<video>` src and restart playback.
     pub fn register(&self, path: &Path) -> String {
-        let mut by_token = self.by_token.lock().expect("preview registry poisoned");
+        let mut by_token = lock(&self.by_token);
         if let Some((token, _)) = by_token.iter().find(|(_, known)| known.as_path() == path) {
             return token.clone();
         }
@@ -63,10 +65,7 @@ impl PreviewFiles {
     }
 
     fn path(&self, token: &str) -> Option<PathBuf> {
-        self.by_token
-            .lock()
-            .ok()
-            .and_then(|by_token| by_token.get(token).cloned())
+        lock(&self.by_token).get(token).cloned()
     }
 }
 
@@ -160,7 +159,6 @@ pub async fn serve_file(path: &Path, headers: &HeaderMap) -> Response {
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
-/// `GET /preview/{token}`.
 pub async fn handle(previews: &PreviewFiles, token: &str, headers: &HeaderMap) -> Response {
     match previews.path(token) {
         Some(path) => serve_file(&path, headers).await,
@@ -193,7 +191,10 @@ mod tests {
         let other = previews.register(Path::new("/tmp/b.mp4"));
         assert_eq!(one, again, "a re-render must not change the video src");
         assert_ne!(one, other);
-        assert_eq!(previews.path(&one).as_deref(), Some(Path::new("/tmp/a.mp4")));
+        assert_eq!(
+            previews.path(&one).as_deref(),
+            Some(Path::new("/tmp/a.mp4"))
+        );
         assert_eq!(previews.path("nope"), None);
     }
 

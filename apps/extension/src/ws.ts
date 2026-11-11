@@ -8,6 +8,7 @@ import {
   pairingTranscript,
   WS_URL,
 } from "@lare/shared";
+import { singleFlight } from "./util";
 
 export type HelloAck = Extract<AppToExt, { type: "hello.ack" }>;
 type Challenge = Extract<AppToExt, { type: "auth.challenge" }>;
@@ -23,9 +24,22 @@ export type PairingSecrets = (
   fresh: boolean,
 ) => Promise<string | null>;
 
-const NOT_RUNNING = "Lare desktop app is not running";
-/** The secret lookup goes to Supabase; the app waits 20s for the answer, so stay well inside it. */
+/** Each wait on the socket while connecting and shaking hands. */
+const CONNECT_TIMEOUT_MS = 3000;
+/**
+ * The pairing-secret lookup goes to Supabase. The app gives up on `auth.response` after 20s, so
+ * this has to stay well inside that.
+ */
 const SECRET_TIMEOUT_MS = 10_000;
+/**
+ * Chrome stops an idle MV3 worker after 30s; socket traffic counts as activity (Chrome >= 116), so
+ * the ping has to come round sooner than that.
+ */
+const PING_INTERVAL_MS = 20_000;
+/** How long a mock interview's start waits for the app to say it is recording. */
+export const START_TIMEOUT_MS = 30_000;
+
+const NOT_RUNNING = "Lare desktop app is not running";
 
 /** Which side has to be updated before the two can work together. */
 type Incompatible = "desktop" | "extension";
@@ -46,6 +60,10 @@ class IncompatibleError extends RefusedError {
 /** Whatever answered could not prove it holds this account's pairing secret, or would not accept ours. */
 const UNVERIFIED =
   "Couldn’t verify the Lare desktop app. Quit and reopen it, signed in to this account, then try again.";
+const DESKTOP_SIGNED_OUT = "Sign in to the Lare desktop app.";
+const OTHER_ACCOUNT = "The desktop app is signed in to a different account.";
+const LARE_UNREACHABLE =
+  "Couldn’t reach Lare to check the desktop app. Check your internet connection and try again.";
 
 /**
  * Who is out of date, from an `unsupported_protocol` refusal. Every app words it "desktop app
@@ -64,9 +82,9 @@ function refusalFrom(msg: Extract<AppToExt, { type: "error" }>): Error {
     case "unsupported_protocol":
       return new IncompatibleError(incompatibleFrom(msg.message));
     case "not_signed_in":
-      return new RefusedError("Sign in to the Lare desktop app.");
+      return new RefusedError(DESKTOP_SIGNED_OUT);
     case "user_mismatch":
-      return new RefusedError("The desktop app is signed in to a different account.");
+      return new RefusedError(OTHER_ACCOUNT);
     case "auth_failed":
       return new RefusedError(UNVERIFIED);
     default:
@@ -175,11 +193,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 }
 
 /**
- * WebSocket client to the desktop app. The service worker stays alive while
- * messages flow (Chrome >= 116), so we ping every 20s during interviews.
+ * WebSocket client to the desktop app. It pings for as long as it is connected, which also keeps
+ * the service worker awake (see `PING_INTERVAL_MS`).
  *
  * Nothing is trusted until the app has proved it holds this account's pairing secret for its
- * install (and accepted our proof in turn); see `ws_server.rs` in the desktop app.
+ * install (and accepted our proof in turn); see `local_server/pairing.rs` in the desktop app.
  */
 export class DesktopClient {
   private ws: WebSocket | null = null;
@@ -187,7 +205,9 @@ export class DesktopClient {
   private closeListeners = new Set<() => void>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private helloAck: HelloAck | null = null;
-  private connecting: Promise<HelloAck> | null = null;
+  private readonly openOnce = singleFlight((userId: string | null, timeoutMs: number) =>
+    this.open(userId, timeoutMs),
+  );
   /**
    * Why the last handshake failed, when something answered: an app this extension cannot work
    * with (or the other way round), signed out or into another account, or not verifiable.
@@ -209,8 +229,8 @@ export class DesktopClient {
     if (this.refusal) return this.refusal;
     const ack = this.connected ? this.helloAck : null;
     if (!ack) return "Open the Lare desktop app to record a mock interview.";
-    if (!ack.userId) return "Sign in to the Lare desktop app.";
-    if (ack.userId !== userId) return "The desktop app is signed in to a different account.";
+    if (!ack.userId) return DESKTOP_SIGNED_OUT;
+    if (ack.userId !== userId) return OTHER_ACCOUNT;
     if (!ack.recordingCapable)
       return "Allow screen recording for Lare in the desktop app (Settings → Recording).";
     return null;
@@ -218,10 +238,6 @@ export class DesktopClient {
 
   get connected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN && this.helloAck !== null;
-  }
-
-  get ack(): HelloAck | null {
-    return this.helloAck;
   }
 
   onMessage(listener: Listener): () => void {
@@ -235,13 +251,9 @@ export class DesktopClient {
   }
 
   /** Connect and complete the handshake, or throw. Each wait on the socket gets `timeoutMs`. */
-  async connect(userId: string | null, timeoutMs = 3000): Promise<HelloAck> {
+  async connect(userId: string | null, timeoutMs = CONNECT_TIMEOUT_MS): Promise<HelloAck> {
     if (this.connected && this.helloAck) return this.helloAck;
-    if (this.connecting) return this.connecting;
-    this.connecting = this.open(userId, timeoutMs).finally(() => {
-      this.connecting = null;
-    });
-    return this.connecting;
+    return this.openOnce(userId, timeoutMs);
   }
 
   private async open(userId: string | null, timeoutMs: number): Promise<HelloAck> {
@@ -337,12 +349,10 @@ export class DesktopClient {
       const secret = await withTimeout(
         this.secrets(userId, challenge.installId, fresh).catch((e: unknown) => {
           console.warn("[lare] pairing secret lookup failed", e);
-          throw new RefusedError(
-            "Couldn’t reach Lare to check the desktop app. Check your internet connection and try again.",
-          );
+          throw new RefusedError(LARE_UNREACHABLE);
         }),
         SECRET_TIMEOUT_MS,
-        "Couldn’t reach Lare to check the desktop app. Check your internet connection and try again.",
+        LARE_UNREACHABLE,
       );
       if (secret === null) {
         if (!fresh) continue;
@@ -404,18 +414,14 @@ export class DesktopClient {
     const ws = this.ws;
     this.ws = null;
     this.helloAck = null;
-    try {
-      ws?.close();
-    } catch {
-      // ignore
-    }
+    ws?.close();
   }
 
   private startPing() {
     this.stopPing();
     this.pingTimer = setInterval(() => {
       this.send({ type: "ping", at: Date.now() });
-    }, 20_000);
+    }, PING_INTERVAL_MS);
   }
 
   private stopPing() {

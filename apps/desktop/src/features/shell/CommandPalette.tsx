@@ -7,10 +7,8 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { requestSearchSync } from "@/features/search/sync";
 import { usePaletteSearch } from "@/features/search/usePaletteSearch";
-import { describeAccelerator } from "@/lib/shortcuts";
+import { describeAccelerator, isMac } from "@/lib/shortcuts";
 import { NAV_ITEMS } from "./nav";
-
-const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 
 /** `CmdOrCtrl+1` as this platform writes it: ⌘1 on macOS, Ctrl+1 elsewhere. */
 function keyHint(accelerator: string): string {

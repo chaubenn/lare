@@ -3,11 +3,12 @@
  * (`{userId}/{sessionId}/{sessionProblemId}.json.gz`, written by the extension at session end).
  */
 import { type EditLog, EditLogSchema } from "@lare/shared";
+import { BUCKETS } from "@/lib/edge";
 import { supabase } from "@/lib/supabase";
 
 /** Download, gunzip (browser `DecompressionStream`) and validate one edit log. */
 export async function fetchEditLog(path: string): Promise<EditLog> {
-  const { data, error } = await supabase.storage.from("session-data").download(path);
+  const { data, error } = await supabase.storage.from(BUCKETS.sessionData).download(path);
   if (error) throw error;
   if (!data) throw new Error("The edit log could not be downloaded.");
   const text = await new Response(

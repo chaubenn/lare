@@ -1,6 +1,5 @@
 "use client";
 
-import { LANGUAGE_LABELS } from "@lare/shared";
 import { useEffect, useState } from "react";
 import { cn } from "./cn";
 import { brand } from "./tokens";
@@ -8,7 +7,6 @@ import { brand } from "./tokens";
 const LANG_ALIASES: Record<string, string> = {
   python3: "python",
   golang: "go",
-  csharp: "csharp",
   "c#": "csharp",
   "c++": "cpp",
   mysql: "sql",
@@ -69,12 +67,7 @@ const resultCache = new Map<string, string>();
 
 function resolveLang(lang: string | null | undefined): string {
   const raw = (lang ? (LANG_ALIASES[lang.toLowerCase()] ?? lang.toLowerCase()) : "text") || "text";
-  if (raw in SHIKI_LANG_LOADERS) return raw;
-  if (raw in LANGUAGE_LABELS) {
-    const aliased = LANG_ALIASES[raw];
-    if (aliased && aliased in SHIKI_LANG_LOADERS) return aliased;
-  }
-  return "text";
+  return raw in SHIKI_LANG_LOADERS ? raw : "text";
 }
 
 async function getHighlighter(): Promise<Highlighter> {
@@ -131,9 +124,7 @@ export function CodeBlock({
     }
     setHtml(null);
     getHighlighter()
-      .then((hl) =>
-        hl.codeToHtml(code, { lang: language === "text" ? "text" : language, theme: THEME_NAME }),
-      )
+      .then((hl) => hl.codeToHtml(code, { lang: language, theme: THEME_NAME }))
       .then((out) => {
         resultCache.set(key, out);
         if (!cancelled) setHtml(out);

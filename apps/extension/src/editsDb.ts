@@ -1,4 +1,5 @@
 import type { EditEvent } from "@lare/shared";
+import { idbConnection } from "./idb";
 
 /**
  * IndexedDB store for Monaco edit events captured during a session. Lives in
@@ -17,51 +18,14 @@ interface EventRow {
   event: EditEvent;
 }
 
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function openDb(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        const store = db.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
-        store.createIndex("byProblem", ["sessionId", "sessionProblemId"], { unique: false });
-        store.createIndex("bySession", "sessionId", { unique: false });
-      }
-    };
-    req.onsuccess = () => {
-      const db = req.result;
-      // The browser can close the connection under us (site data cleared, extension
-      // reloaded, storage eviction). Drop the cached handle so the next call reopens.
-      db.onclose = () => {
-        dbPromise = null;
-      };
-      db.onversionchange = () => {
-        db.close();
-        dbPromise = null;
-      };
-      resolve(db);
-    };
-    req.onerror = () => {
-      dbPromise = null;
-      reject(req.error ?? new Error("indexedDB open failed"));
-    };
-  });
-  return dbPromise;
-}
-
-/** Starts a transaction, reopening the database once if the cached connection has gone stale. */
-async function beginTx(mode: IDBTransactionMode): Promise<IDBTransaction> {
-  try {
-    return (await openDb()).transaction(STORE, mode);
-  } catch (err) {
-    if (!(err instanceof DOMException) || err.name !== "InvalidStateError") throw err;
-    dbPromise = null;
-    return (await openDb()).transaction(STORE, mode);
+const openTx = idbConnection(DB_NAME, DB_VERSION, (db) => {
+  if (!db.objectStoreNames.contains(STORE)) {
+    const store = db.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
+    store.createIndex("byProblem", ["sessionId", "sessionProblemId"], { unique: false });
+    store.createIndex("bySession", "sessionId", { unique: false });
   }
-}
+});
+const beginTx = (mode: IDBTransactionMode) => openTx(STORE, mode);
 
 function txDone(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
