@@ -34,7 +34,7 @@ import {
   resetSyncRetry,
   takeDesktopOutbox,
 } from "@/src/queues";
-import { loadState, withState } from "@/src/storage";
+import { loadState, secureStorage, withState } from "@/src/storage";
 import { currentUserId, getSupabase } from "@/src/supabase";
 import {
   deleteInboxProblems,
@@ -58,7 +58,48 @@ const RECONCILE_ALARM = "lare-reconcile";
 const RETRY_SYNC_ALARM = "lare-retry-sync";
 /** Delays between reconnect attempts while a live interview has lost the desktop app. */
 const RECONNECT_DELAYS_MS = [1000, 3000, 10_000, 30_000];
-const desktop = new DesktopClient();
+/** Cached desktop pairing secrets, `${PAIRING_PREFIX}${userId}:${installId}` (see `pairingSecret`). */
+const PAIRING_PREFIX = "lare:pairing:";
+const desktop = new DesktopClient(pairingSecret);
+
+/**
+ * The secret a desktop install published for this account (migration 0032), cached so an
+ * interview can reconnect without a network. Row-level security only shows the caller's own
+ * rows, so an app signed in to another account has none to find.
+ */
+async function pairingSecret(
+  userId: string,
+  installId: string,
+  fresh: boolean,
+): Promise<string | null> {
+  const key = `${PAIRING_PREFIX}${userId}:${installId}`;
+  if (!fresh) {
+    const cached = await secureStorage.get(key);
+    if (cached) return cached;
+  }
+  const { data, error } = await getSupabase()
+    .from("bridge_secrets")
+    .select("secret")
+    .eq("user_id", userId)
+    .eq("install_id", installId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (data) await secureStorage.set(key, data.secret);
+  else await secureStorage.remove(key);
+  return data?.secret ?? null;
+}
+
+/**
+ * The requests a LeetCode tab may send. Everything else is for the extension's own pages (the
+ * side panel) only, so a new request type is refused from pages unless it is listed here.
+ */
+const PAGE_REQUESTS: ReadonlySet<RuntimeRequest["type"]> = new Set([
+  "GET_STATE",
+  "PROBE_APP",
+  "PROBLEM_OPENED",
+  "EDITS",
+  "SUBMISSION",
+]);
 /**
  * In-flight `session_problems` upserts, keyed by slug. `submissions` has a
  * foreign key onto that row, so a submission captured moments after the problem
@@ -140,12 +181,10 @@ export default defineBackground(() => {
       return false;
     }
     const req = parsed.data;
-    const fromPage = !!sender.tab && !sender.url?.startsWith(chrome.runtime.getURL(""));
-    if (
-      fromPage &&
-      !["GET_STATE", "PROBE_APP", "PROBLEM_OPENED", "EDITS", "SUBMISSION"].includes(req.type)
-    )
-      return false;
+    // Trusted only when it comes from one of our own pages. Anything else is a content script
+    // in a LeetCode tab, which speaks for that tab and nothing more.
+    const fromPage = !(sender.url?.startsWith(chrome.runtime.getURL("")) ?? false);
+    if (fromPage && (!PAGE_REQUESTS.has(req.type) || sender.tab?.id === undefined)) return false;
     handle(req, fromPage ? sender.tab?.id : undefined)
       .then((res) => {
         if (res.ok && fromPage && res.state?.interview?.tabId !== sender.tab?.id)
@@ -250,6 +289,7 @@ async function handle(req: RuntimeRequest, sourceTabId?: number): Promise<Runtim
       if (state.interview) throw new Error("End the mock interview before signing out");
       await signOut();
       desktop.close();
+      await secureStorage.removePrefix(PAIRING_PREFIX);
       await chrome.alarms.clear(RETRY_SYNC_ALARM);
       await resetSyncRetry();
       await chrome.storage.local.remove("lare:state");

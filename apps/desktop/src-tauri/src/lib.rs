@@ -229,9 +229,12 @@ pub fn run() {
             ws: hub,
             initial_deeplink: Mutex::new(None),
         })
+        .manage(server_ctx.local_auth.clone())
         .invoke_handler(tauri::generate_handler![
             commands::prepare_bunny_upload,
             set_current_user,
+            ws_server::set_bridge_key,
+            ws_server::expect_auth_callback,
             ws_status,
             app_version,
             take_initial_deeplink,

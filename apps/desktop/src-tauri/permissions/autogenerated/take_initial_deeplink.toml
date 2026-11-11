@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-take-initial-deeplink"
+description = "Enables the take_initial_deeplink command without any pre-configured scope."
+commands.allow = ["take_initial_deeplink"]
+
+[[permission]]
+identifier = "deny-take-initial-deeplink"
+description = "Denies the take_initial_deeplink command without any pre-configured scope."
+commands.deny = ["take_initial_deeplink"]

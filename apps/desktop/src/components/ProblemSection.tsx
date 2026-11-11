@@ -1,4 +1,4 @@
-import { formatDurationHuman, problemUrl } from "@lare/shared";
+import { formatDurationHuman } from "@lare/shared";
 import type { SessionProblem, Submission } from "@lare/supabase-types";
 import { cn, DifficultyBadge } from "@lare/ui";
 import { Check, ExternalLink } from "@lare/ui/icons";
@@ -8,6 +8,7 @@ import { SubmissionCard } from "@/components/SubmissionCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { parseTopicTags } from "@/lib/json";
+import { leetCodeProblemUrl } from "@/lib/links";
 import { openExternal } from "@/lib/open";
 import { defaultSubmissionIndex, submissionsInAttemptOrder } from "@/lib/submissions";
 
@@ -22,7 +23,9 @@ export function ProblemSection({
   defaultShowCode?: boolean;
 }) {
   const tags = useMemo(() => parseTopicTags(problem.topic_tags), [problem.topic_tags]);
-  const url = problem.url || problemUrl(problem.slug);
+  // Built from the slug, never the stored `url`: the row is written by the post's author, and
+  // a button labelled "LeetCode" must not open some other site.
+  const url = leetCodeProblemUrl(problem.slug);
   const ordered = useMemo(
     () => submissionsInAttemptOrder(problem.submissions),
     [problem.submissions],
@@ -60,14 +63,16 @@ export function ProblemSection({
             )}
           </div>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<ExternalLink className="size-3.5" aria-hidden />}
-          onClick={() => void openExternal(url)}
-        >
-          LeetCode
-        </Button>
+        {url ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<ExternalLink className="size-3.5" aria-hidden />}
+            onClick={() => void openExternal(url)}
+          >
+            LeetCode
+          </Button>
+        ) : null}
       </div>
 
       {tags.length > 0 ? (

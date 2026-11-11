@@ -26,11 +26,12 @@ export default defineConfig({
     description:
       "Track LeetCode problems and submissions, and run AI-graded mock interviews recorded by the Lare desktop app.",
     ...(STORE_BUILD ? {} : { key: process.env.LARE_EXTENSION_KEY ?? EXTENSION_PUBLIC_KEY }),
+    // No "tabs": every tab URL Lare reads, queries by or injects into is on a host below, and
+    // host permissions already expose those.
     permissions: [
       "storage",
       "identity",
       "alarms",
-      "tabs",
       "sidePanel",
       // Loads the content scripts into LeetCode tabs opened before an install or update.
       "scripting",
@@ -39,7 +40,8 @@ export default defineConfig({
     host_permissions: [
       "https://leetcode.com/*",
       "https://jndqrvwkwoyvzoqcveev.supabase.co/*",
-      "http://127.0.0.1/*",
+      // The desktop app's local server (WS_PORT), nothing else on this machine.
+      "http://127.0.0.1:47831/*",
       // Local fixture page + mocked backend for e2e tests (dev/e2e builds only).
       ...(mode === "production" ? [] : ["http://localhost/*"]),
     ],

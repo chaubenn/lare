@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-recorder-settings"
+description = "Enables the recorder_settings command without any pre-configured scope."
+commands.allow = ["recorder_settings"]
+
+[[permission]]
+identifier = "deny-recorder-settings"
+description = "Denies the recorder_settings command without any pre-configured scope."
+commands.deny = ["recorder_settings"]

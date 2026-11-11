@@ -395,6 +395,44 @@ test("a desktop signed in to another account cannot record the interview", async
   }
 });
 
+for (const [name, desktopFor, expected] of [
+  [
+    "an app from before pairing, which is told to update",
+    () => new FakeDesktop({ userId: USER_ID, recordingCapable: true, protocol: 3 }),
+    /Update the Lare desktop app/,
+  ],
+  [
+    "something on the port that cannot prove it is the paired app",
+    () =>
+      new FakeDesktop(
+        { userId: USER_ID, recordingCapable: true, protocol: PROTOCOL_VERSION },
+        "0bad".repeat(16),
+      ),
+    /verify the Lare desktop app/,
+  ],
+] as const) {
+  test(`a mock interview does not start against ${name}`, async () => {
+    await fetch(`${BASE}/__reset`);
+    await resetExtensionState();
+    const desktop = desktopFor();
+    await desktop.start();
+    try {
+      const problem = await openProblem();
+      const panel = await openPanel();
+      const res = await panel.evaluate(
+        (req) => chrome.runtime.sendMessage(req),
+        startRequest(await problemTabId()),
+      );
+      expect(res).toMatchObject({ ok: false, error: expect.stringMatching(expected) });
+      expect(desktop.received.some((m) => m.type === "session.start")).toBe(false);
+      await panel.close();
+      await problem.close();
+    } finally {
+      await desktop.stop();
+    }
+  });
+}
+
 test("the desktop app records the interview: start, consent dot, pause and end reach it", async () => {
   await fetch(`${BASE}/__reset`);
   await resetExtensionState();

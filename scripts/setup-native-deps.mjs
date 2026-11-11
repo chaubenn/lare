@@ -7,7 +7,12 @@
 //
 // macOS:   spacedriveapp/native-deps (libav*, libsw*, libpostproc as a .framework)
 // Windows: GyanD ffmpeg 7.1 full_build-shared (DLLs + import libs + headers)
+//
+// Every archive is pinned by SHA-256 (see SHA256 below) and checked on every run, cached
+// or not: these libraries ship inside the signed installers, so a swapped archive would
+// ship too. A mismatch deletes the file and fails the build.
 import { exec as execCb, execFile as execFileCb } from "node:child_process";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,31 +38,91 @@ async function exists(p) {
     .catch(() => false);
 }
 
-async function download(url, dest) {
+// SHA-256 of each archive this script downloads, keyed by file name. Neither publisher
+// ships checksums and the GitHub release assets predate GitHub's `digest` field, so these
+// were taken by downloading each file once and hashing it (sizes matched the release API).
+// Bumping a version means adding its hash here; an unlisted file is refused.
+const SHA256 = {
+  // https://github.com/spacedriveapp/native-deps/releases/tag/v0.25
+  "native-deps-aarch64-darwin-apple.tar.xz":
+    "59c42dbf4dd2009c1d04c049df8d8e25f79fd2d245531e3d269d83407116c895",
+  "native-deps-x86_64-darwin-apple.tar.xz":
+    "138f2bab8214d8971d043c1d42eb09039743b144c07a33fc6c76f774414407ce",
+  // https://github.com/GyanD/codexffmpeg/releases/tag/7.1
+  "ffmpeg-7.1-full_build-shared.zip":
+    "fedf38dbdd00fa189da06afb0abba69a19312412e05fa2e8e89b3c06aafebcdc",
+};
+
+function expectedSha256(name) {
+  const sha = SHA256[/** @type {keyof typeof SHA256} */ (name)];
+  if (!sha) throw new Error(`No pinned SHA-256 for ${name}; add one to SHA256 in this script`);
+  return sha;
+}
+
+async function sha256File(p) {
+  return createHash("sha256")
+    .update(await fs.readFile(p))
+    .digest("hex");
+}
+
+// Fails loudly (and removes the file, so the next run downloads it again) on a mismatch.
+async function verify(p, expected) {
+  const actual = await sha256File(p);
+  if (actual !== expected) {
+    await fs.rm(p, { force: true });
+    throw new Error(
+      `SHA-256 mismatch for ${path.basename(p)}: expected ${expected}, got ${actual}. ` +
+        "The file was deleted. Do not update the pin unless you know why the upstream file changed.",
+    );
+  }
+  console.log(`Verified ${path.basename(p)} (sha256 ${actual})`);
+}
+
+// Downloads `url` to `dest` unless a copy with the pinned hash is already there.
+// Returns true when it downloaded (the caller re-extracts).
+async function fetchPinned(url, dest, expected) {
+  if (await exists(dest)) {
+    if ((await sha256File(dest)) === expected) {
+      console.log(`Using cached ${path.basename(dest)} (sha256 ${expected})`);
+      return false;
+    }
+    console.warn(`Cached ${path.basename(dest)} does not match its pin; downloading again`);
+    await fs.rm(dest, { force: true });
+  }
   console.log(`Downloading ${url}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Download failed: ${res.status} ${url}`);
   await fs.writeFile(dest, Buffer.from(await res.arrayBuffer()));
+  await verify(dest, expected);
+  return true;
+}
+
+// Extracted trees carry the hash of the archive they came from, so a tree left behind by
+// an older, unverified run (for example restored from the CI cache) is re-extracted.
+const MARKER = ".lare-archive-sha256";
+
+async function extractedFrom(dir, expected) {
+  const marker = await fs.readFile(path.join(dir, MARKER), "utf8").catch(() => "");
+  return marker.trim() === expected;
 }
 
 async function setupMac() {
   const VERSION = "v0.25";
   const asset = `native-deps-${arch}-darwin-apple.tar.xz`;
   const tarPath = path.join(targetDir, `${VERSION}-${asset}`);
-  let fresh = false;
-  if (!(await exists(tarPath))) {
-    await download(
-      `https://github.com/spacedriveapp/native-deps/releases/download/${VERSION}/${asset}`,
-      tarPath,
-    );
-    fresh = true;
-  } else console.log(`Using cached ${asset}`);
+  const sha = expectedSha256(asset);
+  const fresh = await fetchPinned(
+    `https://github.com/spacedriveapp/native-deps/releases/download/${VERSION}/${asset}`,
+    tarPath,
+    sha,
+  );
 
   const depsDir = path.join(targetDir, "native-deps");
-  if (fresh || !(await exists(path.join(depsDir, "lib")))) {
+  if (fresh || !(await exists(path.join(depsDir, "lib"))) || !(await extractedFrom(depsDir, sha))) {
     await fs.rm(depsDir, { recursive: true, force: true });
     await fs.mkdir(depsDir, { recursive: true });
     await execFile("tar", ["xf", tarPath, "-C", depsDir]);
+    await fs.writeFile(path.join(depsDir, MARKER), `${sha}\n`);
     console.log("Extracted native-deps");
   } else console.log("Using cached native-deps");
 
@@ -132,21 +197,21 @@ async function setupWindows() {
   const FFMPEG_VERSION = "7.1";
   const zipName = `ffmpeg-${FFMPEG_VERSION}-full_build-shared`;
   const zipPath = path.join(targetDir, `ffmpeg-${FFMPEG_VERSION}.zip`);
-  let fresh = false;
-  if (!(await exists(zipPath))) {
-    await download(
-      `https://github.com/GyanD/codexffmpeg/releases/download/${FFMPEG_VERSION}/${zipName}.zip`,
-      zipPath,
-    );
-    fresh = true;
-  } else console.log("Using cached ffmpeg zip");
+  const sha = expectedSha256(`${zipName}.zip`);
+  const fresh = await fetchPinned(
+    `https://github.com/GyanD/codexffmpeg/releases/download/${FFMPEG_VERSION}/${zipName}.zip`,
+    zipPath,
+    sha,
+  );
   const ffmpegDir = path.join(targetDir, "ffmpeg");
-  if (fresh || !(await exists(ffmpegDir))) {
+  if (fresh || !(await exists(ffmpegDir)) || !(await extractedFrom(ffmpegDir, sha))) {
+    await fs.rm(path.join(targetDir, zipName), { recursive: true, force: true });
     await exec(`Expand-Archive -Path "${zipPath}" -DestinationPath "${targetDir}" -Force`, {
       shell: "powershell.exe",
     });
     await fs.rm(ffmpegDir, { recursive: true, force: true });
     await fs.rename(path.join(targetDir, zipName), ffmpegDir);
+    await fs.writeFile(path.join(ffmpegDir, MARKER), `${sha}\n`);
     console.log("Extracted ffmpeg");
   }
   for (const profile of ["debug", "release"]) {

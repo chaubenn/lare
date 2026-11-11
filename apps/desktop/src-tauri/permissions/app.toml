@@ -1,0 +1,68 @@
+# Which app commands each window may call (granted in capabilities/). build.rs generates an
+# `allow-<command>` permission for every command it lists, and refuses to build while one of them
+# is in neither set.
+
+[[set]]
+identifier = "main-window"
+description = "Every app command: the main window is the app."
+permissions = [
+  "allow-prepare-bunny-upload",
+  "allow-set-current-user",
+  "allow-set-bridge-key",
+  "allow-expect-auth-callback",
+  "allow-ws-status",
+  "allow-app-version",
+  "allow-take-initial-deeplink",
+  "allow-list-devices",
+  "allow-check-permissions",
+  "allow-request-permission",
+  "allow-permission-settings-url",
+  "allow-open-permission-settings",
+  "allow-reset-screen-recording-permission",
+  "allow-preview-url",
+  "allow-recorder-settings",
+  "allow-set-recorder-settings",
+  "allow-recorder-status",
+  "allow-recording-start",
+  "allow-recording-pause",
+  "allow-recording-resume",
+  "allow-recording-stop",
+  "allow-recording-cancel",
+  "allow-recordings-list",
+  "allow-recording-delete",
+  "allow-clear-screen-sharing",
+  "allow-open-recorder-window",
+  "allow-hide-recorder-window",
+  "allow-tuck-recorder-window",
+  "allow-open-camera-window",
+  "allow-hide-camera-window",
+  "allow-resize-camera-window",
+  "allow-focus-main",
+  "allow-show-desktop-notification",
+  "allow-media-info",
+  "allow-make-thumbnail",
+  "allow-upload-to-bunny",
+  "allow-remember-upload",
+  "allow-whisper-models",
+  "allow-ensure-whisper-model",
+  "allow-transcribe-recording",
+  "allow-read-file-bytes",
+  "allow-delete-file",
+  "allow-path-exists",
+  "allow-search-open",
+  "allow-search-index",
+  "allow-search-query",
+]
+
+[[set]]
+identifier = "overlay-windows"
+description = "What the recorder pill and camera preview call: the recording status and settings, and the pill controls."
+permissions = [
+  "allow-recorder-status",
+  "allow-recorder-settings",
+  "allow-recording-pause",
+  "allow-recording-resume",
+  "allow-recording-stop",
+  "allow-recording-cancel",
+  "allow-tuck-recorder-window",
+]

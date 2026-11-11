@@ -3,12 +3,27 @@
 //! * `GET /`               WebSocket used by the Chrome extension (protocol in `lare_core::protocol`).
 //! * `GET /health`         JSON status probe (`{"app":"lare", ...}`). Readable by any page in the
 //!   user's browser (CORS `*`), so it says whether the app runs and nothing about who is signed in.
-//! * `GET /auth/callback`  OAuth loopback redirect; forwards the PKCE `code` to the webview.
+//! * `GET /auth/callback`  OAuth loopback redirect; forwards the PKCE `code` to the webview, once,
+//!   and only while a sign-in the app started is under way ([`LocalAuth::expect_sign_in`]).
 //! * `GET /preview/{token}` This device's copy of a recording, for the local preview (`preview`).
 //!
-//! The server knows nothing about Tauri: it reports what happened through [`ServerEvent`]s on a
-//! channel, and `lib.rs` turns those into Tauri events. That keeps the whole thing testable with a
-//! plain tokio runtime (see the tests at the bottom).
+//! The `Origin` check on the WebSocket only keeps web pages out: any local process can send any
+//! header. What actually admits the extension is the pairing handshake. The webview generates a
+//! random secret per install, publishes it to the signed-in user's `bridge_secrets` row (migration
+//! 0032) and hands it to [`LocalAuth`]. The extension, signed in as the same user, reads that row.
+//! On connect each side proves it holds the secret with an HMAC over a nonce the other side just
+//! chose, so neither the secret nor a replayable proof ever crosses the socket:
+//!
+//! ```text
+//! ext -> app  hello           { protocol, userId, nonce: Ne }
+//! app -> ext  auth.challenge  { installId, nonce: Na, proof: HMAC(K, "app", user, Ne, Na) }
+//! ext -> app  auth.response   { proof: HMAC(K, "ext", user, Ne, Na) }
+//! app -> ext  hello.ack       (only now is the client registered)
+//! ```
+//!
+//! The server knows nothing about Tauri apart from the two commands at the bottom: it reports
+//! what happened through [`ServerEvent`]s on a channel, and `lib.rs` turns those into Tauri
+//! events. That keeps the whole thing testable with a plain tokio runtime (see the tests).
 
 use std::{
     collections::HashMap,
@@ -17,7 +32,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use axum::{
@@ -32,8 +47,12 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use lare_core::{
-    AUTH_CALLBACK_PATH, MIN_EXT_PROTOCOL_VERSION, PROTOCOL_VERSION, WS_PORT,
+    AUTH_CALLBACK_PATH, MIN_EXT_PROTOCOL_VERSION, PAIRING_DOMAIN, PROTOCOL_VERSION, WS_PORT,
     protocol::{AppToExt, ErrorCode, ExtToApp, RecordingSnapshot, RecordingState, SessionKind},
+};
+use ring::{
+    hmac,
+    rand::{SecureRandom, SystemRandom},
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -58,6 +77,119 @@ pub const STORE_EXTENSION_ID: Option<&str> = Some(match option_env!("LARE_STORE_
     Some(id) => id,
     None => "anlejcjfgabfkgbhbcbojlmccagbfdhg",
 });
+
+/// How long `/auth/callback` stays open after the app sends the user to a sign-in page.
+const SIGN_IN_WINDOW: Duration = Duration::from_secs(10 * 60);
+/// How long a new client gets to say `hello`.
+const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the extension gets to answer `auth.challenge`. Longer than its own timeout for
+/// fetching the pairing secret from Supabase, which it may have to do first.
+const AUTH_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// What the webview tells the server beyond the user id: the pairing secret that admits the
+/// extension (see the module docs), and whether it has just sent the user off to sign in.
+#[derive(Clone, Default)]
+pub struct LocalAuth {
+    inner: Arc<Mutex<LocalAuthState>>,
+}
+
+#[derive(Default)]
+struct LocalAuthState {
+    pairing: Option<PairingKey>,
+    sign_in_started: Option<Instant>,
+}
+
+#[derive(Clone)]
+struct PairingKey {
+    user_id: String,
+    install_id: String,
+    key: hmac::Key,
+}
+
+/// The pairing secret as the webview hands it over (`set_bridge_key`).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeKeyInput {
+    pub user_id: String,
+    pub install_id: String,
+    /// 32 bytes, hex: the `bridge_secrets.secret` the webview published for this install.
+    pub secret: String,
+}
+
+impl LocalAuth {
+    /// Install the pairing secret for the signed-in user, or forget it (signed out) with `None`.
+    pub fn set_bridge_key(&self, input: Option<BridgeKeyInput>) -> Result<(), String> {
+        let pairing = match input {
+            None => None,
+            Some(input) => {
+                let secret = from_hex(&input.secret)
+                    .filter(|bytes| bytes.len() == 32)
+                    .ok_or("the pairing secret must be 32 bytes of lowercase hex")?;
+                let install_id = uuid::Uuid::parse_str(&input.install_id)
+                    .map_err(|_| "the install id must be a UUID")?;
+                if input.user_id.trim().is_empty() {
+                    return Err("the pairing secret needs a user id".into());
+                }
+                Some(PairingKey {
+                    user_id: input.user_id,
+                    install_id: install_id.to_string(),
+                    key: hmac::Key::new(hmac::HMAC_SHA256, &secret),
+                })
+            }
+        };
+        let mut state = self.inner.lock().map_err(|_| "pairing state is poisoned")?;
+        state.pairing = pairing;
+        Ok(())
+    }
+
+    /// The webview is about to open a sign-in page: accept one `/auth/callback` for a while.
+    pub fn expect_sign_in(&self) {
+        if let Ok(mut state) = self.inner.lock() {
+            state.sign_in_started = Some(Instant::now());
+        }
+    }
+
+    /// Whether a callback may be delivered now. Consumes the sign-in, so a second callback (a
+    /// stale tab, a replayed URL, a page that guessed the moment) is turned away.
+    fn take_sign_in(&self) -> bool {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|mut state| state.sign_in_started.take())
+            .is_some_and(|started| started.elapsed() <= SIGN_IN_WINDOW)
+    }
+
+    fn pairing(&self) -> Option<PairingKey> {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|state| state.pairing.clone())
+    }
+}
+
+/// Lowercase hex only, so a value has exactly one spelling inside the HMAC transcript.
+fn from_hex(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 2 != 0 || !s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return None;
+    }
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
+        .collect()
+}
+
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn is_nonce(s: &str) -> bool {
+    from_hex(s).is_some_and(|bytes| bytes.len() == 32)
+}
+
+/// What each side's proof covers. `role` keeps one side's proof from ever passing as the other's.
+fn pairing_transcript(role: &str, user_id: &str, ext_nonce: &str, app_nonce: &str) -> String {
+    format!("{PAIRING_DOMAIN}\n{role}\n{user_id}\n{ext_nonce}\n{app_nonce}")
+}
 
 /// Something the frontend should hear about. Forwarded as Tauri events by `lib.rs`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,6 +295,8 @@ pub struct ServerContext {
     pub extension_ids: Vec<String>,
     /// Recordings this process has agreed to serve over `/preview/{token}`.
     pub previews: PreviewFiles,
+    /// The pairing secret and the sign-in in progress, set from the webview.
+    pub local_auth: LocalAuth,
 }
 
 impl ServerContext {
@@ -183,6 +317,7 @@ impl ServerContext {
                 .map(|id| id.trim().to_string())
                 .collect(),
             previews,
+            local_auth: LocalAuth::default(),
         }
     }
 
@@ -199,6 +334,15 @@ impl ServerContext {
         if let Ok(mut slot) = self.recording.write() {
             *slot = backend;
         }
+    }
+
+    /// The pairing secret, if it belongs to the user the app is signed in as right now. The two are
+    /// set by separate calls, so for a moment around a sign-in or sign-out they can disagree.
+    fn pairing(&self) -> Option<PairingKey> {
+        let current = self.current_user()?;
+        self.local_auth
+            .pairing()
+            .filter(|key| key.user_id == current)
     }
 
     fn recording_capable(&self) -> bool {
@@ -322,10 +466,34 @@ struct AuthCallbackQuery {
     error_description: Option<String>,
 }
 
+/// The provider's redirect is a top-level navigation. Anything else (an `<img>`, an iframe, a
+/// `fetch` from some page) is not a sign-in coming back, and is not allowed to use one up.
+/// Browsers too old to send `Sec-Fetch-*` are let through to the one-shot check.
+fn is_navigation(headers: &HeaderMap) -> bool {
+    let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
+    header("sec-fetch-dest").is_none_or(|dest| dest == "document")
+        && header("sec-fetch-mode").is_none_or(|mode| mode == "navigate")
+}
+
 async fn auth_callback(
     State(ctx): State<ServerContext>,
+    headers: HeaderMap,
     Query(q): Query<AuthCallbackQuery>,
 ) -> Response {
+    if !is_navigation(&headers) {
+        return (StatusCode::FORBIDDEN, "not a sign-in redirect").into_response();
+    }
+    if !ctx.local_auth.take_sign_in() {
+        warn!("oauth callback arrived with no sign-in in progress; ignored");
+        return (
+            StatusCode::BAD_REQUEST,
+            Html(callback_page(
+                "No sign-in in progress",
+                "Start signing in from the Lare app, then try again.",
+            )),
+        )
+            .into_response();
+    }
     if let Some(error) = q.error {
         let description = q.error_description;
         warn!(%error, ?description, "oauth callback returned an error");
@@ -408,32 +576,137 @@ async fn send_frame(socket: &mut WebSocket, msg: &AppToExt) -> Result<(), axum::
     socket.send(Message::Text(text.into())).await
 }
 
+/// The next text frame, or `None` once the client has gone quiet for `limit`, hung up, or sent a
+/// binary frame (which it is told about).
+async fn recv_text(socket: &mut WebSocket, limit: Duration) -> Option<String> {
+    let deadline = tokio::time::Instant::now() + limit;
+    loop {
+        match tokio::time::timeout_at(deadline, socket.recv()).await {
+            Ok(Some(Ok(Message::Text(text)))) => return Some(text.as_str().to_owned()),
+            Ok(Some(Ok(Message::Ping(_) | Message::Pong(_)))) => continue,
+            Ok(Some(Ok(Message::Binary(_)))) => {
+                let _ = send_frame(
+                    socket,
+                    &error_frame(ErrorCode::BadMessage, "expected a text frame"),
+                )
+                .await;
+                return None;
+            }
+            Ok(Some(Ok(Message::Close(_))) | Some(Err(_)) | None) | Err(_) => return None,
+        }
+    }
+}
+
+async fn refuse(socket: &mut WebSocket, code: ErrorCode, message: &str) {
+    let _ = send_frame(socket, &error_frame(code, message)).await;
+}
+
+/// The pairing handshake (see the module docs). Returns once the client has proved it holds this
+/// install's secret for the signed-in user; anything else has been told why and should be dropped.
+async fn authenticate(
+    socket: &mut WebSocket,
+    ctx: &ServerContext,
+    ext_user: Option<String>,
+    ext_nonce: Option<String>,
+) -> Option<()> {
+    let Some(ext_nonce) = ext_nonce.filter(|n| is_nonce(n)) else {
+        refuse(
+            socket,
+            ErrorCode::BadMessage,
+            "hello needs a 32-byte hex nonce",
+        )
+        .await;
+        return None;
+    };
+    let Some(pairing) = ctx.pairing() else {
+        refuse(
+            socket,
+            ErrorCode::NotSignedIn,
+            "the Lare desktop app is not signed in",
+        )
+        .await;
+        return None;
+    };
+    // Turned away before the challenge, so a wrong account gets a precise answer. A forged client
+    // can claim the right user id; it still has to answer the challenge.
+    match ext_user {
+        Some(user) if user == pairing.user_id => {}
+        Some(_) => {
+            warn!("extension user differs from desktop user");
+            refuse(
+                socket,
+                ErrorCode::UserMismatch,
+                "the desktop app is signed in to another account",
+            )
+            .await;
+            return None;
+        }
+        None => {
+            refuse(
+                socket,
+                ErrorCode::NotSignedIn,
+                "the extension is not signed in",
+            )
+            .await;
+            return None;
+        }
+    }
+
+    let mut nonce = [0u8; 32];
+    if SystemRandom::new().fill(&mut nonce).is_err() {
+        error!("no randomness for the pairing challenge");
+        return None;
+    }
+    let app_nonce = to_hex(&nonce);
+    let app_proof = hmac::sign(
+        &pairing.key,
+        pairing_transcript("app", &pairing.user_id, &ext_nonce, &app_nonce).as_bytes(),
+    );
+    let challenge = AppToExt::AuthChallenge {
+        install_id: pairing.install_id.clone(),
+        nonce: app_nonce.clone(),
+        proof: to_hex(app_proof.as_ref()),
+    };
+    if send_frame(socket, &challenge).await.is_err() {
+        return None;
+    }
+
+    let raw = recv_text(socket, AUTH_RESPONSE_TIMEOUT).await?;
+    let Ok(ExtToApp::AuthResponse { proof }) = serde_json::from_str::<ExtToApp>(&raw) else {
+        refuse(socket, ErrorCode::BadMessage, "expected auth.response").await;
+        return None;
+    };
+    let expected = pairing_transcript("ext", &pairing.user_id, &ext_nonce, &app_nonce);
+    let valid = from_hex(&proof)
+        .is_some_and(|tag| hmac::verify(&pairing.key, expected.as_bytes(), &tag).is_ok());
+    if !valid {
+        warn!("client failed the pairing challenge");
+        refuse(
+            socket,
+            ErrorCode::AuthFailed,
+            "the extension could not prove it is paired with this app",
+        )
+        .await;
+        return None;
+    }
+    Some(())
+}
+
 /// Handshake, then pump frames until the client goes away.
 async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
     // 1. First frame must be `hello`.
-    let first = loop {
-        match socket.recv().await {
-            Some(Ok(Message::Text(text))) => break text,
-            Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
-            Some(Ok(Message::Binary(_))) => {
-                let _ = send_frame(
-                    &mut socket,
-                    &error_frame(ErrorCode::BadMessage, "expected a text hello frame"),
-                )
-                .await;
-                return;
-            }
-            Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return,
-        }
+    let Some(first) = recv_text(&mut socket, HELLO_TIMEOUT).await else {
+        return;
     };
 
     let hello = serde_json::from_str::<ExtToApp>(first.as_str());
-    let (protocol, ext_version, ext_user) = match hello {
+    let (protocol, ext_version, ext_user, ext_nonce) = match hello {
         Ok(ExtToApp::Hello {
             protocol,
             ext_version,
             user_id,
-        }) => (protocol, ext_version, user_id),
+            nonce,
+        }) => (protocol, ext_version, user_id, nonce),
         Ok(_) => {
             let _ = send_frame(
                 &mut socket,
@@ -453,9 +726,10 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
     };
 
     // Newer extensions are accepted: the ack carries the lower version and the extension decides
-    // whether this app is new enough. Only an extension older than anything still served is
-    // turned away. The message keeps the wording v2 apps used ("desktop app speaks protocol vN"),
-    // which the extension reads to tell "update the app" from "update the extension".
+    // whether this app is new enough. Only an extension older than anything still served (which
+    // includes every one that cannot pair) is turned away. The message keeps the wording v2 apps
+    // used ("desktop app speaks protocol vN"), which the extension reads to tell "update the app"
+    // from "update the extension".
     if protocol < MIN_EXT_PROTOCOL_VERSION {
         warn!(protocol, "extension uses an unsupported protocol version");
         let _ = send_frame(
@@ -471,11 +745,11 @@ async fn handle_socket(mut socket: WebSocket, ctx: ServerContext) {
         return;
     }
 
-    let current_user = ctx.current_user();
-    if let (Some(ext), Some(app)) = (&ext_user, &current_user) {
-        if ext != app {
-            warn!("extension user differs from desktop user");
-        }
+    if authenticate(&mut socket, &ctx, ext_user, ext_nonce)
+        .await
+        .is_none()
+    {
+        return;
     }
     let ack = ctx.hello_ack(protocol);
     if send_frame(&mut socket, &ack).await.is_err() {
@@ -607,12 +881,34 @@ fn handle_frame(ctx: &ServerContext, tx: &mpsc::UnboundedSender<AppToExt>, raw: 
                 backend.cancel(&ctx.hub, &session_id, at);
             }
         }
-        // Practice sessions, problem/edit/submission frames only need to reach the frontend.
+        // Practice sessions, problem/edit/submission frames only need to reach the frontend. An
+        // `auth.response` after the handshake answers nothing.
         ExtToApp::SessionStart { .. }
         | ExtToApp::ProblemOpen { .. }
         | ExtToApp::EditsBatch { .. }
-        | ExtToApp::Submission { .. } => {}
+        | ExtToApp::Submission { .. }
+        | ExtToApp::AuthResponse { .. } => {}
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Commands (registered in `lib.rs`): the webview's side of `LocalAuth`
+// ---------------------------------------------------------------------------------------------
+
+/// Install the pairing secret the webview published for the signed-in user, or forget it with
+/// `null` when signed out.
+#[tauri::command]
+pub fn set_bridge_key(
+    auth: tauri::State<'_, LocalAuth>,
+    key: Option<BridgeKeyInput>,
+) -> Result<(), String> {
+    auth.set_bridge_key(key)
+}
+
+/// The webview is about to send the user to an OAuth provider: accept the callback that follows.
+#[tauri::command]
+pub fn expect_auth_callback(auth: tauri::State<'_, LocalAuth>) {
+    auth.expect_sign_in();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -645,17 +941,29 @@ mod tests {
         start_with(allow_any_origin, &[]).await
     }
 
+    const TEST_USER: &str = "user-123";
+    const TEST_INSTALL: &str = "6f1c1d2e-5a4b-4c3d-8e2f-1a0b9c8d7e6f";
+    const TEST_SECRET: [u8; 32] = [7; 32];
+
+    /// A server signed in as [`TEST_USER`] and paired with [`TEST_SECRET`].
     async fn start_with(allow_any_origin: bool, extra_extension_ids: &[&str]) -> TestServer {
         let (hub, events) = WsHub::new();
         let mut ctx = ServerContext::new(
             hub,
-            Arc::new(Mutex::new(None)),
+            Arc::new(Mutex::new(Some(TEST_USER.to_string()))),
             "0.0.0-test",
             PreviewFiles::new(),
         );
         ctx.allow_any_extension_origin = allow_any_origin;
         ctx.extension_ids
             .extend(extra_extension_ids.iter().map(|id| id.to_string()));
+        ctx.local_auth
+            .set_bridge_key(Some(BridgeKeyInput {
+                user_id: TEST_USER.into(),
+                install_id: TEST_INSTALL.into(),
+                secret: to_hex(&TEST_SECRET),
+            }))
+            .unwrap();
         let (listener, addr) = bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
         tokio::spawn(serve(listener, ctx.clone()));
         TestServer { addr, ctx, events }
@@ -693,23 +1001,88 @@ mod tests {
         serde_json::from_str(text).expect("valid json")
     }
 
-    /// Connect (no Origin) and complete the hello handshake; returns the client + the ack.
-    async fn handshake(addr: SocketAddr) -> (Client, serde_json::Value) {
-        let mut client = connect(addr, None).await.unwrap();
+    /// The server hangs up: the next item is a Close frame or the end of the stream.
+    async fn assert_closed(client: &mut Client) {
+        let next = tokio::time::timeout(Duration::from_secs(5), client.next())
+            .await
+            .unwrap();
+        assert!(matches!(
+            next,
+            None | Some(Ok(tungstenite::Message::Close(_))) | Some(Err(_))
+        ));
+    }
+
+    fn proof(role: &str, secret: &[u8], ext_nonce: &str, app_nonce: &str) -> String {
+        let key = hmac::Key::new(hmac::HMAC_SHA256, secret);
+        let transcript = pairing_transcript(role, TEST_USER, ext_nonce, app_nonce);
+        to_hex(hmac::sign(&key, transcript.as_bytes()).as_ref())
+    }
+
+    /// Say hello as [`TEST_USER`]; returns our nonce and the server's reply.
+    async fn hello(client: &mut Client, protocol: u32) -> (String, serde_json::Value) {
+        let nonce = to_hex(&[0x5a; 32]);
         send_json(
-            &mut client,
-            json!({ "type": "hello", "protocol": PROTOCOL_VERSION, "extVersion": "0.1.0", "userId": null }),
+            client,
+            json!({ "type": "hello", "protocol": protocol, "extVersion": "0.1.0", "userId": TEST_USER, "nonce": nonce }),
         )
         .await;
-        let ack = recv_json(&mut client).await;
+        let reply = recv_json(client).await;
+        (nonce, reply)
+    }
+
+    /// Answer `challenge` with a proof made from `secret`; returns the server's reply.
+    async fn answer(
+        client: &mut Client,
+        ext_nonce: &str,
+        challenge: &serde_json::Value,
+        secret: &[u8],
+    ) -> serde_json::Value {
+        let app_nonce = challenge["nonce"].as_str().expect("challenge nonce");
+        send_json(
+            client,
+            json!({ "type": "auth.response", "proof": proof("ext", secret, ext_nonce, app_nonce) }),
+        )
+        .await;
+        recv_json(client).await
+    }
+
+    /// Pair over an open socket the way the extension does; returns the `hello.ack`.
+    async fn pair(client: &mut Client, protocol: u32) -> serde_json::Value {
+        let (nonce, challenge) = hello(client, protocol).await;
+        assert_eq!(challenge["type"], "auth.challenge", "{challenge}");
+        let app_nonce = challenge["nonce"].as_str().unwrap();
+        assert_eq!(
+            challenge["proof"],
+            proof("app", &TEST_SECRET, &nonce, app_nonce),
+            "the app proves it holds the secret before the extension says anything"
+        );
+        answer(client, &nonce, &challenge, &TEST_SECRET).await
+    }
+
+    /// Connect (no Origin) and complete the handshake; returns the client + the ack.
+    async fn handshake(addr: SocketAddr) -> (Client, serde_json::Value) {
+        let mut client = connect(addr, None).await.unwrap();
+        let ack = pair(&mut client, PROTOCOL_VERSION).await;
         (client, ack)
     }
 
     async fn http_get(addr: SocketAddr, path: &str) -> (u16, String) {
+        http_get_with(addr, path, &[]).await
+    }
+
+    async fn http_get_with(
+        addr: SocketAddr,
+        path: &str,
+        headers: &[(&str, &str)],
+    ) -> (u16, String) {
         let mut stream = TcpStream::connect(addr).await.unwrap();
+        let extra: String = headers
+            .iter()
+            .map(|(k, v)| format!("{k}: {v}\r\n"))
+            .collect();
         stream
             .write_all(
-                format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n")
+                format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\n{extra}Connection: close\r\n\r\n")
                     .as_bytes(),
             )
             .await
@@ -733,6 +1106,11 @@ mod tests {
             .expect("event channel closed")
     }
 
+    async fn no_event(events: &mut UnboundedReceiver<ServerEvent>) {
+        let got = tokio::time::timeout(Duration::from_millis(200), events.recv()).await;
+        assert!(got.is_err(), "unexpected server event {got:?}");
+    }
+
     #[tokio::test]
     async fn handshake_without_origin_in_debug_returns_hello_ack() {
         let mut server = start(true).await;
@@ -740,7 +1118,7 @@ mod tests {
         assert_eq!(ack["type"], "hello.ack");
         assert_eq!(ack["protocol"], PROTOCOL_VERSION);
         assert_eq!(ack["appVersion"], "0.0.0-test");
-        assert_eq!(ack["userId"], serde_json::Value::Null);
+        assert_eq!(ack["userId"], TEST_USER);
         assert_eq!(ack["recordingCapable"], false);
         assert_eq!(ack["recording"], serde_json::Value::Null);
         assert_eq!(
@@ -751,23 +1129,139 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hello_ack_carries_current_user() {
+    async fn a_client_without_the_secret_is_refused_and_never_reaches_the_recorder() {
+        let mut server = start(false).await;
+        let recorder = Arc::new(FakeRecorder::default());
+        server.ctx.set_recording_backend(Some(recorder.clone()));
+
+        // The extension's Origin is easy to forge outside a browser; it is not enough.
+        let mut client = connect(server.addr, Some(EXTENSION_ORIGIN)).await.unwrap();
+        let (nonce, challenge) = hello(&mut client, PROTOCOL_VERSION).await;
+        assert_eq!(challenge["type"], "auth.challenge");
+        assert_eq!(challenge["installId"], TEST_INSTALL);
+        let err = answer(&mut client, &nonce, &challenge, &[8; 32]).await;
+        assert_eq!(err["code"], "auth_failed");
+        assert_closed(&mut client).await;
+
+        // Skipping the answer and going straight for the recorder does not work either.
+        let mut client = connect(server.addr, Some(EXTENSION_ORIGIN)).await.unwrap();
+        let _ = hello(&mut client, PROTOCOL_VERSION).await;
+        send_json(
+            &mut client,
+            json!({ "type": "session.start", "sessionId": "s1", "kind": "interview", "scope": "problem",
+                    "startedAt": 1u64, "problem": null, "facecam": false, "mic": true }),
+        )
+        .await;
+        assert_eq!(recv_json(&mut client).await["code"], "bad_message");
+        assert_closed(&mut client).await;
+
+        // Reflecting the app's own proof back fails too: each side's proof names its role.
+        let mut client = connect(server.addr, Some(EXTENSION_ORIGIN)).await.unwrap();
+        let (_, challenge) = hello(&mut client, PROTOCOL_VERSION).await;
+        send_json(
+            &mut client,
+            json!({ "type": "auth.response", "proof": challenge["proof"] }),
+        )
+        .await;
+        assert_eq!(recv_json(&mut client).await["code"], "auth_failed");
+
+        assert!(recorder.started.lock().unwrap().is_empty());
+        assert_eq!(server.ctx.hub.client_count(), 0);
+        no_event(&mut server.events).await;
+    }
+
+    #[tokio::test]
+    async fn another_account_is_refused_before_any_challenge() {
         let server = start(true).await;
-        *server.ctx.current_user.lock().unwrap() = Some("user-123".into());
-        let (_client, ack) = handshake(server.addr).await;
-        assert_eq!(ack["userId"], "user-123");
+        let mut client = connect(server.addr, None).await.unwrap();
+        send_json(
+            &mut client,
+            json!({ "type": "hello", "protocol": PROTOCOL_VERSION, "extVersion": "0.1.0",
+                    "userId": "someone-else", "nonce": to_hex(&[1; 32]) }),
+        )
+        .await;
+        assert_eq!(recv_json(&mut client).await["code"], "user_mismatch");
+        assert_closed(&mut client).await;
+    }
+
+    #[tokio::test]
+    async fn a_signed_out_app_or_extension_is_refused() {
+        let server = start(true).await;
+        let mut client = connect(server.addr, None).await.unwrap();
+        send_json(
+            &mut client,
+            json!({ "type": "hello", "protocol": PROTOCOL_VERSION, "extVersion": "0.1.0",
+                    "userId": null, "nonce": to_hex(&[1; 32]) }),
+        )
+        .await;
+        assert_eq!(recv_json(&mut client).await["code"], "not_signed_in");
+
+        // The app signed out: nothing can pair.
+        *server.ctx.current_user.lock().unwrap() = None;
+        let mut client = connect(server.addr, None).await.unwrap();
+        let (_, reply) = hello(&mut client, PROTOCOL_VERSION).await;
+        assert_eq!(reply["code"], "not_signed_in");
+
+        // A secret left over from the previous account is not used for the next one.
+        *server.ctx.current_user.lock().unwrap() = Some("next-user".into());
+        let mut client = connect(server.addr, None).await.unwrap();
+        let (_, reply) = hello(&mut client, PROTOCOL_VERSION).await;
+        assert_eq!(reply["code"], "not_signed_in");
+    }
+
+    #[tokio::test]
+    async fn hello_without_a_nonce_is_refused() {
+        let server = start(true).await;
+        let mut client = connect(server.addr, None).await.unwrap();
+        send_json(
+            &mut client,
+            json!({ "type": "hello", "protocol": PROTOCOL_VERSION, "extVersion": "0.1.0", "userId": TEST_USER }),
+        )
+        .await;
+        assert_eq!(recv_json(&mut client).await["code"], "bad_message");
+    }
+
+    #[test]
+    fn pairing_transcript_matches_the_extension() {
+        // Pinned by `pairingTranscript` in packages/shared/src/session/protocol.test.ts as well.
+        assert_eq!(
+            pairing_transcript("app", "u1", "aa", "bb"),
+            "lare-bridge/1\napp\nu1\naa\nbb"
+        );
+    }
+
+    #[test]
+    fn pairing_secrets_must_be_32_bytes_of_lowercase_hex() {
+        let auth = LocalAuth::default();
+        let key = |secret: String| BridgeKeyInput {
+            user_id: TEST_USER.into(),
+            install_id: TEST_INSTALL.into(),
+            secret,
+        };
+        let good = to_hex(&[0xab; 32]);
+        assert!(auth.set_bridge_key(Some(key(good.clone()))).is_ok());
+        assert!(auth.set_bridge_key(Some(key(to_hex(&[7; 16])))).is_err());
+        assert!(auth.set_bridge_key(Some(key(good.to_uppercase()))).is_err());
+        assert!(
+            auth.set_bridge_key(Some(key(format!("+{}", &good[1..]))))
+                .is_err()
+        );
+        assert!(
+            auth.pairing().is_some(),
+            "a rejected key leaves the previous one in place"
+        );
+        assert!(auth.set_bridge_key(None).is_ok());
+        assert!(auth.pairing().is_none());
     }
 
     #[tokio::test]
     async fn pinned_extension_origin_is_accepted_even_in_release_mode() {
         let server = start(false).await;
         let mut client = connect(server.addr, Some(EXTENSION_ORIGIN)).await.unwrap();
-        send_json(
-            &mut client,
-            json!({ "type": "hello", "protocol": PROTOCOL_VERSION, "extVersion": "0.1.0", "userId": null }),
-        )
-        .await;
-        assert_eq!(recv_json(&mut client).await["type"], "hello.ack");
+        assert_eq!(
+            pair(&mut client, PROTOCOL_VERSION).await["type"],
+            "hello.ack"
+        );
     }
 
     #[tokio::test]
@@ -779,16 +1273,17 @@ mod tests {
         )
         .await
         .unwrap();
-        send_json(
-            &mut client,
-            json!({ "type": "hello", "protocol": PROTOCOL_VERSION, "extVersion": "0.1.0", "userId": null }),
-        )
-        .await;
-        assert_eq!(recv_json(&mut client).await["type"], "hello.ack");
+        assert_eq!(
+            pair(&mut client, PROTOCOL_VERSION).await["type"],
+            "hello.ack"
+        );
 
-        let err = connect(server.addr, Some("chrome-extension://someotherextensionidxxxxxxxxxxx"))
-            .await
-            .expect_err("upgrade should fail");
+        let err = connect(
+            server.addr,
+            Some("chrome-extension://someotherextensionidxxxxxxxxxxx"),
+        )
+        .await
+        .expect_err("upgrade should fail");
         match err {
             tungstenite::Error::Http(response) => assert_eq!(response.status().as_u16(), 403),
             other => panic!("expected an HTTP 403, got {other:?}"),
@@ -928,17 +1423,30 @@ mod tests {
         )
         .await;
         let _ = next_event(&mut server.events).await; // forwarded start
-        send_json(&mut client, json!({ "type": "session.end", "sessionId": "s9", "at": 50u64 })).await;
+        send_json(
+            &mut client,
+            json!({ "type": "session.end", "sessionId": "s9", "at": 50u64 }),
+        )
+        .await;
         let _ = next_event(&mut server.events).await; // forwarded end
 
         assert_eq!(
             *recorder.started.lock().unwrap(),
-            vec![RecordingRequest { session_id: "s9".into(), started_at: 42, facecam: true, mic: true }]
+            vec![RecordingRequest {
+                session_id: "s9".into(),
+                started_at: 42,
+                facecam: true,
+                mic: true
+            }]
         );
         assert_eq!(*recorder.stopped.lock().unwrap(), vec!["s9".to_string()]);
         assert!(recorder.cancelled.lock().unwrap().is_empty());
 
-        send_json(&mut client, json!({ "type": "session.cancel", "sessionId": "s9", "at": 60u64 })).await;
+        send_json(
+            &mut client,
+            json!({ "type": "session.cancel", "sessionId": "s9", "at": 60u64 }),
+        )
+        .await;
         let _ = next_event(&mut server.events).await; // forwarded cancel
         assert_eq!(*recorder.cancelled.lock().unwrap(), vec!["s9".to_string()]);
     }
@@ -999,6 +1507,7 @@ mod tests {
     #[tokio::test]
     async fn auth_callback_emits_code_and_error_events() {
         let mut server = start(true).await;
+        server.ctx.local_auth.expect_sign_in();
         let (status, body) =
             http_get(server.addr, "/auth/callback?code=abc123&next=%2Fdrafts").await;
         assert_eq!(status, 200);
@@ -1011,6 +1520,7 @@ mod tests {
             }
         );
 
+        server.ctx.local_auth.expect_sign_in();
         let (status, body) = http_get(
             server.addr,
             "/auth/callback?error=access_denied&error_description=User%20said%20no",
@@ -1025,6 +1535,51 @@ mod tests {
                 description: Some("User said no".into()),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn auth_callback_needs_a_sign_in_in_progress_and_is_accepted_once() {
+        let mut server = start(true).await;
+        let (status, body) = http_get(server.addr, "/auth/callback?code=forged").await;
+        assert_eq!(status, 400);
+        assert!(body.contains("No sign-in in progress"));
+        no_event(&mut server.events).await;
+
+        server.ctx.local_auth.expect_sign_in();
+        // A page embedding the URL as an image or frame neither delivers a code nor uses up the
+        // sign-in it happened to land in.
+        for dest in ["image", "iframe"] {
+            let (status, _) = http_get_with(
+                server.addr,
+                "/auth/callback?code=forged",
+                &[("Sec-Fetch-Dest", dest), ("Sec-Fetch-Mode", "no-cors")],
+            )
+            .await;
+            assert_eq!(status, 403);
+        }
+        no_event(&mut server.events).await;
+
+        let (status, _) = http_get_with(
+            server.addr,
+            "/auth/callback?code=real",
+            &[
+                ("Sec-Fetch-Dest", "document"),
+                ("Sec-Fetch-Mode", "navigate"),
+            ],
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(
+            next_event(&mut server.events).await,
+            ServerEvent::AuthCallback {
+                code: "real".into(),
+                next: None
+            }
+        );
+
+        let (status, _) = http_get(server.addr, "/auth/callback?code=again").await;
+        assert_eq!(status, 400);
+        no_event(&mut server.events).await;
     }
 
     #[tokio::test]
@@ -1057,12 +1612,7 @@ mod tests {
             (PROTOCOL_VERSION + 5, PROTOCOL_VERSION),
         ] {
             let mut client = connect(server.addr, None).await.unwrap();
-            send_json(
-                &mut client,
-                json!({ "type": "hello", "protocol": sent, "extVersion": "9.9.9", "userId": null }),
-            )
-            .await;
-            let ack = recv_json(&mut client).await;
+            let ack = pair(&mut client, sent).await;
             assert_eq!(ack["type"], "hello.ack");
             assert_eq!(ack["protocol"], expected);
         }
@@ -1071,10 +1621,12 @@ mod tests {
     #[tokio::test]
     async fn protocol_mismatch_is_rejected_and_closed() {
         let server = start(true).await;
+        // What a v3 extension sends: no nonce, so it could never pair. It is told to update, in
+        // the words it already reads as "the extension is the one out of date".
         let mut client = connect(server.addr, None).await.unwrap();
         send_json(
             &mut client,
-            json!({ "type": "hello", "protocol": MIN_EXT_PROTOCOL_VERSION - 1, "extVersion": "0.0.1", "userId": null }),
+            json!({ "type": "hello", "protocol": MIN_EXT_PROTOCOL_VERSION - 1, "extVersion": "0.0.1", "userId": TEST_USER }),
         )
         .await;
         let err = recv_json(&mut client).await;
@@ -1086,14 +1638,7 @@ mod tests {
                 .unwrap()
                 .starts_with(&format!("desktop app speaks protocol v{PROTOCOL_VERSION}"))
         );
-        // Server closes: the next item is a Close frame or the end of the stream.
-        let next = tokio::time::timeout(Duration::from_secs(5), client.next())
-            .await
-            .unwrap();
-        assert!(matches!(
-            next,
-            None | Some(Ok(tungstenite::Message::Close(_))) | Some(Err(_))
-        ));
+        assert_closed(&mut client).await;
         assert_eq!(server.ctx.hub.client_count(), 0);
     }
 

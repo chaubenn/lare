@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-bridge-key"
+description = "Enables the set_bridge_key command without any pre-configured scope."
+commands.allow = ["set_bridge_key"]
+
+[[permission]]
+identifier = "deny-set-bridge-key"
+description = "Denies the set_bridge_key command without any pre-configured scope."
+commands.deny = ["set_bridge_key"]

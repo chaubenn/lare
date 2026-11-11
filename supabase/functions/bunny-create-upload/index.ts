@@ -10,7 +10,11 @@ import {
   tusSignature,
 } from "../_shared/bunny.ts";
 import { HttpError, handler, json, readJson } from "../_shared/http.ts";
-import { adminClient, requireUser } from "../_shared/supabase.ts";
+import { adminClient, ownedRow, requireUser } from "../_shared/supabase.ts";
+
+// Videos created per user per rolling 24 hours. Each take, and each retry whose upload target
+// expired, creates one; past this a script is filling Bunny, not a person recording.
+const DAILY_LIMIT = 50;
 
 interface Body {
   mode?: "instant" | "studio";
@@ -46,12 +50,25 @@ Deno.serve(
 
     const admin = adminClient();
     if (body.sessionId) {
-      const { data: session } = await admin
-        .from("sessions")
-        .select("id, user_id")
-        .eq("id", body.sessionId)
-        .maybeSingle();
-      if (!session || session.user_id !== userId) throw new HttpError("Session not found", 404);
+      await ownedRow(admin, "sessions", body.sessionId, userId, "id, user_id", "Session not found");
+    }
+
+    // Claimed before Bunny is asked for anything (usage ledger, 0034), and not refunded when a
+    // later step fails.
+    const { data: claimed, error: claimError } = await admin.rpc("claim_usage", {
+      p_user_id: userId,
+      p_kind: "video_upload",
+      p_limit: DAILY_LIMIT,
+    });
+    if (claimError) {
+      console.error("claim_usage failed", claimError);
+      throw new HttpError("Could not check the recording limit", 500);
+    }
+    if (claimed !== true) {
+      throw new HttpError(
+        `Recording limit reached (${DAILY_LIMIT} per day). Try again later.`,
+        429,
+      );
     }
 
     const bunny = await createVideo(title);

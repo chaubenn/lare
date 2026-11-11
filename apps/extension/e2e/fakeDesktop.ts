@@ -1,15 +1,34 @@
 /**
  * A stand-in for the Lare desktop app's local socket (`ws://127.0.0.1:47831`), just enough of
  * RFC 6455 for the extension's text frames: handshake, masked client frames in, unmasked frames
- * out. Tests script its replies through `onMessage`.
+ * out. It pairs like the app does (`auth.challenge` / `auth.response`, keyed with
+ * `E2E_PAIRING_SECRET`, which the fixture serves from `bridge_secrets`), unless it plays an app
+ * older than protocol 4. Tests script its replies through `onMessage`.
  */
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { Socket } from "node:net";
+import { pairingTranscript } from "@lare/shared";
 
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 export type DesktopFrame = Record<string, unknown> & { type: string };
+
+export const E2E_INSTALL_ID = "0b6c2f4e-9d1a-4e7b-8c3f-5a2d6e1f9b70";
+/** Also in fixture/server.mjs, which hands it to the extension as this install's row. */
+export const E2E_PAIRING_SECRET = "e2e0".repeat(16);
+
+function pairingProof(
+  secret: string,
+  role: "app" | "ext",
+  userId: string,
+  extNonce: string,
+  appNonce: string,
+) {
+  return createHmac("sha256", Buffer.from(secret, "hex"))
+    .update(pairingTranscript(role, userId, extNonce, appNonce))
+    .digest();
+}
 
 export class FakeDesktop {
   readonly received: DesktopFrame[] = [];
@@ -19,6 +38,8 @@ export class FakeDesktop {
 
   constructor(
     private readonly ack: { userId: string | null; recordingCapable: boolean; protocol: number },
+    /** Another value plays something on the port that is not the paired app. */
+    private readonly secret = E2E_PAIRING_SECRET,
   ) {}
 
   onMessage(handler: (msg: DesktopFrame, reply: (frame: object) => void) => void): void {
@@ -43,6 +64,7 @@ export class FakeDesktop {
       socket.on("error", () => this.sockets.delete(socket));
       socket.on("close", () => this.sockets.delete(socket));
       let buffer = Buffer.alloc(0);
+      let paired: { extNonce: string; appNonce: string } | "yes" | null = null;
       socket.on("data", (chunk) => {
         buffer = Buffer.concat([buffer, chunk]);
         for (;;) {
@@ -54,7 +76,7 @@ export class FakeDesktop {
           const msg = JSON.parse(frame.payload.toString("utf8")) as DesktopFrame;
           this.received.push(msg);
           const reply = (out: object) => socket.write(textFrame(JSON.stringify(out)));
-          if (msg.type === "hello") {
+          const ack = () =>
             reply({
               type: "hello.ack",
               protocol: this.ack.protocol,
@@ -62,6 +84,47 @@ export class FakeDesktop {
               userId: this.ack.userId,
               recordingCapable: this.ack.recordingCapable,
             });
+          const refuse = (code: string) => {
+            reply({ type: "error", code, message: code });
+            socket.end();
+          };
+          if (msg.type === "hello" && this.ack.protocol < 4) {
+            ack();
+          } else if (msg.type === "hello") {
+            const extNonce = typeof msg.nonce === "string" ? msg.nonce : "";
+            if (!this.ack.userId || !msg.userId) refuse("not_signed_in");
+            else if (msg.userId !== this.ack.userId) refuse("user_mismatch");
+            else {
+              const appNonce = randomBytes(32).toString("hex");
+              paired = { extNonce, appNonce };
+              reply({
+                type: "auth.challenge",
+                installId: E2E_INSTALL_ID,
+                nonce: appNonce,
+                proof: pairingProof(
+                  this.secret,
+                  "app",
+                  this.ack.userId,
+                  extNonce,
+                  appNonce,
+                ).toString("hex"),
+              });
+            }
+          } else if (msg.type === "auth.response" && paired && paired !== "yes") {
+            const expected = pairingProof(
+              this.secret,
+              "ext",
+              this.ack.userId ?? "",
+              paired.extNonce,
+              paired.appNonce,
+            );
+            const got = Buffer.from(String(msg.proof), "hex");
+            if (got.length === expected.length && timingSafeEqual(got, expected)) {
+              paired = "yes";
+              ack();
+            } else refuse("auth_failed");
+          } else if (paired !== "yes" && this.ack.protocol >= 4) {
+            refuse("bad_message");
           } else if (msg.type === "ping") {
             reply({ type: "pong", at: msg.at });
           } else {

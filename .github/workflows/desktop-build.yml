@@ -58,17 +58,17 @@ jobs:
             updater_glob: "target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe"
             updater_name: Lare-Windows-x64-Setup.exe
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master (= v1), toolchain set by the input below
         with:
           toolchain: 1.88.0
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release-${{ matrix.target }}
           # Only `main` writes the cache. GitHub scopes caches by ref and lets any ref read
@@ -117,7 +117,7 @@ jobs:
             } >> "$GITHUB_ENV"
           fi
       - name: Build and sign updater bundles
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater signing (minisign). The matching public key is in tauri.conf.json.
@@ -132,25 +132,29 @@ jobs:
       - name: Stage release assets
         shell: bash
         env:
+          INSTALLER_GLOB: ${{ matrix.installer_glob }}
+          INSTALLER_NAME: ${{ matrix.installer_name }}
+          UPDATER_GLOB: ${{ matrix.updater_glob }}
           UPDATER_NAME: ${{ matrix.updater_name }}
         run: |
           set -euo pipefail
           shopt -s nullglob
           mkdir -p dist
 
-          installer=( ${{ matrix.installer_glob }} )
-          [ ${#installer[@]} -gt 0 ] || { echo "::error::no installer matched ${{ matrix.installer_glob }}"; exit 1; }
-          cp "${installer[0]}" "dist/${{ matrix.installer_name }}"
+          # The globs are expanded unquoted on purpose: that is what turns them into paths.
+          installer=( $INSTALLER_GLOB )
+          [ ${#installer[@]} -gt 0 ] || { echo "::error::no installer matched $INSTALLER_GLOB"; exit 1; }
+          cp "${installer[0]}" "dist/$INSTALLER_NAME"
 
-          updater=( ${{ matrix.updater_glob }} )
-          [ ${#updater[@]} -gt 0 ] || { echo "::error::no updater bundle matched ${{ matrix.updater_glob }}"; exit 1; }
+          updater=( $UPDATER_GLOB )
+          [ ${#updater[@]} -gt 0 ] || { echo "::error::no updater bundle matched $UPDATER_GLOB"; exit 1; }
           name="$UPDATER_NAME"
           cp "${updater[0]}" "dist/$name"
           [ -f "${updater[0]}.sig" ] || { echo "::error::no signature beside ${updater[0]} — is TAURI_SIGNING_PRIVATE_KEY set?"; exit 1; }
           cp "${updater[0]}.sig" "dist/$name.sig"
 
           ls -l dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.target }}
           path: dist/*

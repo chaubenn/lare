@@ -1,4 +1,5 @@
 import type { Database } from "@lare/supabase-types";
+import { allowAvatarOrigin } from "@lare/ui";
 import { createClient } from "@supabase/supabase-js";
 import { env } from "./env";
 
@@ -15,6 +16,9 @@ export const supabase = createClient<Database>(
     },
   },
 );
+
+// Profile pictures uploaded in the app are public objects in this project's storage.
+allowAvatarOrigin(env.VITE_SUPABASE_URL);
 
 /**
  * Call an Edge Function and unwrap its JSON body. Surfaces the server's `error` message on

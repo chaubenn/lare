@@ -13,6 +13,10 @@ import {
 import { useNotify } from "@/features/notifications/notices";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { setCurrentUser, useTauriEvent } from "@/lib/tauri";
+import { forgetExtensionPairing, pairExtension, unpairExtension } from "./extensionPairing";
+
+/** How soon to try publishing the pairing secret again after it failed (offline, say). */
+const PAIRING_RETRY_MS = 60_000;
 
 export const profileQueryKey = (userId: string) => ["profile", userId] as const;
 
@@ -103,6 +107,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentUser(userId).catch((err: unknown) => console.error("set_current_user failed", err));
   }, [session, userId]);
 
+  // Pair with the extension. Keyed on the user rather than the session, which changes on every
+  // token refresh.
+  const restored = session !== undefined;
+  useEffect(() => {
+    if (!restored) return;
+    if (!userId) {
+      unpairExtension().catch((err: unknown) => console.error("unpair extension failed", err));
+      return;
+    }
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const attempt = () => {
+      pairExtension(userId).catch((err: unknown) => {
+        console.warn("could not publish the extension pairing secret", err);
+        if (!cancelled) retry = setTimeout(attempt, PAIRING_RETRY_MS);
+      });
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+      clearTimeout(retry);
+    };
+  }, [restored, userId]);
+
   // OAuth loopback: the Rust server received ?code=... on 127.0.0.1:47831/auth/callback.
   useTauriEvent("auth:callback", ({ code }) => {
     supabase.auth
@@ -135,6 +163,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profileError: profileQuery.error,
       retryProfile: () => void profileQuery.refetch(),
       signOut: async () => {
+        if (userId)
+          await forgetExtensionPairing(userId).catch((err: unknown) =>
+            console.warn("could not delete the extension pairing secret", err),
+          );
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
         await setCurrentUser(null);

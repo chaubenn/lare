@@ -16,7 +16,12 @@ pub const AUTH_CALLBACK_PATH: &str = "/auth/callback";
 /// * 2: `session.cancel` (added late, without a bump: a v2 app may not understand it).
 /// * 3: `session.cancel` is guaranteed; `session.*` frames only act on the session they name;
 ///   `hello.ack.recording` carries the recorder's state.
-pub const PROTOCOL_VERSION: u32 = 3;
+/// * 4: both sides prove they hold the install's pairing secret (`hello.nonce`, `auth.challenge`,
+///   `auth.response`) before `hello.ack`.
+pub const PROTOCOL_VERSION: u32 = 4;
 /// Oldest extension protocol the app still serves. The app answers `hello` with the lower of the
-/// two versions, so an older extension that insists on its own number keeps working.
-pub const MIN_EXT_PROTOCOL_VERSION: u32 = 2;
+/// two versions. Older than 4 cannot authenticate, so it is turned away: serving it would let any
+/// local process in by claiming to be an old extension.
+pub const MIN_EXT_PROTOCOL_VERSION: u32 = 4;
+/// Domain-separation prefix of the pairing HMAC transcript (see `ws_server` in the desktop app).
+pub const PAIRING_DOMAIN: &str = "lare-bridge/1";

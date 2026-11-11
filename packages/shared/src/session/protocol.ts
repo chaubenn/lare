@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import { DifficultySchema } from "../leetcode/leetcode";
+import { PAIRING_DOMAIN } from "./constants";
 import { EditEventSchema } from "./edits";
 
 export const ProblemInfoSchema = z.object({
@@ -40,6 +41,14 @@ export const ExtHelloSchema = z.object({
   protocol: z.number().int(),
   extVersion: z.string(),
   userId: z.string().nullable(),
+  /** 32 random bytes (hex) that the app's `auth.challenge` proof covers. Absent before v4. */
+  nonce: z.string().optional(),
+});
+
+/** The extension's half of the pairing handshake, answering `auth.challenge`. */
+export const AuthResponseSchema = z.object({
+  type: z.literal("auth.response"),
+  proof: z.string(),
 });
 
 export const SessionStartSchema = z.object({
@@ -80,6 +89,7 @@ export const SubmissionMsgSchema = z.object({
 
 export const ExtToAppSchema = z.discriminatedUnion("type", [
   ExtHelloSchema,
+  AuthResponseSchema,
   SessionStartSchema,
   z.object({ type: z.literal("session.pause"), sessionId: z.string(), at: z.number() }),
   z.object({ type: z.literal("session.resume"), sessionId: z.string(), at: z.number() }),
@@ -136,6 +146,16 @@ export const AppToExtSchema = z.discriminatedUnion("type", [
     startedAt: z.number().nullable(),
     message: z.string().nullable().optional(),
   }),
+  /**
+   * The app's half of the pairing handshake: `proof` covers the extension's nonce, and the
+   * extension answers with one covering `nonce`. `installId` names the secret to look up.
+   */
+  z.object({
+    type: z.literal("auth.challenge"),
+    installId: z.string(),
+    nonce: z.string(),
+    proof: z.string(),
+  }),
   z.object({
     type: z.literal("error"),
     code: z.enum([
@@ -146,12 +166,26 @@ export const AppToExtSchema = z.discriminatedUnion("type", [
       "recording_failed",
       "bad_message",
       "unsupported_protocol",
+      "auth_failed",
     ]),
     message: z.string(),
   }),
   z.object({ type: z.literal("pong"), at: z.number() }),
 ]);
 export type AppToExt = z.infer<typeof AppToExtSchema>;
+
+/**
+ * What each side's pairing proof is an HMAC-SHA256 of, keyed with the install's secret (see
+ * `ws_server.rs`). `role` keeps one side's proof from ever passing as the other's.
+ */
+export function pairingTranscript(
+  role: "app" | "ext",
+  userId: string,
+  extNonce: string,
+  appNonce: string,
+): string {
+  return [PAIRING_DOMAIN, role, userId, extNonce, appNonce].join("\n");
+}
 
 export function encode(msg: ExtToApp | AppToExt): string {
   return JSON.stringify(msg);

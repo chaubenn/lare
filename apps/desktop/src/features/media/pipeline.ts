@@ -159,12 +159,13 @@ export async function publishVideo(opts: PublishVideoOptions): Promise<string> {
     await opts.onAttached?.();
   }
 
+  // Provisional values from the local file so the draft can lay the video out while it uploads;
+  // Bunny's values replace them once it is ready. The status is the server's (0033).
   throwIf(
     (
       await supabase
         .from("videos")
         .update({
-          status: "uploading",
           duration_ms: info.durationMs,
           width: info.width,
           height: info.height,

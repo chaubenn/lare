@@ -21,16 +21,17 @@ export function postUrl(slug: string): string {
   return `${env.VITE_SITE_URL.replace(/\/+$/, "")}/p/${slug}`;
 }
 
-/** Copy a post's web link and say whether it worked. */
+/** Copy a post's web link and say whether it worked, in a toast and as the result. */
 export function useCopyPostLink() {
   const { notify } = useNotify();
-  return async (slug: string) => {
+  return async (slug: string): Promise<boolean> => {
     const ok = await copyText(postUrl(slug));
     notify(
       ok
         ? { title: "Link copied", variant: "success" }
         : { title: "Couldn't copy the link", description: postUrl(slug), variant: "error" },
     );
+    return ok;
   };
 }
 

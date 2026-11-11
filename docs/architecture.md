@@ -160,7 +160,8 @@ in the extension's `lare:desktop-outbox`.
 
 ## Data model (Supabase)
 
-Migrations are `supabase/migrations/0001`–`0030`, all idempotent. Types are generated into
+Migrations are `supabase/migrations/0001` onwards, all idempotent, applied by hand in the SQL
+Editor in number order (see "Writing migrations" below). Types are generated into
 `packages/supabase-types`.
 
 **People and social**
@@ -184,7 +185,8 @@ Migrations are `supabase/migrations/0001`–`0030`, all idempotent. Types are ge
 - `transcripts` (segments `[{s,e,text}]` in media ms; `upsert_transcript_segments`),
   `interview_reviews` (OpenAI structured output: scores, moments, next steps, code iterations),
   `review_criteria` (a user's own grading criteria; no row means the defaults in
-  `packages/shared`), `ai_review_usage` (append-only ledger behind the daily limit).
+  `packages/shared`), `usage_ledger` (append-only ledger behind every daily limit, 0034;
+  `ai_review_usage` is its read-only predecessor).
 - `practice_goals` (one private goal per user: N problems per day or week, optional minimum
   difficulty) with `goal_progress()`.
 
@@ -208,20 +210,27 @@ followees), `global_leaderboard` (everyone, with the viewer's own row).
 **Lifecycle RPCs**
 `practice_inbox`, `publish_practice_problems`, `delete_practice_post`, `create_session_draft`
 (gives a finished session a fresh draft, built the way the extension builds one),
-`unpublish_post`, `claim_ai_review_slot`.
+`unpublish_post`, `claim_usage` (service role only; `claim_ai_review_slot` is a wrapper kept for
+older `ai-review` deployments).
 
 Edge Function configuration lives in Supabase Vault (`public.get_app_secrets`, service role only)
 with `Deno.env` taking precedence; see `supabase/functions/_shared/http.ts`.
 
 ## Access rules
 
-Visibility is decided once, in `private.can_view_post`, and everything else inherits it.
+Visibility is decided once, in `private.can_view_post_as(post, viewer)` (0035), and everything else
+inherits it. `can_view_post`, `can_view_profile_content` and `is_accepted_follower` are wrappers that
+pass `auth.uid()`; `user_can_view_post` asks on behalf of a notification's recipient.
 
 - **Post visible** = published, and (owner, or public post and (author not private, or viewer is an
   accepted follower)).
 - **Pending posts (0018).** An author can publish while a video is still processing. Others see the
   post only once every video it *shows* is `ready`; at that moment `published_at` moves to now so it
   lands at the top of feeds. There is no `pending` status. A hidden video never holds a post back.
+- **A post goes live once (0033).** `post_first_live` (server only) records the `published_at` a
+  post had the first time it was live. Only a post that has never been live is moved to now when its
+  video becomes ready, and publishing a post again after `unpublish_post` restores that first
+  `published_at`. So neither a new video nor unpublishing and publishing again can bump a post.
 - **Hidden means hidden (0019).** A video switched off with `show_video` / `show_demo_video` is
   invisible to viewers in the database, not just the UI, so it cannot be fetched or given a
   playback token. Authors still see their own.
@@ -231,7 +240,19 @@ Visibility is decided once, in `private.can_view_post`, and everything else inhe
 - **Posts only reference what the author owns (0020)**: session, videos and cover.
 - **Server-owned columns (0026).** `like_count`, `comment_count`, `published_at`, `slug`, `user_id`,
   `session_id`, `created_at` cannot be written by `anon` or `authenticated`. Re-publishing never bumps
-  a post.
+  a post. One compatibility case remains: a plain update from `published` to `draft` keeps the post
+  published, because extensions released before 3.5.0 (bridge protocol 2) upsert `status: 'draft'`
+  on a finalize retry, and installed desktop builds whose `MIN_EXT_PROTOCOL_VERSION` is 2 still run
+  interviews for them. Current extensions never send `status`, and unpublishing goes through
+  `unpublish_post`. The case can go once no desktop build that accepts protocol 2 is in use; the
+  database cannot tell old clients apart, so dropping it earlier would silently unpublish posts
+  again.
+- **Video state is Bunny's (0033).** For `anon` and `authenticated`, `videos.status` only moves
+  `created -> uploading` (a late `uploading` from an older desktop is ignored, anything else is
+  refused), `error` is refused, and `duration_ms` / `width` / `height` are provisional until the video
+  is ready, then pinned. `ready_at` is stamped by the database the first time a video is ready.
+- **Comment edits follow visibility (0035)**: editing a comment needs the post to be visible, like
+  writing one.
 - **Follow edges are immutable (0027)** apart from `pending → accepted`, and only via the RPCs.
 - **Private accounts** show only their header (name, picture, handle) to everyone but accepted
   followers, including signed-out viewers (0024: the helper always returns a real boolean, and the
@@ -241,17 +262,23 @@ Visibility is decided once, in `private.can_view_post`, and everything else inhe
   accepted submissions that carry a LeetCode id, arrived within two days of `submitted_at`, and have
   a plausible slug, capped at 30 distinct problems per user per UTC day. This is mitigation, not
   proof: a determined user can still script plausible inserts.
-- **Storage.** `session-data` is per-user (`{user_id}/{session_id}/{problem_id}.json.gz`) and
-  `edits_path` is pinned to the owner's folder (0025), because `ai-review` reads it with the service
-  role. `thumbnails` follows `can_view_video`.
-- **AI review limit.** Five generations per rolling 24 hours per user, claimed under an advisory lock
-  before OpenAI is called.
+- **Storage paths stay owned (0031).** Every path column (`session_problems.edits_path`,
+  `videos.thumbnail_path`, `post_media.storage_path`) must pass `private.is_owned_storage_path`: the
+  first segment is the row owner's id and no segment is empty, `.` or `..` or has a backslash.
+  Thumbnails are exactly `{owner}/{video_id}.{ext}` and photos `{owner}/{post_id}/{file}`. Edge
+  Functions check the same rule (`_shared/storage.ts`) before any service-role storage call, since
+  the service role ignores storage policies. The read policies of `thumbnails` and `post-media` also
+  require the object to sit in the owning row's folder.
+- **Usage limits (0034).** Per user per rolling 24 hours, claimed in `usage_ledger` under an advisory
+  lock before the work happens: 5 AI reviews (before OpenAI is called), 50 new videos (before Bunny
+  is), 100 comments (refused past it) and 50 mention notifications (past it, comments still post but
+  stop notifying).
 
 ## Edge Functions
 
 | Function | Caller | What it does |
 | --- | --- | --- |
-| `bunny-create-upload` | desktop | Creates the Bunny video and our `videos` row; returns TUS credentials so clients upload straight to Bunny without seeing the API key. |
+| `bunny-create-upload` | desktop | Creates the Bunny video and our `videos` row; returns TUS credentials so clients upload straight to Bunny without seeing the API key. 50 per user per day (`usage_ledger`). |
 | `bunny-finalize-recording` | desktop | Receipt confirmation only. The client must finish the deferred TUS upload first. |
 | `bunny-captions` | desktop | Owner-only. Attaches the whisper transcript as a WebVTT track. |
 | `bunny-webhook` | Bunny | HMAC-signed (`verify_jwt = false`, auth is the signature). Flips `videos.status`, which releases pending posts. |
@@ -260,7 +287,44 @@ Visibility is decided once, in `private.can_view_post`, and everything else inhe
 | `ai-review` | desktop session page | `{sessionId, force?}`. Builds a timeline from the transcript, Monaco edit checkpoints and submissions, applies the user's `review_criteria`, asks OpenAI (Responses API, strict JSON schema, `gpt-5-mini` unless `OPENAI_MODEL` is set), and upserts `interview_reviews`. |
 
 Shared helpers are in `functions/_shared` (`http.ts`, `bunny.ts`, `edits.ts`, `reviewCriteria.ts`,
-`aiReviewSchema.ts`). Tests: `functions/_tests`, `bunny_test.ts`.
+`aiReviewSchema.ts`, `storage.ts`). Service-role code loads the caller's rows through `ownedRow`
+(`supabase.ts`), which puts `user_id` in the query and answers 404 for anyone else's row.
+`ai-review` passes the user's `review_criteria` in the user message inside `<grading_preferences>`
+and tells the model to treat it as preferences, never as instructions about scores. Errors from
+OpenAI and the database go to the function logs, not to the caller. Tests: `functions/_tests`,
+`bunny_test.ts`.
+
+### Settings outside the repo
+
+There is no `supabase/config.toml`; functions are deployed with `npx supabase functions deploy`
+from a local terminal, and these settings live in the Supabase dashboard. Check them after creating a
+project or changing a function:
+
+- **JWT verification per function.** `bunny-webhook` must be deployed with JWT verification off
+  (`--no-verify-jwt`): Bunny sends no JWT and the function authenticates the HMAC signature instead.
+  Every other function checks the caller itself (`requireUser` / `optionalUser`), so it is safe
+  either way, but `bunny-playback-token` serves signed-out viewers of public posts: if verification
+  is on for it, the key the website and app send must pass the gateway.
+- **Exposed API schemas** (API settings): `public` (and `graphql_public`) only. `private` must never
+  be exposed; its functions assume they are reached only through policies and definer code (0036).
+- **Auth redirect URLs**: `http://127.0.0.1:47831/auth/callback` (desktop) and
+  `https://<extension id>.chromiumapp.org/auth/callback` for each extension id (see "Build, CI and
+  releases").
+- **Bunny webhook** points at `.../functions/v1/bunny-webhook`. Bunny signs only the body, with the
+  library's read-only API key, and sends no timestamp, so a captured call can be replayed. The damage
+  is bounded: a replay can re-apply a status to a video that is not ready yet (the next real event
+  corrects it), never regresses a ready video, and cannot move `ready_at` (0033).
+
+### Writing migrations
+
+- New file, next number, idempotent (`create or replace`, `drop ... if exists`, `on conflict do
+  nothing`), safe on a live database with existing rows (check new rules with triggers on insert and
+  update, or `not valid` constraints, rather than rewriting old rows).
+- Security definer functions: `set search_path = ''` and schema-qualify every name. Older ones use
+  `public`, which is safe only because the API roles cannot create objects there (0036).
+- A function the API roles should not call: `revoke all ... from public, anon, authenticated`. In
+  `private`, end the migration with `select private.sync_function_privileges();`, which closes every
+  private function and grants EXECUTE back only on those a policy calls.
 
 ## Time model
 
@@ -412,7 +476,11 @@ The Chrome Web Store package is built without the pinned `key` (`pnpm zip:store`
 so the store assigns its own extension id (`anlejcjfgabfkgbhbcbojlmccagbfdhg`). The desktop's origin
 allow-list includes it (`STORE_EXTENSION_ID` in `ws_server.rs`; `LARE_STORE_EXTENSION_ID` overrides it
 at build time), and Supabase Auth needs `https://<that id>.chromiumapp.org/auth/callback` in its
-redirect URLs for sign-in.
+redirect URLs for sign-in. If the redirect URL is missing, Supabase falls back to the Site URL, so the
+GitHub/Google popup lands on the landing page instead of returning to the extension. Email sign-in
+(desktop and extension) uses a 6-digit code via `signInWithOtp` + `verifyOtp`, so the Supabase "Magic Link"
+and "Confirm signup" email templates must include `{{ .Token }}`; a link-only template sends a magic link
+and there is no code to type.
 
 ## Licensing
 

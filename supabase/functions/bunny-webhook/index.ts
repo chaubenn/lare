@@ -25,9 +25,10 @@ Deno.serve(
     if (!status) return json({ ignored: true, status: payload.Status });
 
     const admin = adminClient();
+    // ready_at is stamped by the database the first time the video is ready (0033), so a replayed
+    // or repeated ready event cannot move it.
     const patch: Record<string, unknown> = { status };
     if (status === "ready") {
-      patch.ready_at = new Date().toISOString();
       const details = await getVideo(payload.VideoGuid).catch(() => null);
       if (details) {
         patch.duration_ms = Math.round((details.length ?? 0) * 1000);
@@ -40,7 +41,10 @@ Deno.serve(
     // Never regress a video that is already ready (e.g. late "processing" events).
     const query = admin.from("videos").update(patch).eq("bunny_video_id", payload.VideoGuid);
     const { error } = status === "ready" ? await query : await query.neq("status", "ready");
-    if (error) return json({ error: error.message }, 500);
+    if (error) {
+      console.error("videos update failed", error);
+      return json({ error: "update failed" }, 500);
+    }
     return json({ ok: true, status });
   }),
 );

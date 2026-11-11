@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-expect-auth-callback"
+description = "Enables the expect_auth_callback command without any pre-configured scope."
+commands.allow = ["expect_auth_callback"]
+
+[[permission]]
+identifier = "deny-expect-auth-callback"
+description = "Denies the expect_auth_callback command without any pre-configured scope."
+commands.deny = ["expect_auth_callback"]

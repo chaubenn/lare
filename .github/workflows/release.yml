@@ -41,19 +41,25 @@ jobs:
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Resolve tag + version
         id: meta
+        # Through env, never `${{ }}` in the script: a tag name is text whoever pushed it
+        # chose, and an interpolated one is pasted into the shell before it runs.
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
           VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG="${{ github.ref_name }}"
+          if [ "$REF_TYPE" = "tag" ]; then
+            TAG="$REF_NAME"
             if [ "$TAG" != "v$VERSION" ]; then
               echo "::error::Tag $TAG does not match tauri.conf.json version $VERSION. Bump the version (apps/desktop/package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml) and re-tag."
               exit 1
             fi
           else
-            TAG="manual-${{ github.run_number }}"
+            TAG="manual-$RUN_NUMBER"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -171,9 +177,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -193,7 +199,7 @@ jobs:
           cp "$(ls .output/*-chrome.zip | head -n1)" ../../Lare-Chrome-Extension.zip
           pnpm zip:store
           cp "$(ls .output/*-chrome.zip | head -n1)" ../../Lare-Chrome-Extension-Store.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: extension-chrome-mv3
           path: Lare-Chrome-Extension*.zip
@@ -229,7 +235,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Download desktop bundles
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: desktop-*
           merge-multiple: true

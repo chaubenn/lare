@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-screen-sharing"
+description = "Enables the clear_screen_sharing command without any pre-configured scope."
+commands.allow = ["clear_screen_sharing"]
+
+[[permission]]
+identifier = "deny-clear-screen-sharing"
+description = "Denies the clear_screen_sharing command without any pre-configured scope."
+commands.deny = ["clear_screen_sharing"]

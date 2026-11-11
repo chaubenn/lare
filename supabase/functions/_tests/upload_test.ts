@@ -6,6 +6,7 @@ Deno.test("upload endpoints authenticate, authorize, validate, and preserve read
   const handlers: ((req: Request) => Promise<Response>)[] = [];
   let foreignSession = false;
   let missingVideo = false;
+  let limitReached = false;
   let bunnyStatus = 2;
   let videoStatus = "processing";
   let created = 0;
@@ -30,6 +31,14 @@ Deno.test("upload endpoints authenticate, authorize, validate, and preserve read
     );
     const method = init?.method ?? "GET";
     if (url.pathname === "/auth/v1/user") return json({ id: "owner" });
+    if (url.pathname === "/rest/v1/rpc/claim_usage") {
+      const body = JSON.parse(String(init?.body));
+      assert(
+        body.p_user_id === "owner" && body.p_kind === "video_upload",
+        "claim the caller's quota",
+      );
+      return json(!limitReached);
+    }
     if (url.pathname === "/rest/v1/sessions")
       return json({ id: "session", user_id: foreignSession ? "other" : "owner" });
     if (url.pathname === "/rest/v1/videos") {
@@ -91,6 +100,12 @@ Deno.test("upload endpoints authenticate, authorize, validate, and preserve read
       assert((await invoke(0, { sessionId: "session" })).status === 404, "Expected 404");
       assert(created === 0, "Must not provision for someone else's session");
       foreignSession = false;
+    });
+    await t.step("daily limit refuses before Bunny provisioning", async () => {
+      limitReached = true;
+      assert((await invoke(0, {})).status === 429, "Expected 429");
+      assert(created === 0, "Must not provision past the limit");
+      limitReached = false;
     });
     await t.step("browser MIME and original credential shape preserved", async () => {
       const response = await invoke(0, {

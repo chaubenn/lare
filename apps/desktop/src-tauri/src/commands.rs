@@ -96,10 +96,9 @@ pub fn preview_url(
     previews: State<'_, crate::preview::PreviewFiles>,
     path: String,
 ) -> Result<String, String> {
-    let path = std::fs::canonicalize(&path).map_err(|e| format!("no such recording: {e}"))?;
-    let root = std::fs::canonicalize(rec.recordings_dir()).map_err(err)?;
-    if !path.starts_with(&root) {
-        return Err("path is not a recording".to_string());
+    let path = under_recordings(&rec, Path::new(&path))?;
+    if !path.exists() {
+        return Err("no such recording".to_string());
     }
     let token = previews.register(&path);
     Ok(format!(
@@ -152,6 +151,10 @@ pub async fn recorder_status(rec: Rec<'_>) -> Result<StatePayload, String> {
 pub async fn recording_start(rec: Rec<'_>, req: DemoStart) -> Result<StatePayload, String> {
     let recorder = rec.inner().clone();
     let prepared = recorder.take_prepared_upload().await;
+    if let Some(upload) = &req.upload {
+        pinned_tus(&upload.tus)?;
+        pinned_upload_url(&upload.upload_url)?;
+    }
     recorder
         .start(
             crate::recorder::StartSpec {
@@ -251,30 +254,50 @@ pub fn recordings_list(rec: Rec<'_>) -> Vec<CompletedPayload> {
 
 #[tauri::command]
 pub fn recording_delete(rec: Rec<'_>, recording_id: String) -> Result<(), String> {
-    let dir = rec.recordings_dir().join(safe_id(&recording_id)?);
+    let dir = recording_dir(rec.recordings_dir(), &recording_id)?;
     if !dir.exists() {
         return Ok(());
     }
     std::fs::remove_dir_all(&dir).map_err(err)
 }
 
-fn safe_id(id: &str) -> Result<&str, String> {
-    if id.is_empty() || id.contains(['/', '\\', '.']) {
+/// The directory of the recording `id` names, confirmed to be one of the recordings.
+///
+/// The id is checked for shape before it is joined to anything: `recorder` names a take
+/// `<ms>-<random>` in hex (a uuid fits the same rule), and a denylist of separators missed that on
+/// Windows `C:` or `C:name` replaces the base path instead of extending it.
+fn recording_dir(root: &Path, id: &str) -> Result<PathBuf, String> {
+    let well_formed =
+        (1..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-');
+    if !well_formed {
         return Err("invalid recording id".into());
     }
-    Ok(id)
+    let dir = confine(root, &root.join(id))?;
+    if dir.parent() != Some(root) {
+        return Err("invalid recording id".into());
+    }
+    Ok(dir)
 }
 
 /// `path` resolved and confirmed to live under the recordings directory.
 ///
-/// Every command that takes a path from the webview goes through here. The webview renders
-/// content other users wrote, so a path it hands over is not trusted to name anything outside
-/// the recordings this app made: without the check `read_file_bytes` is a file reader and
-/// `make_thumbnail` a file writer for the whole disk. Both sides are canonicalised, so `..`,
-/// symlinks and Windows path prefixes cannot slip a file past the comparison. The file itself
-/// may not exist yet (a thumbnail about to be written, an upload marker); its directory must.
+/// Every command that takes a path from the webview goes through here (an id through
+/// [`recording_dir`]). The webview renders content other users wrote, so a path it hands over is
+/// not trusted to name anything outside the recordings this app made: without the check
+/// `read_file_bytes` is a file reader and `make_thumbnail` a file writer for the whole disk. Both
+/// sides are canonicalised, so `..`, symlinks and Windows path prefixes cannot slip a file past
+/// the comparison. The file itself may not exist yet (a thumbnail about to be written, an upload
+/// marker); its directory must.
+///
+/// The result is the recordings directory joined with what was confirmed to lie under it, which
+/// is the spelling the recorder itself uses: callers act on that rather than on what was checked,
+/// and it still matches the recorder's own keys (live uploads, previews).
 fn under_recordings(rec: &Recorder, path: &Path) -> Result<PathBuf, String> {
-    let root = std::fs::canonicalize(rec.recordings_dir())
+    confine(rec.recordings_dir(), path)
+}
+
+fn confine(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    let canonical_root = std::fs::canonicalize(root)
         .map_err(|e| format!("recordings directory unavailable: {e}"))?;
     let resolved = match std::fs::canonicalize(path) {
         Ok(resolved) => resolved,
@@ -287,10 +310,35 @@ fn under_recordings(rec: &Recorder, path: &Path) -> Result<PathBuf, String> {
                 .join(name)
         }
     };
-    if !resolved.starts_with(&root) {
-        return Err("path is outside the recordings directory".to_string());
+    let inside = resolved
+        .strip_prefix(&canonical_root)
+        .map_err(|_| "path is outside the recordings directory".to_string())?;
+    if inside.as_os_str().is_empty() {
+        return Err("path is the recordings directory itself".to_string());
     }
-    Ok(resolved)
+    Ok(root.join(inside))
+}
+
+/// Bunny Stream's TUS endpoint (`BUNNY_TUS_ENDPOINT` in the Edge Functions), the only server a
+/// recording is uploaded to. The credentials reach Rust through the webview, so the endpoint and
+/// every upload URL are held to it rather than trusted: otherwise a webview that ran someone
+/// else's script could send a recording anywhere.
+const BUNNY_TUS_ENDPOINT: &str = "https://video.bunnycdn.com/tusupload";
+
+fn pinned_tus(tus: &lare_bunny::TusCredentials) -> Result<(), String> {
+    if tus.endpoint != BUNNY_TUS_ENDPOINT {
+        return Err("upload endpoint is not Bunny Stream".to_string());
+    }
+    Ok(())
+}
+
+fn pinned_upload_url(url: &str) -> Result<(), String> {
+    let bunny = reqwest::Url::parse(BUNNY_TUS_ENDPOINT).map_err(err)?;
+    let url = reqwest::Url::parse(url).map_err(|_| "invalid upload URL".to_string())?;
+    if url.origin() != bunny.origin() {
+        return Err("upload URL is not on Bunny Stream".to_string());
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +465,7 @@ fn show_notification(
 
 #[tauri::command]
 pub async fn media_info(rec: Rec<'_>, path: PathBuf) -> Result<MediaInfo, String> {
-    under_recordings(&rec, &path)?;
+    let path = under_recordings(&rec, &path)?;
     tokio::task::spawn_blocking(move || lare_recording::thumbnail::probe(&path).map_err(err))
         .await
         .map_err(err)?
@@ -438,18 +486,16 @@ pub struct ThumbnailRequest {
 /// Write a JPEG poster frame and return its path (read it with the fs plugin to upload).
 #[tauri::command]
 pub async fn make_thumbnail(rec: Rec<'_>, req: ThumbnailRequest) -> Result<PathBuf, String> {
-    under_recordings(&rec, &req.video_path)?;
-    if let Some(output) = &req.output {
-        under_recordings(&rec, output)?;
-    }
+    let video_path = under_recordings(&rec, &req.video_path)?;
+    let output = match &req.output {
+        Some(output) => under_recordings(&rec, output)?,
+        None => video_path.with_file_name("thumbnail.jpg"),
+    };
     tokio::task::spawn_blocking(move || {
-        let output = req
-            .output
-            .unwrap_or_else(|| req.video_path.with_file_name("thumbnail.jpg"));
-        let duration = lare_recording::thumbnail::duration_ms(&req.video_path).unwrap_or(0);
+        let duration = lare_recording::thumbnail::duration_ms(&video_path).unwrap_or(0);
         let at = req.at_ms.unwrap_or(1000).min(duration.saturating_sub(200));
         lare_recording::thumbnail::extract_jpeg(
-            &req.video_path,
+            &video_path,
             &output,
             at,
             req.max_width.unwrap_or(640),
@@ -492,20 +538,22 @@ pub struct UploadResult {
 
 #[tauri::command]
 pub async fn prepare_bunny_upload(rec: Rec<'_>, tus: lare_bunny::TusCredentials) -> Result<String, String> {
+    pinned_tus(&tus)?;
     rec.prepare_upload(tus).await
 }
 
 #[tauri::command]
 pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Result<UploadResult, String> {
-    under_recordings(&rec, &job.path)?;
+    let path = under_recordings(&rec, &job.path)?;
+    pinned_tus(&job.tus)?;
     let client = lare_bunny::http_client();
-    if let Some(upload_url) = rec.join_live_upload(&job.path, &job.tus, job.resume_url.as_deref()).await? {
-        return Ok(UploadResult { upload_url, size_bytes: tokio::fs::metadata(&job.path).await.map_err(err)?.len() });
+    if let Some(upload_url) = rec.join_live_upload(&path, &job.tus, job.resume_url.as_deref()).await? {
+        return Ok(UploadResult { upload_url, size_bytes: tokio::fs::metadata(&path).await.map_err(err)?.len() });
     }
-    let size_bytes = tokio::fs::metadata(&job.path).await.map_err(err)?.len();
+    let size_bytes = tokio::fs::metadata(&path).await.map_err(err)?.len();
     let job_id = job.job_id.clone();
     // Remember the upload URL next to the file so a restart can resume.
-    let marker = job.path.with_extension("upload.json");
+    let marker = path.with_extension("upload.json");
     let saved_url = {
         std::fs::read_to_string(&marker)
             .ok()
@@ -521,15 +569,18 @@ pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Re
     // capture.mp4. The frontend may still hold the pre-capture URL after salvage.
     // Never resume that object's offset against the replacement file. Prefer a
     // matching per-file checkpoint on subsequent retries over the stale UI URL.
-    let capture_path = job.path.parent().map(|p| p.join("capture.mp4"));
-    let inherited_capture_url = capture_path.as_ref().filter(|p| *p != &job.path)
+    let capture_path = path.parent().map(|p| p.join("capture.mp4"));
+    let inherited_capture_url = capture_path.as_ref().filter(|p| *p != &path)
         .and_then(|p| std::fs::read_to_string(p.with_extension("upload.json")).ok())
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
         .and_then(|v| v["uploadUrl"].as_str().map(str::to_string));
     let resume_url = saved_url.or_else(|| job.resume_url.clone())
         .filter(|url| Some(url) != inherited_capture_url.as_ref());
     let resume_url = match resume_url {
-        Some(url) => url,
+        Some(url) => {
+            pinned_upload_url(&url)?;
+            url
+        }
         None => lare_bunny::create_deferred_upload(&client, &job.tus)
             .await
             .map_err(err)?,
@@ -540,12 +591,12 @@ pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Re
     )
     .await
     .map_err(err)?;
-    info!(job = %job_id, path = %job.path.display(), size_bytes, "upload started");
+    info!(job = %job_id, path = %path.display(), size_bytes, "upload started");
     // Retries are closed files. Instant captures join their live tailer above.
     let (_finished, completion) = tokio::sync::watch::channel(true);
     let upload_url = lare_bunny::upload_growing_file(
         &client,
-        &job.path,
+        &path,
         &job.tus,
         &resume_url,
         lare_bunny::DEFAULT_CHUNK_SIZE,
@@ -573,7 +624,8 @@ pub async fn upload_to_bunny(app: AppHandle, rec: Rec<'_>, job: UploadJob) -> Re
 /// Persist an upload URL for later resume (called by the frontend right after `create-upload`).
 #[tauri::command]
 pub fn remember_upload(rec: Rec<'_>, path: PathBuf, upload_url: String) -> Result<(), String> {
-    under_recordings(&rec, &path)?;
+    let path = under_recordings(&rec, &path)?;
+    pinned_upload_url(&upload_url)?;
     let marker = path.with_extension("upload.json");
     std::fs::write(
         marker,
@@ -704,8 +756,7 @@ pub async fn transcribe_recording(
     })
     .await
     .map_err(|e| format!("{e:#}"))?;
-    let input = job.input.clone();
-    under_recordings(&rec, &input)?;
+    let input = under_recordings(&rec, &job.input)?;
     if !input.exists() {
         return Err(format!("{} does not exist", input.display()));
     }
@@ -735,7 +786,7 @@ pub async fn transcribe_recording(
 /// Read a small file (thumbnail/VTT) as bytes for uploading from the webview.
 #[tauri::command]
 pub async fn read_file_bytes(rec: Rec<'_>, path: PathBuf) -> Result<tauri::ipc::Response, String> {
-    under_recordings(&rec, &path)?;
+    let path = under_recordings(&rec, &path)?;
     let meta = tokio::fs::metadata(&path).await.map_err(err)?;
     if meta.len() > 64 * 1024 * 1024 {
         return Err("file too large to read into memory".into());
@@ -757,4 +808,73 @@ pub fn delete_file(rec: Rec<'_>, path: PathBuf) -> Result<(), String> {
 #[tauri::command]
 pub fn path_exists(rec: Rec<'_>, path: PathBuf) -> bool {
     under_recordings(&rec, &path).is_ok_and(|p| p.exists())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_root() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("lare-commands-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("0190f3a2b4c5d-0123456789abcdef")).unwrap();
+        root
+    }
+
+    #[test]
+    fn recording_ids_name_a_directory_under_the_root() {
+        let root = temp_root();
+        let dir = recording_dir(&root, "0190f3a2b4c5d-0123456789abcdef").unwrap();
+        assert_eq!(dir, root.join("0190f3a2b4c5d-0123456789abcdef"));
+        // Not there yet (or already gone) is still a recording directory.
+        assert!(recording_dir(&root, "6f2c9e0a-1b2c-4d3e-8f90-0a1b2c3d4e5f").is_ok());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn recording_ids_that_could_leave_the_root_are_refused() {
+        let root = temp_root();
+        // Drive-relative (`C:name`) is the one a separator denylist missed.
+        let separators = ["a/b", r"a\b", "/tmp", r"\\server\share"];
+        let ids = ["", "C:", "C:name", "..", ".", "abc.d"];
+        for id in ids.into_iter().chain(separators) {
+            assert!(recording_dir(&root, id).is_err(), "{id:?} was accepted");
+        }
+        assert!(recording_dir(&root, &"a".repeat(65)).is_err());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn paths_are_confined_and_keep_the_root_spelling() {
+        let root = temp_root();
+        let take = root.join("0190f3a2b4c5d-0123456789abcdef");
+        let file = take.join("capture.mp4");
+        std::fs::write(&file, b"x").unwrap();
+        assert_eq!(confine(&root, &file).unwrap(), file);
+        // A file about to be written, in a directory that exists.
+        let thumb = take.join("thumbnail.jpg");
+        assert_eq!(confine(&root, &thumb).unwrap(), thumb);
+        assert!(confine(&root, &take.join("..").join("..").join("elsewhere")).is_err());
+        assert!(confine(&root, &root).is_err());
+        assert!(confine(&root, &std::env::temp_dir()).is_err());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn uploads_only_go_to_bunny_stream() {
+        let tus = |endpoint: &str| lare_bunny::TusCredentials {
+            endpoint: endpoint.to_string(),
+            headers: Default::default(),
+            metadata: lare_bunny::TusMetadata {
+                filetype: "video/mp4".into(),
+                title: "t".into(),
+            },
+        };
+        assert!(pinned_tus(&tus(BUNNY_TUS_ENDPOINT)).is_ok());
+        assert!(pinned_tus(&tus("https://video.bunnycdn.com.evil.test/tusupload")).is_err());
+        assert!(pinned_tus(&tus("http://video.bunnycdn.com/tusupload")).is_err());
+        assert!(pinned_upload_url("https://video.bunnycdn.com/tusupload/abc").is_ok());
+        assert!(pinned_upload_url("https://evil.test/tusupload/abc").is_err());
+        assert!(pinned_upload_url("https://video.bunnycdn.com:8443/tusupload/abc").is_err());
+        assert!(pinned_upload_url("not a url").is_err());
+    }
 }

@@ -21,11 +21,46 @@ export function userClient(req: Request): AnyClient {
   });
 }
 
-/** Service-role client (bypasses RLS). Use only after authorising the caller. */
+/**
+ * Service-role client (bypasses RLS). Use only after authorising the caller; load the caller's own
+ * rows through `ownedRow`.
+ */
 export function adminClient(): AnyClient {
   return createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+// deno-lint-ignore no-explicit-any
+type OwnedRow = { user_id: string } & Record<string, any>;
+
+/**
+ * The caller's own row of `table`, read with the service role. `user_id` is part of the query and
+ * checked again on the result, so a row someone else owns is never returned: it is a 404, like a
+ * row that does not exist.
+ */
+export async function ownedRow<T extends { user_id: string } = OwnedRow>(
+  admin: AnyClient,
+  table: string,
+  id: string,
+  userId: string,
+  columns: string,
+  notFound: string,
+): Promise<T> {
+  const select = columns.split(",").some((c) => c.trim() === "user_id")
+    ? columns
+    : `${columns}, user_id`;
+  const { data, error } = await admin
+    .from(table)
+    .select(select)
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  // 22P02: the id is not a uuid, so there is no such row.
+  if (error && error.code !== "22P02") throw new Error(`${table} select failed: ${error.message}`);
+  const row = (error ? null : data) as unknown as T | null;
+  if (!row || row.user_id !== userId) throw new HttpError(notFound, 404);
+  return row;
 }
 
 export async function requireUser(req: Request): Promise<{ id: string; client: AnyClient }> {

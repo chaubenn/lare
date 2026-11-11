@@ -5,6 +5,7 @@
   "windows": ["recorder", "camera"],
   "permissions": [
     "core:default",
+    "overlay-windows",
     "core:window:allow-start-dragging",
     "core:window:allow-close",
     "core:window:allow-hide",

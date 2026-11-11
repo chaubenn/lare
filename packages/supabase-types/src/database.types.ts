@@ -50,6 +50,38 @@ export type Database = {
           },
         ]
       }
+      bridge_secrets: {
+        Row: {
+          created_at: string
+          install_id: string
+          secret: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          install_id: string
+          secret: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          install_id?: string
+          secret?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bridge_secrets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       follows: {
         Row: {
           created_at: string

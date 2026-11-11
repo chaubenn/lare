@@ -1,9 +1,11 @@
 import { postStateOf } from "@lare/shared";
 import { cn } from "@lare/ui";
-import { Heart, Lock, MessageCircle, Sparkles } from "@lare/ui/icons";
+import { Check, Heart, Link2, Lock, MessageCircle, Sparkles } from "@lare/ui/icons";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Avatar } from "@/components/ui/Avatar";
 import { PostStateBadge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ExpandableText } from "@/components/ui/ExpandableText";
 import { CommentsPreview } from "@/features/feed/CommentsPreview";
 import { PostSlides, postHasSlides } from "@/features/feed/PostSlides";
@@ -11,6 +13,7 @@ import type { FeedPost } from "@/features/feed/queries";
 import { useNotify } from "@/features/notifications/notices";
 import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import type { UserPost } from "@/features/profile/queries";
+import { SHARE_LINKS, useCopyPostLink } from "@/features/publishing/posts/postActions";
 import { useToggleLike } from "@/features/publishing/posts/social";
 import { errorMessage } from "@/lib/supabase";
 
@@ -18,9 +21,10 @@ const cardClass =
   "rounded-[var(--lare-r-4)] border border-[var(--border)] bg-[var(--surface-raised)]";
 
 /**
- * A post in the feed, mirroring the web feed card exactly: author header with the post link
- * action, the caption above the swipe deck (images → demo video; absent when the post has no media), then the like/comment row with the "View post" link inline and an inline preview
- * of the first comments.
+ * A post in the feed, mirroring the web feed card exactly: author header with the copy-link
+ * action (shown on hover or focus), the caption above the swipe deck (images → demo video; absent
+ * when the post has no media), then the like/comment row with the "View post" link inline and an
+ * inline preview of the first comments.
  */
 export function PostCard({
   post,
@@ -44,7 +48,7 @@ export function PostCard({
   const showAiReview = Boolean(post.include_ai_insights && session?.kind === "interview");
 
   return (
-    <article className={cn(cardClass, "overflow-hidden")}>
+    <article className={cn(cardClass, "group overflow-hidden")}>
       <header className="flex items-center gap-3 p-4 pb-3 sm:px-5">
         {author?.handle ? (
           <ProfileHoverCard handle={author.handle} className="shrink-0">
@@ -90,7 +94,9 @@ export function PostCard({
             <PostStateBadge state={postStateOf(post)} />
           </div>
         </div>
-        <div className="shrink-0"></div>
+        {SHARE_LINKS && post.status === "published" && post.slug ? (
+          <CopyLinkButton slug={post.slug} />
+        ) : null}
       </header>
 
       <div className="px-4 sm:px-5">
@@ -169,6 +175,47 @@ export function PostCard({
         />
       </div>
     </article>
+  );
+}
+
+/**
+ * Hidden until the card is hovered or something in it has focus, so the feed stays quiet. After a
+ * copy the icon turns into a tick for a moment, alongside the "Link copied" toast.
+ */
+function CopyLinkButton({ slug }: { slug: string }) {
+  const copyLink = useCopyPostLink();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+
+  return (
+    <div
+      className={cn(
+        "shrink-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100",
+        copied ? "opacity-100" : "opacity-0",
+      )}
+    >
+      <Button
+        size="sm"
+        variant="ghost"
+        aria-label={copied ? "Link copied" : "Copy link"}
+        tooltipAlign="end"
+        icon={
+          copied ? (
+            <Check className="size-4 text-emerald-400" aria-hidden />
+          ) : (
+            <Link2 className="size-4" aria-hidden />
+          )
+        }
+        onClick={async () => {
+          if (await copyLink(slug)) setCopied(true);
+        }}
+      />
+    </div>
   );
 }
 

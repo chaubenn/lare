@@ -69,7 +69,13 @@ pub enum ExtToApp {
         ext_version: String,
         #[serde(rename = "userId")]
         user_id: Option<String>,
+        /// 32 random bytes (hex) the app's `auth.challenge` proof covers. Absent before v4.
+        #[serde(default)]
+        nonce: Option<String>,
     },
+    /// The extension's half of the pairing handshake, answering `auth.challenge`.
+    #[serde(rename = "auth.response")]
+    AuthResponse { proof: String },
     #[serde(rename = "session.start", rename_all = "camelCase")]
     SessionStart {
         session_id: String,
@@ -136,6 +142,8 @@ pub enum ErrorCode {
     RecordingFailed,
     BadMessage,
     UnsupportedProtocol,
+    /// The extension's `auth.response` did not prove it holds the pairing secret.
+    AuthFailed,
 }
 
 /// What the recorder is doing, as of the last `recording.state` it sent. Sent in `hello.ack` so an
@@ -171,6 +179,14 @@ pub enum AppToExt {
         started_at: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         message: Option<String>,
+    },
+    /// The app's half of the pairing handshake: `proof` covers the extension's nonce, and the
+    /// extension answers with one covering `nonce`. `install_id` names the secret to look up.
+    #[serde(rename = "auth.challenge", rename_all = "camelCase")]
+    AuthChallenge {
+        install_id: String,
+        nonce: String,
+        proof: String,
     },
     #[serde(rename = "error")]
     Error { code: ErrorCode, message: String },

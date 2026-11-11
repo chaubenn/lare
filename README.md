@@ -6,7 +6,7 @@
 </picture>
 
 **Social progress tracking for LeetCode.**
-Your practice logs itself — every problem opened, every submission judged, with code,
+Your practice logs itself: every problem opened, every submission judged, with code,
 runtime and memory percentiles and the runtime distribution graph.
 
 [![Release](https://img.shields.io/github/v/release/chaubenn/lare?color=%2310b981&label=release)](https://github.com/chaubenn/lare/releases/latest)
@@ -20,16 +20,11 @@ runtime and memory percentiles and the runtime distribution graph.
 
 ---
 
-> **This repository is published so the source can be read, not so it can be built or run.**
-> Lare is a hosted service, and building or self-hosting it is not supported: there are no setup,
-> build or deployment instructions here, and issues and pull requests are not monitored. To use
-> Lare, install a release from the section below.
-
 Share posts with followers, attach demo videos, and run AI-graded mock interviews.
 
 | | |
 | --- | --- |
-| **Chrome extension** | Captures problems, your Monaco edits and judge results on its own — nothing to start or stop. Starts mock interviews from a side panel. |
+| **Chrome extension** | Captures problems, your Monaco edits and judge results on its own, with nothing to start or stop. Starts mock interviews from a side panel. |
 | **Desktop app** (Tauri) | Records your screen natively with Cap's recording stack and **transcribes interviews locally with whisper.cpp**. |
 | **Website** | A landing page with the downloads, and the public page for each shared post (`lare.fyi/p/<slug>`). Lare is the app and the extension; there is nothing to sign in to on the web. |
 

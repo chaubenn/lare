@@ -4349,7 +4349,7 @@ dependencies = [
 
 [[package]]
 name = "lare-desktop"
-version = "3.5.1"
+version = "3.6.0"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -4362,6 +4362,7 @@ dependencies = [
  "objc",
  "objc2 0.6.2",
  "reqwest 0.13.4",
+ "ring",
  "serde",
  "serde_json",
  "tauri",

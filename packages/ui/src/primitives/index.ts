@@ -1,4 +1,4 @@
-export { Avatar } from "./Avatar";
+export { Avatar, allowAvatarOrigin } from "./Avatar";
 export { Badge, CountBadge, KindBadge, SessionStatusBadge } from "./Badge";
 export { Button, type ButtonProps } from "./Button";
 export {

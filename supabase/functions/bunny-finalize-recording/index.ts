@@ -2,7 +2,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getVideo, libraryId, mapWebhookStatus } from "../_shared/bunny.ts";
 import { HttpError, handler, json, readJson } from "../_shared/http.ts";
-import { adminClient, requireUser } from "../_shared/supabase.ts";
+import { adminClient, ownedRow, requireUser } from "../_shared/supabase.ts";
 
 Deno.serve(
   handler(async (req) => {
@@ -21,14 +21,15 @@ Deno.serve(
       throw new HttpError("Invalid recording metadata", 400);
     }
     const admin = adminClient();
-    const { data: video, error } = await admin
-      .from("videos")
-      .select("id,user_id,bunny_video_id,library_id,status")
-      .eq("id", body.videoId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (error) throw new HttpError("Could not read recording", 500);
-    if (!video?.bunny_video_id || Number(video.library_id) !== libraryId())
+    const video = await ownedRow(
+      admin,
+      "videos",
+      body.videoId,
+      user.id,
+      "id,user_id,bunny_video_id,library_id,status",
+      "Recording not found",
+    );
+    if (!video.bunny_video_id || Number(video.library_id) !== libraryId())
       throw new HttpError("Recording not found", 404);
     // Never trust a client-provided upload URL (SSRF) or mark an unreceived video playable.
     const bunny = await getVideo(video.bunny_video_id);
@@ -41,9 +42,9 @@ Deno.serve(
       size_bytes: body.sizeBytes,
       duration_ms: body.durationMs,
     };
+    // ready_at is stamped by the database (0033).
     if (video.status !== "ready") patch.status = status;
     if (status === "ready") {
-      if (video.status !== "ready") patch.ready_at = new Date().toISOString();
       patch.width = bunny.width || null;
       patch.height = bunny.height || null;
     }

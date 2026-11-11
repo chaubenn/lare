@@ -23,7 +23,7 @@ import {
   submissionIdFromPayload,
   submissionIdFromUrl,
 } from "@lare/shared";
-import { BRIDGE_MARK, isMainToIsolated, type MainToIsolated } from "./bridge";
+import { BRIDGE_MARK, type MainToIsolated, parseMainToIsolated } from "./bridge";
 import { fetchQuestion, fetchSubmissionDetails, statusLabel } from "./leetcodeApi";
 import {
   type CapturedSubmission,
@@ -214,8 +214,9 @@ export class PageController {
 
   // ---- MAIN-world bridge ---------------------------------------------------
   private onWindowMessage = (ev: MessageEvent) => {
-    if (ev.origin !== window.location.origin || !isMainToIsolated(ev.data)) return;
-    const msg: MainToIsolated = ev.data;
+    if (ev.origin !== window.location.origin) return;
+    const msg = parseMainToIsolated(ev.data);
+    if (!msg) return;
     switch (msg.kind) {
       case "monaco-ready":
         this.set({ monacoReady: true });

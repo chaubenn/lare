@@ -56,14 +56,33 @@ export function lineDiff(before: string, after: string): { added: string[]; remo
   return { added, removed };
 }
 
-export async function gunzipJson<T>(bytes: Uint8Array): Promise<T> {
+/** Gunzip and parse, refusing to inflate past `maxBytes` (a small gzip can expand enormously). */
+export async function gunzipJson<T>(bytes: Uint8Array, maxBytes: number): Promise<T> {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
-  const stream = new Blob([copy.buffer as ArrayBuffer])
+  const reader = new Blob([copy.buffer as ArrayBuffer])
     .stream()
-    .pipeThrough(new DecompressionStream("gzip"));
-  const text = await new Response(stream).text();
-  return JSON.parse(text) as T;
+    .pipeThrough(new DecompressionStream("gzip"))
+    .getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error(`gzip content is larger than ${maxBytes} bytes`);
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(out)) as T;
 }
 
 // ---------------------------------------------------------------------------

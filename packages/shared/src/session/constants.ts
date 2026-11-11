@@ -14,13 +14,17 @@ export const DEEP_LINK_SCHEME = "lare";
  * - 2: `session.cancel` (added late, without a bump: a v2 app may not understand it).
  * - 3: `session.cancel` is guaranteed; `session.*` frames only act on the session they name;
  *   `hello.ack.recording` carries the recorder's state.
+ * - 4: both sides prove they hold the install's pairing secret (`hello.nonce`, `auth.challenge`,
+ *   `auth.response`) before `hello.ack`.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 /**
- * Oldest desktop protocol the extension can run a mock interview against. It discards a failed
- * start with `session.cancel`, which a v2 app may not know.
+ * Oldest desktop protocol the extension talks to. An app older than 4 cannot prove it is Lare, so
+ * whatever answers like one is treated as "update the desktop app".
  */
-export const MIN_DESKTOP_PROTOCOL_VERSION = 3;
+export const MIN_DESKTOP_PROTOCOL_VERSION = 4;
+/** Domain-separation prefix of the pairing HMAC transcript (`pairingTranscript`). */
+export const PAIRING_DOMAIN = "lare-bridge/1";
 
 /** Bunny Stream library used for all videos. */
 export const BUNNY_LIBRARY_ID = 743884;

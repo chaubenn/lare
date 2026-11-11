@@ -312,14 +312,14 @@ export async function finalizeSession(
           ? "Mock interview"
           : "Practice session";
 
-  // Insert only: a retry after the post already exists must leave it alone. Posts refuse a client
-  // move from published back to draft, so overwriting `status` would fail that retry forever, and
-  // the desktop app attaches the interview video to the row when its upload lands.
+  // Insert only: a retry after the post already exists must leave it alone, since the author may
+  // have published it and the desktop app attaches the interview video to the row when its upload
+  // lands. `status` is left to the column default (draft); only publishing and `unpublish_post`
+  // change it.
   const { error: insertErr } = await supabase.from("posts").upsert(
     {
       user_id: userId,
       session_id: session.sessionId,
-      status: "draft",
       visibility: "public",
       title,
       include_ai_insights: false,

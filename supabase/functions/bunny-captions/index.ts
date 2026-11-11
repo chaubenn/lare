@@ -3,7 +3,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { uploadCaptions } from "../_shared/bunny.ts";
 import { HttpError, handler, json, readJson } from "../_shared/http.ts";
-import { adminClient, requireUser } from "../_shared/supabase.ts";
+import { adminClient, ownedRow, requireUser } from "../_shared/supabase.ts";
 
 const MAX_VTT_BYTES = 2 * 1024 * 1024;
 const LANG_RE = /^[a-z]{2,3}(-[a-zA-Z]{2,4})?$/;
@@ -22,13 +22,14 @@ Deno.serve(
     if (!LANG_RE.test(lang)) throw new HttpError("invalid lang");
     const label = (body.label ?? "English").slice(0, 40);
 
-    const admin = adminClient();
-    const { data: video } = await admin
-      .from("videos")
-      .select("id, user_id, bunny_video_id")
-      .eq("id", body.videoId)
-      .maybeSingle();
-    if (!video || video.user_id !== userId) throw new HttpError("Video not found", 404);
+    const video = await ownedRow(
+      adminClient(),
+      "videos",
+      body.videoId,
+      userId,
+      "id, user_id, bunny_video_id",
+      "Video not found",
+    );
     if (!video.bunny_video_id) throw new HttpError("Video has not been uploaded yet", 409);
 
     await uploadCaptions(video.bunny_video_id, lang, label, body.vtt);

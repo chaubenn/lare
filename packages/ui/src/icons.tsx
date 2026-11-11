@@ -25,6 +25,7 @@ import {
   InboxIcon,
   InformationCircleIcon,
   Key01Icon,
+  Link01Icon,
   LinkSquare02Icon,
   Loading03Icon,
   LockIcon,
@@ -113,6 +114,7 @@ export const ImagePlus = icon(ImageAdd01Icon);
 export const Inbox = icon(InboxIcon);
 export const Info = icon(InformationCircleIcon);
 export const KeyRound = icon(Key01Icon);
+export const Link2 = icon(Link01Icon);
 export const ListChecks = icon(CheckListIcon);
 export const LoaderCircle = icon(Loading03Icon);
 export const Lock = icon(LockIcon);

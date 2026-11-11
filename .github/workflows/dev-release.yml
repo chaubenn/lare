@@ -56,7 +56,7 @@ jobs:
       extension: ${{ steps.targets.outputs.extension }}
       assets: ${{ steps.targets.outputs.assets }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Pick targets from the tag
         id: targets
         env:
@@ -130,17 +130,17 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.create-release.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master (= v1), toolchain set by the input below
         with:
           toolchain: 1.88.0
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # Not the release key: the profile overrides above produce different artifacts.
           key: dev-release-${{ matrix.target }}
@@ -183,18 +183,21 @@ jobs:
             } >> "$GITHUB_ENV"
           fi
       - name: Build installers
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # tauri.conf.json has createUpdaterArtifacts on, so the bundler needs the key even
-          # here. The signed bundles are trimmed off the dev release below — nothing points
-          # at them, because a dev release writes no latest.json.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # No updater signing key here, on purpose. A dev release serves no updater (no
+          # latest.json), so .github/tauri.dev-release.conf.json turns createUpdaterArtifacts
+          # off and the bundler never asks for TAURI_SIGNING_PRIVATE_KEY. That key signs what
+          # every installed copy of Lare accepts as an update; it stays with release builds.
+          # The QA downloads are unaffected: the updater artifacts are extra files
+          # (.app.tar.gz, .sig) beside the .dmg and setup.exe, which the trim step deleted anyway.
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
-          args: --target ${{ matrix.target }}
+          # The --config path is relative to projectPath (tauri-action and the tauri CLI both
+          # resolve it from apps/desktop).
+          args: --target ${{ matrix.target }} --config ../../.github/tauri.dev-release.conf.json
           releaseId: ${{ needs.create-release.outputs.release_id }}
           includeUpdaterJson: false
       - name: Attach stable-named installer
@@ -202,12 +205,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.create-release.outputs.tag }}
+          GLOB: ${{ matrix.glob }}
+          ASSET: ${{ matrix.asset }}
         run: |
           shopt -s nullglob
-          files=( ${{ matrix.glob }} )
-          if [ ${#files[@]} -eq 0 ]; then echo "::error::no installer matched ${{ matrix.glob }}"; exit 1; fi
-          cp "${files[0]}" "${{ matrix.asset }}"
-          gh release upload "$TAG" "${{ matrix.asset }}" --clobber
+          # Unquoted on purpose: the glob has to expand into paths.
+          files=( $GLOB )
+          if [ ${#files[@]} -eq 0 ]; then echo "::error::no installer matched $GLOB"; exit 1; fi
+          cp "${files[0]}" "$ASSET"
+          gh release upload "$TAG" "$ASSET" --clobber
 
   extension:
     name: Chrome extension
@@ -216,9 +222,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm

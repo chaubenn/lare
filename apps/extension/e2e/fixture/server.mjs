@@ -299,6 +299,10 @@ const server = createServer(async (req, res) => {
     if (sub.startsWith("/auth/v1/user")) {
       return json(res, 200, fakeSession().user);
     }
+    // The fake desktop's pairing secret (E2E_PAIRING_SECRET in e2e/fakeDesktop.ts).
+    if (sub.startsWith("/rest/v1/bridge_secrets")) {
+      return json(res, 200, [{ secret: "e2e0".repeat(16) }]);
+    }
     if (sub.startsWith("/rest/v1/profiles")) {
       return json(res, 200, [{ handle: "tester", display_name: "Test User", avatar_url: null }]);
     }

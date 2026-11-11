@@ -21,6 +21,25 @@ export async function setCurrentUser(userId: string | null): Promise<void> {
   await invoke("set_current_user", { userId });
 }
 
+/** This install's extension pairing secret for `userId` (see `ws_server.rs`). */
+export interface BridgeKey {
+  userId: string;
+  installId: string;
+  secret: string;
+}
+
+/** Hand the local server the pairing secret it checks the extension against; null when signed out. */
+export async function setBridgeKey(key: BridgeKey | null): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_bridge_key", { key });
+}
+
+/** Let the local server accept the OAuth callback of the sign-in about to open in the browser. */
+export async function expectAuthCallback(): Promise<void> {
+  if (!inTauri) return;
+  await invoke("expect_auth_callback");
+}
+
 export async function wsStatus(): Promise<WsStatus> {
   if (!inTauri) return { connected: false, port: WS_PORT };
   return invoke<WsStatus>("ws_status");

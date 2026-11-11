@@ -1,12 +1,14 @@
 import { AUTH_CALLBACK_URL } from "@lare/shared";
 import { openExternal } from "@/lib/open";
 import { supabase } from "@/lib/supabase";
+import { expectAuthCallback } from "@/lib/tauri";
 
 export type OAuthProvider = "github" | "google";
 
 /**
  * Start the PKCE flow in the system browser. Supabase redirects to the local Rust server
  * (`http://127.0.0.1:47831/auth/callback`), which forwards the code via the `auth:callback` event.
+ * The server only takes that callback while a sign-in started here is pending, and only once.
  */
 export async function signInWithProvider(provider: OAuthProvider): Promise<void> {
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -15,6 +17,7 @@ export async function signInWithProvider(provider: OAuthProvider): Promise<void>
   });
   if (error) throw error;
   if (!data.url) throw new Error("Supabase did not return a sign-in URL");
+  await expectAuthCallback();
   await openExternal(data.url);
 }
 

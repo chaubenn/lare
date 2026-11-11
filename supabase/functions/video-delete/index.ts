@@ -3,7 +3,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { deleteVideo } from "../_shared/bunny.ts";
 import { HttpError, handler, json, readJson } from "../_shared/http.ts";
-import { adminClient, requireUser } from "../_shared/supabase.ts";
+import { isOwnStoragePath } from "../_shared/storage.ts";
+import { adminClient, ownedRow, requireUser } from "../_shared/supabase.ts";
 
 Deno.serve(
   handler(async (req) => {
@@ -13,19 +14,25 @@ Deno.serve(
     if (!body.videoId) throw new HttpError("videoId required");
 
     const admin = adminClient();
-    const { data: video } = await admin
-      .from("videos")
-      .select("id, user_id, bunny_video_id, thumbnail_path")
-      .eq("id", body.videoId)
-      .maybeSingle();
-    if (!video || video.user_id !== userId) throw new HttpError("Video not found", 404);
+    const video = await ownedRow(
+      admin,
+      "videos",
+      body.videoId,
+      userId,
+      "id, user_id, bunny_video_id, thumbnail_path",
+      "Video not found",
+    );
 
     if (video.bunny_video_id) await deleteVideo(video.bunny_video_id);
-    if (video.thumbnail_path) {
+    // The service role ignores storage policies, so only a path in the caller's own folder is
+    // removed; anything else is left where it is.
+    if (video.thumbnail_path && isOwnStoragePath(video.thumbnail_path, userId)) {
       await admin.storage
         .from("thumbnails")
         .remove([video.thumbnail_path])
         .catch(() => undefined);
+    } else if (video.thumbnail_path) {
+      console.warn("video-delete: not removing a thumbnail outside the caller's folder", video.id);
     }
     // The FK already nulls both slots on delete; this is only about `video_kind`, which
     // describes the main slot and would otherwise still claim there is a video there.
