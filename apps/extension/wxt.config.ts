@@ -23,10 +23,34 @@ const { version: EXT_VERSION } = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ) as { version: string };
 
+/**
+ * The Supabase project is compiled into the bundle from `WXT_SUPABASE_URL` and
+ * `WXT_SUPABASE_PUBLISHABLE_KEY` (the release workflows set them; locally they come from
+ * `apps/extension/.env`). Without them the package still builds, loads and passes store review,
+ * and then answers every sign-in with "supabaseUrl is required", which is how the 3.5.0 store
+ * package shipped. So a build or zip without them fails instead.
+ */
+function requireSupabaseEnv(): void {
+  const missing = ["WXT_SUPABASE_URL", "WXT_SUPABASE_PUBLISHABLE_KEY"].filter(
+    (name) => !process.env[name],
+  );
+  if (missing.length === 0) return;
+  const them = missing.length > 1 ? "them" : "it";
+  throw new Error(
+    `${missing.join(" and ")} must be set to build the extension: nobody could sign in to a build without ${them}. Put ${them} in apps/extension/.env (.github/workflows/release.yml has the values).`,
+  );
+}
+
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   srcDir: ".",
   outDir: ".output",
+  hooks: {
+    // Runs after WXT has loaded the .env files into `process.env`, and not for `wxt prepare`.
+    "build:before": (wxt) => {
+      if (wxt.config.command === "build") requireSupabaseEnv();
+    },
+  },
   manifest: ({ mode }) => ({
     name: mode === "development" ? "Lare for LeetCode (dev)" : "Lare for LeetCode",
     short_name: "Lare",

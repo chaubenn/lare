@@ -14,7 +14,7 @@ runtime and memory percentiles and the runtime distribution graph.
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Chrome-lightgrey)
 
-[Install](#install) · [Architecture](docs/architecture.md) · [Privacy policy](docs/privacy-policy.md) · [Privacy design](docs/privacy.md)
+[Install](#install) · [Chrome Web Store](https://chromewebstore.google.com/detail/lare-for-leetcode/anlejcjfgabfkgbhbcbojlmccagbfdhg) · [Architecture](docs/architecture.md) · [Privacy policy](docs/privacy-policy.md) · [Privacy design](docs/privacy.md)
 
 </div>
 
@@ -58,16 +58,33 @@ demand.
 
 ### 2. Chrome extension
 
+1. Add **[Lare for LeetCode](https://chromewebstore.google.com/detail/lare-for-leetcode/anlejcjfgabfkgbhbcbojlmccagbfdhg)** from the Chrome Web Store.
+2. Pin the Lare icon and click it to open the side panel.
+3. Sign in with the same account as the desktop app, then open any LeetCode problem. Practice
+   starts logging itself immediately.
+
+Chrome keeps the store copy up to date on its own. Chrome 116+.
+
+The extension works on its own for sign-in, passive capture and drafts. It talks to the desktop
+app over `127.0.0.1` to start, pause and end a mock interview, so the app has to be open for one,
+signed in to the same account; the desktop footer then shows **Extension: connected**.
+
+A new extension version waits for Chrome Web Store review, while the desktop app updates the moment
+a release is out. If the side panel says to update the extension just after the app updated, the
+store copy is still in review and will update by itself; practice keeps logging in the meantime.
+
+<details>
+<summary>Install from the release zip instead</summary>
+
+The same extension as an unpacked folder, for a release the store has not caught up with yet. It
+does not update itself, so repeat this for each release. Install one copy, not both: remove the
+store copy first.
+
 1. Download [Lare-Chrome-Extension.zip](https://github.com/chaubenn/lare/releases/latest/download/Lare-Chrome-Extension.zip) and unzip it.
 2. Open `chrome://extensions`, turn on **Developer mode** (top right).
 3. Click **Load unpacked** and pick the unzipped folder.
-4. Pin the Lare icon and click it to open the side panel, then sign in and open any LeetCode
-   problem. Practice starts logging itself immediately.
 
-The extension works on its own for sign-in, passive capture and drafts. It talks to the desktop
-app over `127.0.0.1` to start, pause and end a mock interview, so the app has to be open for one
-and the desktop footer shows **Extension: connected**. Chrome 116+. Chrome Web Store listing is coming;
-until then the unpacked install is the supported path.
+</details>
 
 ## License
 

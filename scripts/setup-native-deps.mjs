@@ -193,6 +193,35 @@ async function setupMac() {
   console.log("macOS native deps ready");
 }
 
+// Unpacks a zip with the bsdtar that ships in System32 since Windows 10 1803 and Server 2019. By
+// full path: under Git Bash a bare `tar` is GNU tar, which does not read zip.
+//
+// This used to be `Expand-Archive` in Windows PowerShell. On the windows-2022 runner image of
+// 2026-11-12 that exited 0 and left no folder behind, and the build died one line later on the
+// rename. PowerShell is now only the fallback for a machine with no tar.exe.
+async function unzip(zipPath, destDir) {
+  const tar = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+  if (await exists(tar)) {
+    await execFile(tar, ["-xf", zipPath, "-C", destDir]);
+    return;
+  }
+  await exec(`Expand-Archive -Path "${zipPath}" -DestinationPath "${destDir}" -Force`, {
+    shell: "powershell.exe",
+  });
+}
+
+// The folder under `staging` that holds ffmpeg's `bin`, `lib` and `include`: the archive's one
+// top-level folder, or `staging` itself if the tool that unpacked it dropped that level.
+async function ffmpegTree(staging, topLevel) {
+  for (const dir of [path.join(staging, topLevel), staging]) {
+    if (await exists(path.join(dir, "bin"))) return dir;
+  }
+  const found = await fs.readdir(staging);
+  throw new Error(
+    `Unpacking ${topLevel}.zip left no ffmpeg tree in ${staging} (found: ${found.join(", ") || "nothing"})`,
+  );
+}
+
 async function setupWindows() {
   const FFMPEG_VERSION = "7.1";
   const zipName = `ffmpeg-${FFMPEG_VERSION}-full_build-shared`;
@@ -205,12 +234,15 @@ async function setupWindows() {
   );
   const ffmpegDir = path.join(targetDir, "ffmpeg");
   if (fresh || !(await exists(ffmpegDir)) || !(await extractedFrom(ffmpegDir, sha))) {
-    await fs.rm(path.join(targetDir, zipName), { recursive: true, force: true });
-    await exec(`Expand-Archive -Path "${zipPath}" -DestinationPath "${targetDir}" -Force`, {
-      shell: "powershell.exe",
-    });
+    // Unpacked on its own, so what the archive held can be told from what was already in target/.
+    const staging = path.join(targetDir, "ffmpeg-extract");
+    await fs.rm(staging, { recursive: true, force: true });
+    await fs.mkdir(staging, { recursive: true });
+    await unzip(zipPath, staging);
+    const extracted = await ffmpegTree(staging, zipName);
     await fs.rm(ffmpegDir, { recursive: true, force: true });
-    await fs.rename(path.join(targetDir, zipName), ffmpegDir);
+    await fs.rename(extracted, ffmpegDir);
+    await fs.rm(staging, { recursive: true, force: true });
     await fs.writeFile(path.join(ffmpegDir, MARKER), `${sha}\n`);
     console.log("Extracted ffmpeg");
   }

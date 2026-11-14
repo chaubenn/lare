@@ -312,6 +312,12 @@ project or changing a function:
 - **Auth redirect URLs**: `http://127.0.0.1:47831/auth/callback` (desktop) and
   `https://<extension id>.chromiumapp.org/auth/callback` for each extension id (see "Build, CI and
   releases").
+- **Auth providers**: GitHub and Google, each with the client id and secret of an OAuth app whose
+  callback is `https://<project ref>.supabase.co/auth/v1/callback`. The desktop app and the
+  extension read the project's public `/auth/v1/settings` and only show a button for a provider that
+  is switched on (`enabledOAuthProviders` in `@lare/shared`), so turning one on or off needs no
+  release. A sign-in that ends on the Site URL instead of back in the client asked for a redirect
+  URL that is not in the list above; `auth.flow_state.referrer` records where each attempt was sent.
 - **Bunny webhook** points at `.../functions/v1/bunny-webhook`. Bunny signs only the body, with the
   library's read-only API key, and sends no timestamp, so a captured call can be replayed. The damage
   is bounded: a replay can re-apply a status to a video that is not ready yet (the next real event
@@ -404,7 +410,8 @@ Other things that live in the Rust shell:
   words find results while typing; transcripts and reviews match on stemmed whole words. A CPU
   without AVX never loads the library and the palette falls back to substring search.
 - **Sign-in.** OAuth (GitHub, Google) with PKCE in the system browser, redirected to the loopback
-  server. `current_user` is mirrored into `hello.ack.userId`, and the extension refuses to start an interview when it names a different account.
+  server. Only the providers switched on in Supabase get a button, and the wait for the browser
+  ends after ten minutes or on Cancel. `current_user` is mirrored into `hello.ack.userId`, and the extension refuses to start an interview when it names a different account.
 - **Deep links.** `lare://open/<path>` and `lare://drafts/<id>` route inside the app; the
   single-instance plugin hands a second launch's link to the running one.
 - **Updates.** Checks GitHub Releases on every launch and installs before opening, then hourly, and on
@@ -478,7 +485,14 @@ so the store assigns its own extension id (`anlejcjfgabfkgbhbcbojlmccagbfdhg`). 
 allow-list includes it (`STORE_EXTENSION_ID` in `local_server/bridge.rs`; `LARE_STORE_EXTENSION_ID` overrides it
 at build time), and Supabase Auth needs `https://<that id>.chromiumapp.org/auth/callback` in its
 redirect URLs for sign-in. If the redirect URL is missing, Supabase falls back to the Site URL, so the
-GitHub/Google popup lands on the landing page instead of returning to the extension. Email sign-in
+GitHub/Google popup lands on the landing page instead of returning to the extension. Submit the
+`Lare-Chrome-Extension-Store.zip` the release workflow attaches to the GitHub release, not a local
+build: the Supabase project is compiled in from `WXT_SUPABASE_URL` and `WXT_SUPABASE_PUBLISHABLE_KEY`,
+and a package built without them (the 3.5.0 store package was) cannot sign anyone in. `wxt build` and
+`wxt zip` now refuse to run without both. An unpacked store package gets an id from its folder path,
+which neither the desktop app nor Supabase accepts, so test it from the store or use the keyed build.
+
+Email sign-in
 (desktop and extension) uses a 6-digit code via `signInWithOtp` + `verifyOtp`, so the Supabase "Magic Link"
 and "Confirm signup" email templates must include `{{ .Token }}`; a link-only template sends a magic link
 and there is no code to type.

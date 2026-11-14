@@ -24,8 +24,16 @@ export type PairingSecrets = (
   fresh: boolean,
 ) => Promise<string | null>;
 
-/** Each wait on the socket while connecting and shaking hands. */
+/** Each wait for a frame while shaking hands. */
 const CONNECT_TIMEOUT_MS = 3000;
+/**
+ * The wait for the socket to open. Chromium holds a new WebSocket back for a random 1-5s once a
+ * process has had about 16 fail without one succeeding, and every probe made while the app was
+ * closed is one of those. Giving up inside that window reported an app that had just been opened
+ * as not running. A closed port still fails as soon as Chromium tries it, so this only costs
+ * time when nothing is listening and the attempt was held back anyway.
+ */
+const OPEN_TIMEOUT_MS = 8000;
 /**
  * The pairing-secret lookup goes to Supabase. The app gives up on `auth.response` after 20s, so
  * this has to stay well inside that.
@@ -250,7 +258,10 @@ export class DesktopClient {
     return () => this.closeListeners.delete(listener);
   }
 
-  /** Connect and complete the handshake, or throw. Each wait on the socket gets `timeoutMs`. */
+  /**
+   * Connect and complete the handshake, or throw. Each wait for a frame gets `timeoutMs`; the
+   * socket opening gets at least `OPEN_TIMEOUT_MS`.
+   */
   async connect(userId: string | null, timeoutMs = CONNECT_TIMEOUT_MS): Promise<HelloAck> {
     if (this.connected && this.helloAck) return this.helloAck;
     return this.openOnce(userId, timeoutMs);
@@ -295,7 +306,7 @@ export class DesktopClient {
   private async handshake(ws: WebSocket, userId: string, timeoutMs: number): Promise<HelloAck> {
     const frames = frameReader(ws);
     try {
-      await opened(ws, timeoutMs);
+      await opened(ws, Math.max(timeoutMs, OPEN_TIMEOUT_MS));
       const extNonce = toHex(crypto.getRandomValues(new Uint8Array(32)));
       ws.send(
         encode({

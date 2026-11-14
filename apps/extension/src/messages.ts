@@ -9,6 +9,7 @@ import {
   DistributionSchema,
   EditEventSchema,
   type ExtensionStateSchema,
+  OAUTH_PROVIDERS,
   type ProblemInfo,
   ProblemInfoSchema,
   type RecordingState,
@@ -92,7 +93,7 @@ const PANEL_REQUESTS = [
   z.object({ type: z.literal("END_SESSION") }),
   /** Close the interview and throw its recording away, without saving anything. */
   z.object({ type: z.literal("DISCARD_SESSION") }),
-  z.object({ type: z.literal("SIGN_IN"), provider: z.enum(["github", "google"]) }),
+  z.object({ type: z.literal("SIGN_IN"), provider: z.enum(OAUTH_PROVIDERS) }),
   z.object({ type: z.literal("SIGN_IN_OTP"), email: z.string().email() }),
   z.object({ type: z.literal("VERIFY_OTP"), email: z.string().email(), token: z.string() }),
   z.object({ type: z.literal("SIGN_OUT") }),

@@ -1,9 +1,19 @@
-import { AUTH_CALLBACK_URL } from "@lare/shared";
+import { AUTH_CALLBACK_URL, enabledOAuthProviders, type OAuthProvider } from "@lare/shared";
+import { env } from "@/lib/env";
 import { openExternal } from "@/lib/open";
 import { supabase } from "@/lib/supabase";
 import { expectAuthCallback } from "@/lib/tauri";
 
-export type OAuthProvider = "github" | "google";
+/**
+ * How long a sign-in sent to the browser is waited for. The local server stops taking the
+ * callback after the same ten minutes (`SIGN_IN_WINDOW` in `local_server/oauth_callback.rs`).
+ */
+export const SIGN_IN_WAIT_MS = 10 * 60_000;
+
+/** The providers this Supabase project has switched on; all of them when that cannot be read. */
+export function fetchSignInProviders(): Promise<OAuthProvider[]> {
+  return enabledOAuthProviders(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY);
+}
 
 /**
  * Start the PKCE flow in the system browser. Supabase redirects to the local Rust server's

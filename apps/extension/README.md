@@ -3,6 +3,11 @@
 Chrome 116+. The toolbar opens a side panel, not a popup. OAuth/email sign-in, passive
 problem/submission capture and inbox draft creation do not require the desktop app.
 
+Published as [Lare for LeetCode](https://chromewebstore.google.com/detail/lare-for-leetcode/anlejcjfgabfkgbhbcbojlmccagbfdhg) on the Chrome Web Store. Each release also attaches
+`Lare-Chrome-Extension.zip`, the same code for an unpacked install; it carries the pinned `key`
+the store package leaves out, so it loads under a fixed id (see "Build, CI and releases" in
+[`docs/architecture.md`](../../docs/architecture.md)).
+
 ## Mock interviews
 
 The desktop app records mock interviews; the extension does not capture media. Starting one from

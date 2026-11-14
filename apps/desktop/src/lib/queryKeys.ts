@@ -11,6 +11,7 @@ type Maybe = string | null | undefined;
 
 export const queryKeys = {
   appVersion: ["app-version"] as const,
+  authProviders: ["auth-providers"] as const,
   profile: (userId: string) => ["profile", userId] as const,
 
   feed: {

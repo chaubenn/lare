@@ -1,3 +1,4 @@
+import type { OAuthProvider } from "@lare/shared";
 import type { AuthInfo } from "./messages";
 import { getSupabase } from "./supabase";
 
@@ -6,7 +7,7 @@ import { getSupabase } from "./supabase";
  * The redirect URL https://<extension-id>.chromiumapp.org/auth/callback must be
  * listed under Supabase Auth -> URL Configuration -> Redirect URLs.
  */
-export async function signInWithProvider(provider: "github" | "google"): Promise<void> {
+export async function signInWithProvider(provider: OAuthProvider): Promise<void> {
   const supabase = getSupabase();
   const redirectTo = chrome.identity.getRedirectURL("auth/callback");
   const { data, error } = await supabase.auth.signInWithOAuth({

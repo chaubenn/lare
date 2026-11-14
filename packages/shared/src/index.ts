@@ -11,6 +11,7 @@ export * from "./progress/leaderboard";
 export * from "./progress/skills";
 export * from "./search/search";
 export * from "./session/ai-review";
+export * from "./session/auth-providers";
 export * from "./session/constants";
 export * from "./session/edits";
 export * from "./session/protocol";

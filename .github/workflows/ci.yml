@@ -40,8 +40,11 @@ jobs:
       - run: pnpm -r --if-present test
       - name: Extension e2e (Playwright + Monaco fixture)
         working-directory: apps/extension
+        # No `--with-deps`: the runner image already ships every shared library Chromium
+        # needs, so all that flag added was an apt install of nine extra font packages, and
+        # the job failed whenever the runner could not resolve Ubuntu's mirrors.
         run: |
-          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright install chromium
           pnpm build:e2e
           pnpm exec playwright test
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -51,6 +54,11 @@ jobs:
           path: apps/extension/test-results
       - name: Extension production build
         working-directory: apps/extension
+        # The same public project settings the release workflows compile in; the build refuses
+        # to run without them (`requireSupabaseEnv` in wxt.config.ts).
+        env:
+          WXT_SUPABASE_URL: https://jndqrvwkwoyvzoqcveev.supabase.co
+          WXT_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nsqHiRNIbrFvs1Y3nxpl3Q_xG2vqS9Q
         run: pnpm build && pnpm zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

@@ -1,4 +1,12 @@
-import { activeMs, formatDuration, timerStatus } from "@lare/shared";
+import {
+  activeMs,
+  enabledOAuthProviders,
+  formatDuration,
+  OAUTH_PROVIDER_LABELS,
+  OAUTH_PROVIDERS,
+  type OAuthProvider,
+  timerStatus,
+} from "@lare/shared";
 import { Emblem } from "@lare/ui/brand";
 import { useCallback, useEffect, useState } from "react";
 import { applySnapshot, type RuntimeSnapshot, sendRuntime, sendToTab } from "@/src/messages";
@@ -58,6 +66,8 @@ export function App() {
   const [graded, setGraded] = useState(true);
   const [selected, setSelected] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>("tracking");
+  /** The sign-in buttons to show: the providers the Supabase project has switched on. */
+  const [providers, setProviders] = useState<readonly OAuthProvider[]>(OAUTH_PROVIDERS);
   const [, setTick] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -75,6 +85,23 @@ export function App() {
       clearInterval(id);
     };
   }, [refresh]);
+
+  // A provider that is off in Supabase opens a window that can never come back signed in, so only
+  // the ones that are on get a button. Asked while signed out, which is when the buttons show.
+  const signedOut = snap !== null && !snap.auth;
+  useEffect(() => {
+    if (!signedOut) return;
+    let active = true;
+    void enabledOAuthProviders(
+      import.meta.env.WXT_SUPABASE_URL,
+      import.meta.env.WXT_SUPABASE_PUBLISHABLE_KEY,
+    ).then((enabled) => {
+      if (active) setProviders(enabled);
+    });
+    return () => {
+      active = false;
+    };
+  }, [signedOut]);
 
   const run = async (fn: () => ReturnType<typeof sendRuntime>) => {
     setBusy(true);
@@ -201,23 +228,18 @@ export function App() {
       ) : !auth ? (
         <section className="card">
           <div className="card-title">Sign in</div>
-          <button
-            type="button"
-            className="btn"
-            disabled={busy}
-            onClick={() => void run(() => sendRuntime({ type: "SIGN_IN", provider: "github" }))}
-          >
-            Continue with GitHub
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={busy}
-            onClick={() => void run(() => sendRuntime({ type: "SIGN_IN", provider: "google" }))}
-          >
-            Continue with Google
-          </button>
-          <div className="divider">or email</div>
+          {providers.map((provider) => (
+            <button
+              key={provider}
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={() => void run(() => sendRuntime({ type: "SIGN_IN", provider }))}
+            >
+              Continue with {OAUTH_PROVIDER_LABELS[provider]}
+            </button>
+          ))}
+          {providers.length > 0 && <div className="divider">or email</div>}
           {!otpSent ? (
             <form
               className="row"
