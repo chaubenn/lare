@@ -1,12 +1,13 @@
 import { cn } from "@lare/ui";
 import { useLayoutEffect, useRef, useState } from "react";
+import { RichText } from "@/components/rich/RichText";
 
 /**
- * Plain text that keeps the author's line breaks and clamps to three lines, with a
- * "See more" control only when something is actually hidden.
+ * A write-up with its formatting and line breaks, clamped to three lines, with a "See more"
+ * control only when something is actually hidden.
  */
 export function ExpandableText({ text, className }: { text: string; className?: string }) {
-  const ref = useRef<HTMLParagraphElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
 
@@ -25,16 +26,10 @@ export function ExpandableText({ text, className }: { text: string; className?: 
 
   return (
     <div>
-      <p
-        ref={ref}
-        className={cn(
-          "whitespace-pre-wrap text-sm leading-relaxed",
-          !expanded && "line-clamp-3",
-          className,
-        )}
-      >
-        {text}
-      </p>
+      {/* The clamp counts lines across the paragraphs and list items inside. */}
+      <div ref={ref} className={cn("text-sm leading-relaxed", !expanded && "line-clamp-3")}>
+        <RichText source={text} className={className} />
+      </div>
       {overflows || expanded ? (
         <button
           type="button"

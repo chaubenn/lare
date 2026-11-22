@@ -60,6 +60,9 @@ function useHideShortcut(state: RecorderStatus["state"]): string | null {
   return accelerator;
 }
 
+/** How long the discard question waits for an answer before the pill goes back to normal. */
+const DISCARD_CONFIRM_MS = 5000;
+
 /** How long the pointer rests on a control before its tooltip shows. */
 const TOOLTIP_DELAY_MS = 350;
 
@@ -172,17 +175,33 @@ export function RecorderPillWindow() {
   const { pointed, shown, target } = useTooltips();
   const noun = isInterview ? "interview" : "recording";
 
+  // Discarding throws the take away for good, so the bin asks once more in place: the pill is
+  // too small for a dialog, and a stray click on it should not cost a whole recording.
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const canDiscard = !busy && state !== "stopping";
+  useEffect(() => {
+    if (!confirmingDiscard) return;
+    if (!canDiscard) {
+      setConfirmingDiscard(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setConfirmingDiscard(false), DISCARD_CONFIRM_MS);
+    return () => window.clearTimeout(timer);
+  }, [confirmingDiscard, canDiscard]);
+
   const label = error
     ? error
-    : state === "starting"
-      ? "Starting"
-      : state === "stopping"
-        ? "Saving"
-        : paused
-          ? "Paused"
-          : isInterview
-            ? "Mock interview"
-            : "Recording";
+    : confirmingDiscard
+      ? `Discard ${noun}?`
+      : state === "starting"
+        ? "Starting"
+        : state === "stopping"
+          ? "Saving"
+          : paused
+            ? "Paused"
+            : isInterview
+              ? "Mock interview"
+              : "Recording";
 
   return (
     <div className="flex h-full w-full flex-col justify-end">
@@ -227,7 +246,9 @@ export function RecorderPillWindow() {
               <div
                 className={cn(
                   "mt-1 truncate text-[10.5px] font-medium uppercase tracking-[0.08em]",
-                  error ? "text-[var(--lare-status-stop)]" : "text-[var(--lare-muted)]",
+                  error || confirmingDiscard
+                    ? "text-[var(--lare-status-stop)]"
+                    : "text-[var(--lare-muted)]",
                 )}
                 aria-live="polite"
               >
@@ -235,55 +256,100 @@ export function RecorderPillWindow() {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <span className="relative flex" {...target("pause")}>
-              <PillButton
-                label={paused ? "Resume" : "Pause"}
-                hot={pointed === "pause"}
-                disabled={busy || !live}
-                onClick={() => void run(() => (paused ? recorder.resume() : recorder.pause()))}
-              >
-                {paused ? (
-                  <Play className="size-4 fill-current" aria-hidden />
-                ) : (
-                  <Pause className="size-4 fill-current" aria-hidden />
-                )}
-              </PillButton>
-              <Tooltip show={shown === "pause"}>
-                {paused ? `Resume ${noun}` : `Pause ${noun}`}
-              </Tooltip>
-            </span>
-            <span className="relative mx-1 flex" {...target("end")}>
-              <button
-                type="button"
-                aria-label="End and save"
-                disabled={busy || !live}
-                onClick={() => void run(() => recorder.stop())}
-                className={cn(
-                  "lare-press inline-flex h-9 shrink-0 items-center gap-2 rounded-full pr-3.5 pl-3 text-[13px] font-semibold text-white",
-                  "bg-[color-mix(in_oklab,var(--lare-status-stop)_82%,black)] shadow-[inset_0_1px_0_rgb(255_255_255/0.14)]",
-                  "transition-colors hover:bg-[var(--lare-status-stop)] disabled:cursor-not-allowed disabled:opacity-40",
-                  pointed === "end" && !(busy || !live) && "bg-[var(--lare-status-stop)]",
-                )}
-              >
-                <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
-                End
-              </button>
-              <Tooltip show={shown === "end"}>End &amp; save {noun}</Tooltip>
-            </span>
-            <span className="relative flex" {...target("discard")}>
-              <PillButton
-                label="Discard"
-                danger
-                hot={pointed === "discard"}
-                disabled={busy || state === "stopping"}
-                onClick={() => void run(() => recorder.cancel())}
-              >
-                <Trash2 className="size-4" aria-hidden />
-              </PillButton>
-              <Tooltip show={shown === "discard"}>Discard {noun}</Tooltip>
-            </span>
-          </div>
+          {confirmingDiscard ? (
+            <div className="flex shrink-0 items-center gap-1">
+              <span className="relative flex" {...target("keep")}>
+                <button
+                  type="button"
+                  aria-label={`Keep ${noun}`}
+                  onClick={() => setConfirmingDiscard(false)}
+                  className={cn(
+                    "lare-press inline-flex h-9 shrink-0 items-center rounded-full px-3 text-[13px] font-semibold text-[var(--lare-soft)] transition-colors",
+                    "hover:bg-white/[0.08] hover:text-[var(--lare-bone)]",
+                    pointed === "keep" && "bg-white/[0.08] text-[var(--lare-bone)]",
+                  )}
+                >
+                  Keep
+                </button>
+                <Tooltip show={shown === "keep"}>Keep {noun}</Tooltip>
+              </span>
+              <span className="relative flex" {...target("confirm-discard")}>
+                <button
+                  type="button"
+                  aria-label={`Discard ${noun} for good`}
+                  disabled={!canDiscard}
+                  onClick={() =>
+                    void run(async () => {
+                      setConfirmingDiscard(false);
+                      await recorder.cancel();
+                    })
+                  }
+                  className={cn(
+                    "lare-press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full pr-3.5 pl-3 text-[13px] font-semibold text-white",
+                    "bg-[color-mix(in_oklab,var(--lare-status-stop)_82%,black)] shadow-[inset_0_1px_0_rgb(255_255_255/0.14)]",
+                    "transition-colors hover:bg-[var(--lare-status-stop)] disabled:cursor-not-allowed disabled:opacity-40",
+                    pointed === "confirm-discard" && canDiscard && "bg-[var(--lare-status-stop)]",
+                  )}
+                >
+                  <Trash2 className="size-3.5" aria-hidden />
+                  Discard
+                </button>
+                <Tooltip show={shown === "confirm-discard"} align="end">
+                  Throw this {noun} away
+                </Tooltip>
+              </span>
+            </div>
+          ) : (
+            <div className="flex shrink-0 items-center gap-0.5">
+              <span className="relative flex" {...target("pause")}>
+                <PillButton
+                  label={paused ? "Resume" : "Pause"}
+                  hot={pointed === "pause"}
+                  disabled={busy || !live}
+                  onClick={() => void run(() => (paused ? recorder.resume() : recorder.pause()))}
+                >
+                  {paused ? (
+                    <Play className="size-4 fill-current" aria-hidden />
+                  ) : (
+                    <Pause className="size-4 fill-current" aria-hidden />
+                  )}
+                </PillButton>
+                <Tooltip show={shown === "pause"}>
+                  {paused ? `Resume ${noun}` : `Pause ${noun}`}
+                </Tooltip>
+              </span>
+              <span className="relative mx-1 flex" {...target("end")}>
+                <button
+                  type="button"
+                  aria-label="End and save"
+                  disabled={busy || !live}
+                  onClick={() => void run(() => recorder.stop())}
+                  className={cn(
+                    "lare-press inline-flex h-9 shrink-0 items-center gap-2 rounded-full pr-3.5 pl-3 text-[13px] font-semibold text-white",
+                    "bg-[color-mix(in_oklab,var(--lare-status-stop)_82%,black)] shadow-[inset_0_1px_0_rgb(255_255_255/0.14)]",
+                    "transition-colors hover:bg-[var(--lare-status-stop)] disabled:cursor-not-allowed disabled:opacity-40",
+                    pointed === "end" && !(busy || !live) && "bg-[var(--lare-status-stop)]",
+                  )}
+                >
+                  <span className="size-2.5 rounded-[3px] bg-current" aria-hidden />
+                  End
+                </button>
+                <Tooltip show={shown === "end"}>End &amp; save {noun}</Tooltip>
+              </span>
+              <span className="relative flex" {...target("discard")}>
+                <PillButton
+                  label="Discard"
+                  danger
+                  hot={pointed === "discard"}
+                  disabled={!canDiscard}
+                  onClick={() => setConfirmingDiscard(true)}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                </PillButton>
+                <Tooltip show={shown === "discard"}>Discard {noun}</Tooltip>
+              </span>
+            </div>
+          )}
           {keys ? (
             <span className="relative flex" {...target("hide")}>
               <PillButton

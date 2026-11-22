@@ -1,5 +1,5 @@
 export { ActivityChart } from "./ActivityChart";
-export { CodeBlock } from "./CodeBlock";
+export { CODE_THEME, CODE_THEME_NAME, CodeBlock } from "./CodeBlock";
 export { cn } from "./cn";
 export { DifficultyBadge } from "./DifficultyBadge";
 export { GoalSummary } from "./GoalSummary";

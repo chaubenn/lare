@@ -17,6 +17,8 @@ export * from "./session/edits";
 export * from "./session/protocol";
 export * from "./session/session";
 export * from "./session/timer";
+export * from "./social/code";
 export * from "./social/mentions";
 export * from "./social/notifications";
 export * from "./social/postState";
+export * from "./social/richText";

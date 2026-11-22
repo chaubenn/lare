@@ -1,21 +1,15 @@
 import { formatDurationHuman, showsActiveTime } from "@lare/shared";
 import type { Post } from "@lare/supabase-types";
+import { cn } from "@lare/ui";
 import { ArrowLeft, ArrowRight, Check, Eye, Send, Trash2 } from "@lare/ui/icons";
-import {
-  Button,
-  Card,
-  Input,
-  KindBadge,
-  Label,
-  Select,
-  Textarea,
-  Toggle,
-} from "@lare/ui/primitives";
+import { Button, Card, Input, KindBadge, Label, Select, Toggle } from "@lare/ui/primitives";
 import { onlineManager } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { PageActions } from "@/components/PageSlots";
 import { ProblemSection } from "@/components/ProblemSection";
+import { RichText } from "@/components/rich/RichText";
+import { RichTextEditor } from "@/components/rich/RichTextEditor";
 import { confirm } from "@/components/ui/Confirm";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
@@ -475,14 +469,28 @@ function DraftEditor({ draft }: { draft: Draft }) {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="draft-body">Write-up</Label>
-                  <Textarea
+                  <Label
+                    htmlFor="draft-body"
+                    hint={
+                      body.length > POST_BODY_MAX * 0.8 ? (
+                        <span
+                          className={cn(body.length > POST_BODY_MAX && "text-[var(--lare-danger)]")}
+                        >
+                          {body.length}/{POST_BODY_MAX}
+                        </span>
+                      ) : null
+                    }
+                  >
+                    Write-up
+                  </Label>
+                  <RichTextEditor
                     id="draft-body"
-                    className="mt-1 min-h-48"
+                    className="mt-1"
+                    minHeight="min-h-48"
                     value={body}
-                    onChange={(e) => setBody(e.target.value)}
+                    onValueChange={setBody}
+                    ariaLabel="Write-up"
                     placeholder="What did you learn? What was the approach?"
-                    maxLength={POST_BODY_MAX}
                   />
                 </div>
               </Card>
@@ -531,9 +539,14 @@ function DraftEditor({ draft }: { draft: Draft }) {
             {step === 4 ? (
               <Card className="space-y-3">
                 <h2 className="lare-heading text-[var(--text)]">{title || "Untitled draft"}</h2>
-                <p className="whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
-                  {body || "No write-up."}
-                </p>
+                {body.trim() ? (
+                  <RichText
+                    source={body}
+                    className="text-sm leading-relaxed text-[var(--text-secondary)]"
+                  />
+                ) : (
+                  <p className="text-sm text-[var(--text-secondary)]">No write-up.</p>
+                )}
                 <dl className="grid gap-x-6 gap-y-2 border-t border-[var(--border)] pt-3 text-sm sm:grid-cols-2">
                   {[
                     ["Visibility", visibility === "private" ? "Only you" : "Public"],

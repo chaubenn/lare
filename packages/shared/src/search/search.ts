@@ -7,6 +7,7 @@
  * without the index.
  */
 import type { SessionKind } from "../primitives";
+import { richTextToPlain } from "../social/richText";
 
 export type SearchKind = "session" | "said" | "post" | "draft" | "person";
 
@@ -99,7 +100,8 @@ export function postSearchDoc(post: {
     subtitle: draft ? "Draft" : "Post",
     route: draft ? `/drafts/${post.id}` : `/posts/${post.id}`,
     at: epochMs(post.publishedAt ?? post.updatedAt),
-    text: post.body ?? "",
+    // Searched as words: formatting markers would only get in the way of matches.
+    text: post.body ? richTextToPlain(post.body) : "",
   };
 }
 

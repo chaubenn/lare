@@ -10,6 +10,8 @@ import {
   Cancel01Icon,
   CheckmarkCircle02Icon,
   Clock01Icon,
+  CodeIcon,
+  CodeSquareIcon,
   CommandIcon,
   ComputerIcon,
   Copy01Icon,
@@ -20,10 +22,15 @@ import {
   FireIcon,
   GlobalIcon,
   HardDriveIcon,
+  Heading01Icon,
+  Heading02Icon,
+  Heading03Icon,
   ImageAdd01Icon,
   InboxIcon,
   InformationCircleIcon,
   Key01Icon,
+  LeftToRightListBulletIcon,
+  LeftToRightListNumberIcon,
   Link01Icon,
   LinkSquare02Icon,
   Loading03Icon,
@@ -42,6 +49,7 @@ import {
   PencilEdit01Icon,
   PencilEdit02Icon,
   PlayIcon,
+  QuoteDownIcon,
   Radio01Icon,
   RefreshIcon,
   ReplyIcon,
@@ -56,6 +64,9 @@ import {
   SparklesIcon,
   Sun03Icon,
   Target02Icon,
+  TextBoldIcon,
+  TextItalicIcon,
+  TextStrikethroughIcon,
   Tick02Icon,
   TrophyIcon,
   UserAdd01Icon,
@@ -86,6 +97,7 @@ export const AlertTriangle = icon(Alert02Icon);
 export const ArrowLeft = icon(ArrowLeft02Icon);
 export const ArrowRight = icon(ArrowRight02Icon);
 export const Bell = icon(Notification01Icon);
+export const Bold = icon(TextBoldIcon);
 export const Camera = icon(Camera01Icon);
 export const Check = icon(Tick02Icon);
 export const ChevronDown = icon(ArrowDown01Icon);
@@ -94,6 +106,7 @@ export const ChevronRight = icon(ArrowRight01Icon);
 export const CircleAlert = icon(AlertCircleIcon);
 export const CircleCheck = icon(CheckmarkCircle02Icon);
 export const Clock = icon(Clock01Icon);
+export const Code = icon(CodeIcon);
 export const Command = icon(CommandIcon);
 export const Copy = icon(Copy01Icon);
 export const Download = icon(Download01Icon);
@@ -105,12 +118,18 @@ export const Flame = icon(FireIcon);
 export const Globe = icon(GlobalIcon);
 export const GripVertical = icon(DragDropVerticalIcon);
 export const HardDrive = icon(HardDriveIcon);
+export const Heading1 = icon(Heading01Icon);
+export const Heading2 = icon(Heading02Icon);
+export const Heading3 = icon(Heading03Icon);
 export const Heart = icon(FavouriteIcon);
 export const ImagePlus = icon(ImageAdd01Icon);
 export const Inbox = icon(InboxIcon);
 export const Info = icon(InformationCircleIcon);
+export const Italic = icon(TextItalicIcon);
 export const KeyRound = icon(Key01Icon);
 export const Link2 = icon(Link01Icon);
+export const List = icon(LeftToRightListBulletIcon);
+export const ListOrdered = icon(LeftToRightListNumberIcon);
 export const LoaderCircle = icon(Loading03Icon);
 export const Lock = icon(LockIcon);
 export const LogOut = icon(Logout01Icon);
@@ -121,15 +140,16 @@ export const MicOff = icon(MicOff01Icon);
 export const Minus = icon(MinusSignIcon);
 export const Monitor = icon(ComputerIcon);
 export const MonitorX = icon(MonitorOffIcon);
-export const MoreHorizontal = icon(MoreHorizontalIcon);
 export const Moon = icon(Moon02Icon);
+export const MoreHorizontal = icon(MoreHorizontalIcon);
 export const PanelLeftClose = icon(SidebarLeftIcon);
 export const Pause = icon(PauseIcon);
 export const Pencil = icon(PencilEdit02Icon);
 export const Play = icon(PlayIcon);
+export const Quote = icon(QuoteDownIcon);
 export const Radio = icon(Radio01Icon);
-export const Reply = icon(ReplyIcon);
 export const RefreshCw = icon(RefreshIcon);
+export const Reply = icon(ReplyIcon);
 export const RotateCcw = icon(RotateLeft01Icon);
 export const RotateCw = icon(RotateRight01Icon);
 export const Rss = icon(RssIcon);
@@ -137,7 +157,9 @@ export const Search = icon(Search01Icon);
 export const Send = icon(SentIcon);
 export const Settings = icon(Settings02Icon);
 export const Sparkles = icon(SparklesIcon);
+export const SquareCode = icon(CodeSquareIcon);
 export const SquarePen = icon(PencilEdit01Icon);
+export const Strikethrough = icon(TextStrikethroughIcon);
 export const Sun = icon(Sun03Icon);
 export const Target = icon(Target02Icon);
 export const Trash2 = icon(Delete02Icon);

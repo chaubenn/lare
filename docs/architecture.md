@@ -421,6 +421,33 @@ Other things that live in the Rust shell:
 - **Logs.** `~/Library/Logs/Lare` on macOS, `%LOCALAPPDATA%\Lare\logs` on Windows, user-only
   permissions.
 
+### Formatted write-ups and comments
+
+Post write-ups and comments are edited in a Lexical editor (`components/rich/RichTextEditor.tsx`)
+with a toolbar and Markdown-style shortcuts, but the database still holds plain text: a small
+Markdown subset defined in `@lare/shared` (`social/richText.ts`). Blocks are line-based (one line per
+paragraph, `#` to `###` headings, `- ` and `1. ` lists, `> ` quotes, fenced code with an optional
+language); inline there is bold, italic, strikethrough and code, and bare `http(s)` URLs and
+`@handle`s are picked up as they are. Nothing is ever escaped, so `private.comment_mentions` finds
+`@snake_case` handles in the stored body exactly as typed, and text written before formatting
+existed reads the same. `RichText` renders it as React elements (no HTML), `markup.ts` moves it in
+and out of the editor, and the search index strips it (`richTextToPlain`). The length limits count
+the markup. The text area stops growing at about half the window and scrolls inside itself;
+`KeepInViewPlugin` keeps the caret in it and scrolls the page so the whole editor and its submit
+button stay on screen while typing.
+
+Code blocks can be Python, Java or C++ (`social/code.ts`), picked in the toolbar or guessed from
+the code until someone picks; pasting multi-line code into an ordinary line makes it a block.
+`CodeBlockPlugin.tsx` colours them with `@lexical/code-shiki` in the same theme as `CodeBlock`, which
+renders them read-only, and gives them code-editor indentation (four spaces; Enter keeps the indent
+and opens blocks after `:` or `{`; a closing bracket lines up with its opener; two blank lines at the
+end leave the block). `shikiBundles.ts` stands in for Shiki's full language and theme indexes
+(aliased in `vite.config.ts`) so the app only carries those three grammars for the editor.
+
+Deleting a comment asks first, saying how many replies go with it. The recording pill's **Discard**
+does the same in place: the first press swaps the controls for **Keep** and **Discard**, and the
+question lapses after five seconds.
+
 ## Post carousel
 
 Two decks, one mechanism. `PostCarousel` is the swipe deck itself (native scroll-snap for swiping,

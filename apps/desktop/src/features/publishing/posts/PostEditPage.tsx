@@ -1,4 +1,5 @@
 import type { Post } from "@lare/supabase-types";
+import { cn } from "@lare/ui";
 import { Eye, Trash2 } from "@lare/ui/icons";
 import {
   Button,
@@ -8,11 +9,11 @@ import {
   PageHeader,
   SectionTitle,
   Select,
-  Textarea,
   Toggle,
 } from "@lare/ui/primitives";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
+import { RichTextEditor } from "@/components/rich/RichTextEditor";
 import { EmptyState, ErrorState, PageSpinner } from "@/components/ui/States";
 import { useUser } from "@/features/auth/AuthProvider";
 import { POST_BODY_MAX, POST_TITLE_MAX } from "@/features/publishing/drafts/validation";
@@ -77,6 +78,9 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
     showDemoVideo,
   });
 
+  // Formatting counts toward the limit: the column holds the markup.
+  const bodyTooLong = body.length > POST_BODY_MAX;
+
   const save = () => {
     update.mutate(
       { id: post.id, title, body, visibility, showVideo, showDemoVideo },
@@ -108,7 +112,12 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
               <Button variant="ghost" disabled={busy} onClick={goBack}>
                 Cancel
               </Button>
-              <Button variant="primary" loading={update.isPending} disabled={busy} onClick={save}>
+              <Button
+                variant="primary"
+                loading={update.isPending}
+                disabled={busy || bodyTooLong}
+                onClick={save}
+              >
                 Save changes
               </Button>
             </>
@@ -131,15 +140,23 @@ function PostEditor({ post, userId }: { post: PostDetail; userId: string }) {
             />
           </div>
           <div>
-            <Label htmlFor="post-body" hint={`${body.length}/${POST_BODY_MAX}`}>
+            <Label
+              htmlFor="post-body"
+              hint={
+                <span className={cn(bodyTooLong && "text-[var(--lare-danger)]")}>
+                  {body.length}/{POST_BODY_MAX}
+                </span>
+              }
+            >
               Caption
             </Label>
-            <Textarea
+            <RichTextEditor
               id="post-body"
-              className="mt-1 min-h-48"
+              className="mt-1"
+              minHeight="min-h-48"
               value={body}
-              onChange={(e) => setBody(e.target.value)}
-              maxLength={POST_BODY_MAX}
+              onValueChange={setBody}
+              ariaLabel="Caption"
               placeholder="What did you learn? What was the approach?"
             />
           </div>

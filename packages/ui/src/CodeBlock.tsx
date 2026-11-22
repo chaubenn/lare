@@ -33,9 +33,11 @@ const SHIKI_LANG_LOADERS = {
   sql: () => import("@shikijs/langs/sql"),
 } as const;
 
-const THEME_NAME = "lare-ink";
+/** The code colours, shared with the post editor's highlighter so code reads the same in both. */
+export const CODE_THEME_NAME = "lare-ink";
+const THEME_NAME = CODE_THEME_NAME;
 
-const THEME = {
+export const CODE_THEME = {
   name: THEME_NAME,
   type: "dark" as const,
   colors: {
@@ -86,7 +88,7 @@ async function getHighlighter(): Promise<Highlighter> {
       );
       const langs = loaded.filter((lang) => lang != null);
       return createHighlighterCore({
-        themes: [THEME],
+        themes: [CODE_THEME],
         langs,
         engine: createJavaScriptRegexEngine(),
       }) as Promise<Highlighter>;

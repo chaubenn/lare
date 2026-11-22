@@ -3,6 +3,7 @@ import type { Post, Video } from "@lare/supabase-types";
 import { Lock, X } from "@lare/ui/icons";
 import { Avatar } from "@lare/ui/primitives";
 import { useEffect } from "react";
+import { RichText } from "@/components/rich/RichText";
 import { useUser } from "@/features/auth/AuthProvider";
 import { useVideo } from "@/features/media/hooks";
 import { usePostMedia } from "@/features/publishing/posts/media";
@@ -107,9 +108,10 @@ export function PostPreview({
           <div className="px-4 sm:px-5">
             <h3 className="text-base font-semibold leading-snug text-[var(--text)]">{shown}</h3>
             {body.trim() && (
-              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-400">
-                {body.trim()}
-              </p>
+              <RichText
+                source={body.trim()}
+                className="mt-1 text-sm leading-relaxed text-zinc-400"
+              />
             )}
           </div>
 

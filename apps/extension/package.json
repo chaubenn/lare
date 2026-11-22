@@ -1,6 +1,6 @@
 {
   "name": "@lare/extension",
-  "version": "3.7.1",
+  "version": "3.7.2",
   "private": true,
   "type": "module",
   "description": "Lare for LeetCode: passive problem/submission tracking and desktop-recorded mock interviews.",

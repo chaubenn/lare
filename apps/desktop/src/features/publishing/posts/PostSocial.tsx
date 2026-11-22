@@ -3,9 +3,14 @@ import { cn } from "@lare/ui";
 import { Heart, MessageCircle, Pencil, Reply, Trash2 } from "@lare/ui/icons";
 import { Avatar, Button, SectionTitle } from "@lare/ui/primitives";
 import { useState } from "react";
+import { Link } from "react-router";
+import { RichText } from "@/components/rich/RichText";
+import { RichTextEditor } from "@/components/rich/RichTextEditor";
+import { confirm } from "@/components/ui/Confirm";
+import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import { COMMENT_MAX } from "@/features/publishing/drafts/validation";
 import { notifyError } from "@/lib/notices";
-import { CommentText, MentionTextarea } from "./Mentions";
+import { routes } from "@/lib/routes";
 import {
   type PostComment,
   useAddComment,
@@ -98,6 +103,17 @@ export function CommentsSection({
 
   const fail = (title: string) => (e: unknown) => notifyError(title, e);
 
+  const post = () => {
+    if (!commentReady(draft) || add.isPending) return;
+    add.mutate(
+      { body: draft },
+      {
+        onSuccess: () => setDraft(""),
+        onError: fail("Couldn't post the comment"),
+      },
+    );
+  };
+
   const list = comments.data ?? [];
   const topLevel = list.filter((c) => !c.parent_id);
   const replies = new Map<string, PostComment[]>();
@@ -123,33 +139,31 @@ export function CommentsSection({
         className="space-y-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (draft.trim().length === 0) return;
-          add.mutate(
-            { body: draft },
-            {
-              onSuccess: () => setDraft(""),
-              onError: fail("Couldn't post the comment"),
-            },
-          );
+          post();
         }}
       >
-        <MentionTextarea
+        <RichTextEditor
           id={COMPOSER_ID}
           value={draft}
           onValueChange={setDraft}
-          maxLength={COMMENT_MAX}
+          mentions
+          minHeight="min-h-20"
           placeholder="Add a comment. Type @ to mention someone."
-          aria-label="Add a comment"
+          ariaLabel="Add a comment"
+          onSubmitShortcut={post}
         />
-        <Button
-          type="submit"
-          size="sm"
-          variant="primary"
-          loading={add.isPending}
-          disabled={draft.trim().length === 0}
-        >
-          Comment
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            type="submit"
+            size="sm"
+            variant="primary"
+            loading={add.isPending}
+            disabled={!commentReady(draft)}
+          >
+            Comment
+          </Button>
+          <CommentLength body={draft} />
+        </div>
       </form>
 
       <ul className="space-y-4">
@@ -163,6 +177,7 @@ export function CommentsSection({
                 postId={postId}
                 canEdit={comment.user_id === userId}
                 canDelete={comment.user_id === userId || isPostOwner}
+                replies={thread.length}
                 onReply={() => startReply(comment.id, comment)}
               />
               {thread.length > 0 || replying ? (
@@ -217,50 +232,50 @@ function ReplyComposer({
   const add = useAddComment(postId, userId);
   const [draft, setDraft] = useState(prefill);
 
+  const post = () => {
+    if (!commentReady(draft) || add.isPending) return;
+    add.mutate(
+      { body: draft, parentId },
+      {
+        onSuccess: onDone,
+        onError: (err) => notifyError("Couldn't post the reply", err),
+      },
+    );
+  };
+
   return (
     <form
       className="space-y-2"
       onSubmit={(e) => {
         e.preventDefault();
-        if (draft.trim().length === 0) return;
-        add.mutate(
-          { body: draft, parentId },
-          {
-            onSuccess: onDone,
-            onError: (err) => notifyError("Couldn't post the reply", err),
-          },
-        );
+        post();
       }}
     >
-      <MentionTextarea
+      <RichTextEditor
         value={draft}
         onValueChange={setDraft}
-        maxLength={COMMENT_MAX}
+        mentions
+        minHeight="min-h-16"
         placeholder="Write a reply"
-        aria-label="Write a reply"
-        className="min-h-16"
+        ariaLabel="Write a reply"
         autoFocus
-        onFocus={(e) => {
-          const end = e.currentTarget.value.length;
-          e.currentTarget.setSelectionRange(end, end);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onDone();
-        }}
+        onSubmitShortcut={post}
+        onEscape={onDone}
       />
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         <Button
           type="submit"
           size="sm"
           variant="primary"
           loading={add.isPending}
-          disabled={draft.trim().length === 0}
+          disabled={!commentReady(draft)}
         >
           Reply
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={onDone}>
           Cancel
         </Button>
+        <CommentLength body={draft} />
       </div>
     </form>
   );
@@ -272,12 +287,15 @@ function CommentRow({
   postId,
   canEdit,
   canDelete,
+  replies = 0,
   onReply,
 }: {
   comment: PostComment;
   postId: string;
   canEdit: boolean;
   canDelete: boolean;
+  /** How many replies a delete takes with it: the database removes them alongside. */
+  replies?: number;
   onReply: () => void;
 }) {
   const update = useUpdateComment(postId);
@@ -289,55 +307,99 @@ function CommentRow({
   const name = author?.display_name ?? (author?.handle ? `@${author.handle}` : "Someone");
   const fail = (title: string) => (e: unknown) => notifyError(title, e);
 
+  const save = () => {
+    if (!commentReady(draft) || update.isPending) return;
+    update.mutate(
+      { id: comment.id, body: draft },
+      { onSuccess: () => setEditing(false), onError: fail("Couldn't save") },
+    );
+  };
+  const cancelEdit = () => {
+    setDraft(comment.body);
+    setEditing(false);
+  };
+  const ownComment = canEdit;
+  const askToDelete = async () => {
+    const ok = await confirm({
+      title: "Delete comment?",
+      message: [
+        ownComment ? "Your comment will be removed." : `${name}'s comment will be removed.`,
+        replies > 0
+          ? `${replies === 1 ? "Its reply goes" : `All ${replies} replies go`} with it.`
+          : "",
+        "This can't be undone.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (ok) remove.mutate(comment.id, { onError: fail("Couldn't delete the comment") });
+  };
+
   return (
     <div id={`comment-${comment.id}`} className="flex gap-3">
-      <Avatar url={author?.avatar_url} name={name} size={28} />
+      {author?.handle ? (
+        <ProfileHoverCard handle={author.handle} className="shrink-0">
+          <Link to={routes.user(author.handle)}>
+            <Avatar url={author.avatar_url} name={name} size={28} />
+          </Link>
+        </ProfileHoverCard>
+      ) : (
+        <Avatar url={author?.avatar_url} name={name} size={28} />
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-[var(--text-tertiary)]">
-          <span className="font-medium text-[var(--text)]">{name}</span>
+          {author?.handle ? (
+            <ProfileHoverCard handle={author.handle}>
+              <Link
+                to={routes.user(author.handle)}
+                className="font-medium text-[var(--text)] hover:underline"
+              >
+                {name}
+              </Link>
+            </ProfileHoverCard>
+          ) : (
+            <span className="font-medium text-[var(--text)]">{name}</span>
+          )}
           <span>{formatLocalTimestamp(comment.created_at)}</span>
           {comment.edited_at ? <span>· edited</span> : null}
         </div>
 
         {editing ? (
-          <div className="mt-1.5 space-y-2">
-            <MentionTextarea
+          <div data-editor-scope className="mt-1.5 space-y-2">
+            <RichTextEditor
               value={draft}
               onValueChange={setDraft}
-              maxLength={COMMENT_MAX}
-              aria-label="Edit comment"
+              mentions
+              minHeight="min-h-16"
+              ariaLabel="Edit comment"
+              autoFocus
+              onSubmitShortcut={save}
+              onEscape={cancelEdit}
             />
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 variant="primary"
                 loading={update.isPending}
-                disabled={draft.trim().length === 0}
-                onClick={() =>
-                  update.mutate(
-                    { id: comment.id, body: draft },
-                    { onSuccess: () => setEditing(false), onError: fail("Couldn't save") },
-                  )
-                }
+                disabled={!commentReady(draft)}
+                onClick={save}
               >
                 Save
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setDraft(comment.body);
-                  setEditing(false);
-                }}
-              >
+              <Button size="sm" variant="ghost" onClick={cancelEdit}>
                 Cancel
               </Button>
+              <CommentLength body={draft} />
             </div>
           </div>
         ) : (
-          <p className="mt-1 select-text whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]">
-            <CommentText body={comment.body} />
-          </p>
+          <RichText
+            source={comment.body}
+            mentions
+            className="mt-1 text-sm leading-relaxed text-[var(--text)]"
+          />
         )}
 
         {!editing ? (
@@ -364,9 +426,7 @@ function CommentRow({
               <button
                 type="button"
                 disabled={remove.isPending}
-                onClick={() =>
-                  remove.mutate(comment.id, { onError: fail("Couldn't delete the comment") })
-                }
+                onClick={() => void askToDelete()}
                 className="inline-flex items-center gap-1 rounded-[var(--lare-r-1)] hover:text-[var(--lare-danger)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
               >
                 <Trash2 className="size-3" aria-hidden />
@@ -377,5 +437,25 @@ function CommentRow({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** A comment can go once it has something in it and fits the column. */
+function commentReady(body: string): boolean {
+  return body.trim().length > 0 && body.length <= COMMENT_MAX;
+}
+
+/** The count, only once it is close to the limit: formatting counts toward it too. */
+function CommentLength({ body }: { body: string }) {
+  if (body.length < COMMENT_MAX * 0.8) return null;
+  return (
+    <span
+      className={cn(
+        "ml-auto text-xs tabular-nums text-[var(--text-tertiary)]",
+        body.length > COMMENT_MAX && "text-[var(--lare-danger)]",
+      )}
+    >
+      {body.length}/{COMMENT_MAX}
+    </span>
   );
 }

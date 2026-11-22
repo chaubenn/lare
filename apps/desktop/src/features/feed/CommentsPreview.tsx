@@ -1,6 +1,7 @@
 import { Avatar } from "@lare/ui/primitives";
 import { Link } from "react-router";
-import { CommentText } from "@/features/publishing/posts/Mentions";
+import { RichTextInline } from "@/components/rich/RichText";
+import { ProfileHoverCard } from "@/features/profile/ProfileHoverCard";
 import type { PostComment } from "@/features/publishing/posts/social";
 import { routes } from "@/lib/routes";
 
@@ -45,24 +46,28 @@ function CommentPreview({ comment }: { comment: PostComment }) {
   return (
     <li className="flex gap-2.5">
       {author?.handle ? (
-        <Link to={routes.user(author.handle)} className="shrink-0">
-          <Avatar url={author.avatar_url} name={name} size={28} />
-        </Link>
+        <ProfileHoverCard handle={author.handle} className="shrink-0">
+          <Link to={routes.user(author.handle)}>
+            <Avatar url={author.avatar_url} name={name} size={28} />
+          </Link>
+        </ProfileHoverCard>
       ) : (
         <Avatar url={author?.avatar_url} name={name} size={28} />
       )}
       <p className="line-clamp-2 min-w-0 flex-1 text-sm leading-relaxed text-zinc-300">
         {author?.handle ? (
-          <Link
-            to={routes.user(author.handle)}
-            className="font-semibold text-zinc-200 hover:underline"
-          >
-            {name}
-          </Link>
+          <ProfileHoverCard handle={author.handle}>
+            <Link
+              to={routes.user(author.handle)}
+              className="font-semibold text-zinc-200 hover:underline"
+            >
+              {name}
+            </Link>
+          </ProfileHoverCard>
         ) : (
           <span className="font-semibold text-zinc-200">{name}</span>
         )}{" "}
-        <CommentText body={comment.body} />
+        <RichTextInline source={comment.body} mentions />
       </p>
     </li>
   );

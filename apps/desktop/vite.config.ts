@@ -20,9 +20,16 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: [
+      { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+      // The code highlighter's language and theme indexes, cut down to what a code block can be.
+      {
+        find: /^shiki\/(langs|themes)$/,
+        replacement: fileURLToPath(
+          new URL("./src/components/rich/shikiBundles.ts", import.meta.url),
+        ),
+      },
+    ],
   },
   // Tauri expects a fixed port; fail if it is taken.
   clearScreen: false,
