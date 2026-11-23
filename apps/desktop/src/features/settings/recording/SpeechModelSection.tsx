@@ -71,17 +71,14 @@ export function SpeechModelSection() {
       : null;
 
   return (
-    <SubSection
-      title="Speech model (whisper.cpp)"
-      description="Transcription runs locally on this machine; models are stored in the app data folder."
-    >
+    <SubSection title="Speech model (whisper.cpp)" description="Transcribes on this device.">
       {models.isError ? <FieldError>{errorMessage(models.error)}</FieldError> : null}
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-56 flex-1">
           <SettingSelect
             id="rec-whisper-model"
             label="Model"
-            hint="larger is more accurate, slower"
+            hint="bigger is more accurate, slower"
             value={selected}
             options={modelOptions}
             disabled={!models.data || !settings.data}

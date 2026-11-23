@@ -43,6 +43,10 @@ pub struct RecorderSettings {
     /// default (`windows::DEFAULT_PILL_SHORTCUT`); `Some("")` = no shortcut.
     #[serde(default)]
     pub pill_shortcut: Option<String>,
+    /// Accelerator that hides and shows the facecam while recording. `None` = the default
+    /// (`windows::DEFAULT_CAMERA_SHORTCUT`); `Some("")` = no shortcut.
+    #[serde(default)]
+    pub camera_shortcut: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,8 +332,8 @@ impl Recorder {
     pub fn set_settings(&self, settings: RecorderSettings) {
         *write(&self.settings) = settings.clone();
         save_settings(&self.data_dir, &settings);
-        // A new shortcut takes effect straight away if a recording is already running.
-        crate::windows::sync_pill_shortcut(&self.app, settings.pill_shortcut);
+        // New shortcuts take effect straight away if a recording is already running.
+        crate::windows::sync_shortcuts(&self.app, Some(settings));
     }
 
     async fn feeds(&self) -> &Feeds {
@@ -577,7 +581,7 @@ impl Recorder {
                     if let Err(e) = crate::windows::open_recorder(
                         &self.app,
                         display_id.as_deref(),
-                        self.settings().pill_shortcut,
+                        self.settings(),
                     ) {
                         warn!(%e, "recorder window failed to open");
                     }

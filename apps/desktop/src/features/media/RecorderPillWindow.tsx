@@ -9,11 +9,12 @@
 import { formatDuration } from "@lare/shared";
 import { cn } from "@lare/ui";
 import { Emblem } from "@lare/ui/brand";
-import { EyeOff, GripVertical, Pause, Play, Trash2 } from "@lare/ui/icons";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Camera, EyeOff, GripVertical, Pause, Play, Trash2 } from "@lare/ui/icons";
+import { useCallback, useEffect, useState } from "react";
 import { type RecorderStatus, recorder } from "@/lib/recorder";
 import { DEFAULT_PILL_SHORTCUT, describeAccelerator, isMac } from "@/lib/shortcuts";
 import { useTauriEvent } from "@/lib/tauri";
+import { ShortcutCaps, OverlayTooltip as Tooltip, useOverlayTooltips } from "./overlayTooltips";
 
 /**
  * How much video exists, ticking. Rust reports `recordedMs` with every state payload — wall clock
@@ -62,62 +63,6 @@ function useHideShortcut(state: RecorderStatus["state"]): string | null {
 
 /** How long the discard question waits for an answer before the pill goes back to normal. */
 const DISCARD_CONFIRM_MS = 5000;
-
-/** How long the pointer rests on a control before its tooltip shows. */
-const TOOLTIP_DELAY_MS = 350;
-
-/**
- * Which control the pointer is on (`pointed`, for the hover highlight) and whose tooltip shows.
- * Once one tooltip has shown, sliding to the next control shows its tooltip straight away.
- *
- * The pointer comes from two places: the webview's own pointer events, and the
- * `recorder:pointer` events Rust sends while the pill is up. On macOS the pill is never the key
- * window, and WebKit sends it no hover at all, so there the second is the only one that arrives.
- */
-function useTooltips() {
-  const [pointed, setPointed] = useState<string | null>(null);
-  const [shown, setShown] = useState<string | null>(null);
-  const warm = useRef(false);
-  const timer = useRef<number | undefined>(undefined);
-
-  useEffect(() => {
-    window.clearTimeout(timer.current);
-    if (pointed === null) {
-      setShown(null);
-      // A gap between two buttons should not start the delay over.
-      timer.current = window.setTimeout(() => {
-        warm.current = false;
-      }, 250);
-      return;
-    }
-    if (warm.current) {
-      setShown(pointed);
-      return;
-    }
-    setShown(null);
-    timer.current = window.setTimeout(() => {
-      warm.current = true;
-      setShown(pointed);
-    }, TOOLTIP_DELAY_MS);
-  }, [pointed]);
-  useEffect(() => () => window.clearTimeout(timer.current), []);
-
-  useTauriEvent("recorder:pointer", (at) => {
-    const el = at ? document.elementFromPoint(at[0], at[1]) : null;
-    setPointed(el?.closest<HTMLElement>("[data-tip]")?.dataset.tip ?? null);
-  });
-
-  /** Props for the element wrapping a control and its tooltip. */
-  const target = (id: string) => ({
-    "data-tip": id,
-    onPointerEnter: () => setPointed(id),
-    onPointerLeave: () => setPointed((p) => (p === id ? null : p)),
-    onFocus: () => setPointed(id),
-    onBlur: () => setPointed((p) => (p === id ? null : p)),
-  });
-
-  return { pointed, shown, target };
-}
 
 /**
  * The pill is moved with `data-tauri-drag-region`, the OS's own window drag.
@@ -172,7 +117,10 @@ export function RecorderPillWindow() {
 
   const live = state === "recording" || paused;
   const keys = caps.join(isMac ? "" : "+");
-  const { pointed, shown, target } = useTooltips();
+  const { pointed, shown, target } = useOverlayTooltips("recorder:pointer");
+  // The user hid the facecam from its own toolbar; the pill offers it back.
+  const [cameraTucked, setCameraTucked] = useState(false);
+  useTauriEvent("camera:tucked", setCameraTucked);
   const noun = isInterview ? "interview" : "recording";
 
   // Discarding throws the take away for good, so the bin asks once more in place: the pill is
@@ -350,6 +298,20 @@ export function RecorderPillWindow() {
               </span>
             </div>
           )}
+          {cameraTucked ? (
+            <span className="relative flex" {...target("camera")}>
+              <PillButton
+                label="Show facecam"
+                hot={pointed === "camera"}
+                onClick={() => void run(() => recorder.showCameraWindow())}
+              >
+                <Camera className="size-4" aria-hidden />
+              </PillButton>
+              <Tooltip show={shown === "camera"} align={keys ? "center" : "end"}>
+                Show facecam
+              </Tooltip>
+            </span>
+          ) : null}
           {keys ? (
             <span className="relative flex" {...target("hide")}>
               <PillButton
@@ -361,52 +323,13 @@ export function RecorderPillWindow() {
               </PillButton>
               <Tooltip show={shown === "hide"} align="end">
                 Hide
-                <span className="ml-1.5 inline-flex gap-0.5">
-                  {caps.map((cap) => (
-                    <kbd
-                      key={cap}
-                      className="rounded-[4px] border border-white/[0.1] bg-white/[0.06] px-1 font-sans text-[10.5px] leading-4 text-[var(--lare-soft)]"
-                    >
-                      {cap}
-                    </kbd>
-                  ))}
-                </span>
+                {hideShortcut ? <ShortcutCaps accelerator={hideShortcut} /> : null}
               </Tooltip>
             </span>
           ) : null}
         </div>
       </div>
     </div>
-  );
-}
-
-/**
- * A control's tooltip, in the room above the pill. It is drawn by the control's wrapper rather
- * than the button, so a disabled button's fade does not reach it.
- */
-function Tooltip({
-  show,
-  align = "center",
-  children,
-}: {
-  show: boolean;
-  align?: "start" | "center" | "end";
-  children: React.ReactNode;
-}) {
-  return (
-    <span
-      role="tooltip"
-      aria-hidden={!show}
-      className={cn(
-        "pointer-events-none absolute bottom-[calc(100%+16px)] z-10 flex items-center whitespace-nowrap rounded-lg border border-white/[0.08] px-2 py-1 text-[11.5px] font-medium leading-4 text-[var(--lare-bone)]",
-        "bg-[color-mix(in_oklab,var(--lare-ink-2)_96%,transparent)] shadow-[0_4px_14px_rgb(0_0_0/0.45)]",
-        "transition-opacity duration-100 motion-reduce:transition-none",
-        align === "start" ? "left-0" : align === "end" ? "right-0" : "left-1/2 -translate-x-1/2",
-        show ? "opacity-100" : "opacity-0",
-      )}
-    >
-      {children}
-    </span>
   );
 }
 
@@ -447,7 +370,7 @@ function PillButton({
 }: {
   label: string;
   danger?: boolean;
-  /** The pointer is on it: macOS gets no CSS hover in the pill (see `useTooltips`). */
+  /** The pointer is on it: macOS gets no CSS hover in the pill (see `overlayTooltips.tsx`). */
   hot?: boolean;
   disabled?: boolean;
   onClick: () => void;

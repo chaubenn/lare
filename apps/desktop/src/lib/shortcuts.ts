@@ -1,11 +1,13 @@
 /**
- * Accelerator strings for the recorder-pill shortcut, in the syntax Tauri's global-shortcut plugin
+ * Accelerator strings for the recorder-pill and facecam shortcuts, in the syntax Tauri's global-shortcut plugin
  * parses (`Control+Alt+Shift+H`, `CommandOrControl+Space`). Kept free of React and Tauri so the capture and
  * display rules can be tested on their own.
  */
 
 /** What the setting means when nothing has been chosen. Matches `windows::DEFAULT_PILL_SHORTCUT`. */
 export const DEFAULT_PILL_SHORTCUT = "Control+Alt+Shift+H";
+/** Likewise for the facecam. Matches `windows::DEFAULT_CAMERA_SHORTCUT`. */
+export const DEFAULT_CAMERA_SHORTCUT = "Control+Alt+Shift+C";
 
 export interface KeyLike {
   code: string;

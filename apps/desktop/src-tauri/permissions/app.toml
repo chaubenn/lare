@@ -5,7 +5,7 @@
 
 [[set]]
 identifier = "overlay-windows"
-description = "What the recorder pill and camera preview call: the recording status and settings, and the pill controls."
+description = "What the recorder pill and camera preview call: the recording status and settings, the pill controls, and the camera bubble's layout and visibility."
 permissions = [
   "allow-recorder-status",
   "allow-recorder-settings",
@@ -14,4 +14,9 @@ permissions = [
   "allow-recording-stop",
   "allow-recording-cancel",
   "allow-tuck-recorder-window",
+  "allow-camera-layout",
+  "allow-resize-camera-window",
+  "allow-settle-camera-window",
+  "allow-tuck-camera-window",
+  "allow-show-camera-window",
 ]

@@ -53,6 +53,8 @@ export interface RecorderSettings {
    * syntax). null = the default, Ctrl+Alt+Shift+H; "" = no shortcut.
    */
   pillShortcut: string | null;
+  /** Hides and shows the facecam while recording. null = the default, Ctrl+Alt+Shift+C; "" = none. */
+  cameraShortcut: string | null;
 }
 
 export interface RecorderStatus {
@@ -134,12 +136,29 @@ export interface WhisperModelStatus {
   downloaded: boolean;
 }
 
+/** The facecam bubble's shapes. Their proportions live in Rust (`camera.rs`), which sizes the window. */
+export type CameraShape = "circle" | "square" | "rectangle" | "pillow";
+export type CameraCorner = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+
+/** The facecam bubble's shape, height in points, and distance from the screen corner it keeps to. */
+export interface CameraLayout {
+  shape: CameraShape;
+  height: number;
+  corner: CameraCorner;
+  dx: number;
+  dy: number;
+}
+
 /** Events emitted by the Rust side. The two progress events carry the `jobId` they belong to. */
 export interface RecorderEvents {
   "recording:state": RecorderStatus;
   "recording:completed": CompletedRecording;
   /** Whether the facecam preview window should be holding the webcam open. */
   "camera:active": boolean;
+  /** The pointer over the facecam preview window, in points from its top-left; `null` off it. */
+  "camera:pointer": [number, number] | null;
+  /** Whether the user has hidden the facecam for the rest of the take (sent to the pill). */
+  "camera:tucked": boolean;
   /** The pointer over the pill window, in points from its top-left; `null` off it. */
   "recorder:pointer": [number, number] | null;
   "upload:progress": { jobId: string; uploaded: number; total: number };
@@ -169,6 +188,17 @@ export const recorder = {
   previewUrl: (path: string) => invoke<string>("preview_url", { path }),
   settings: () => invoke<RecorderSettings>("recorder_settings"),
   setSettings: (settings: RecorderSettings) => invoke<void>("set_recorder_settings", { settings }),
+
+  cameraLayout: () => invoke<CameraLayout>("camera_layout"),
+  /** Reshape or resize the facecam bubble, holding its anchored corner still. Not saved yet. */
+  resizeCamera: (shape: CameraShape, height: number) =>
+    invoke<CameraLayout>("resize_camera_window", { shape, height }),
+  /** Anchor the bubble to the corner it is now nearest and save its layout for the next take. */
+  settleCamera: () => invoke<CameraLayout>("settle_camera_window"),
+  /** Hide the facecam for the rest of the take, webcam and all; the pill offers it back. */
+  tuckCameraWindow: () => invoke<void>("tuck_camera_window"),
+  /** Bring a hidden facecam back where it was. */
+  showCameraWindow: () => invoke<void>("show_camera_window"),
 
   status: () => invoke<RecorderStatus>("recorder_status"),
   start: (req: DemoStart) => invoke<RecorderStatus>("recording_start", { req }),

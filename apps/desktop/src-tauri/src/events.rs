@@ -15,6 +15,12 @@ pub const UPLOAD_PROGRESS: &str = "upload:progress";
 pub const TRANSCRIBE_PROGRESS: &str = "transcribe:progress";
 /// Whether the facecam preview window should be holding the webcam open.
 pub const CAMERA_ACTIVE: &str = "camera:active";
+/// The pointer's position over the facecam preview window, in points from its top-left (`null`
+/// when it is off the window).
+pub const CAMERA_POINTER: &str = "camera:pointer";
+/// Whether the user has hidden the facecam for the rest of the take (sent to the pill, which then
+/// offers to bring it back).
+pub const CAMERA_TUCKED: &str = "camera:tucked";
 /// The pointer's position over the pill window, in points from its top-left (`null` when it is
 /// off the window).
 pub const RECORDER_POINTER: &str = "recorder:pointer";

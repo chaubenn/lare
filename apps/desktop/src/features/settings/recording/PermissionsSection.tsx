@@ -24,21 +24,21 @@ const PERMISSION_ROWS: PermissionRowDef[] = [
     key: "screenRecording",
     which: "screen_recording",
     label: "Screen recording",
-    description: "Captures your display while you record.",
+    description: "Captures your display.",
     icon: Monitor,
   },
   {
     key: "camera",
     which: "camera",
     label: "Camera",
-    description: "Only used when the facecam is on.",
+    description: "Only for the facecam.",
     icon: Camera,
   },
   {
     key: "microphone",
     which: "microphone",
     label: "Microphone",
-    description: "Voice-over for demos and the transcript of mock interviews.",
+    description: "Narration and interview transcripts.",
     icon: Mic,
   },
 ];
@@ -48,10 +48,7 @@ export function PermissionsSection() {
   const macScreenPermission =
     permissions.data !== undefined && permissions.data.screenRecording !== "not_applicable";
   return (
-    <SubSection
-      title="Permissions"
-      description="The operating system has to allow Lare to capture before a recording can start."
-    >
+    <SubSection title="Permissions" description="Needed before Lare can record.">
       {permissions.isError ? <FieldError>{errorMessage(permissions.error)}</FieldError> : null}
       <ul className="divide-y divide-zinc-800 rounded-[var(--lare-r-2)] border border-[var(--border)]">
         {PERMISSION_ROWS.map((row) => (
@@ -60,7 +57,7 @@ export function PermissionsSection() {
       </ul>
       {macScreenPermission ? (
         <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-          After allowing Screen Recording on macOS, quit and reopen Lare for it to take effect.
+          After allowing Screen Recording, reopen Lare.
         </p>
       ) : null}
       {macScreenPermission && permissions.data?.screenRecording === "denied" ? (
@@ -90,7 +87,7 @@ function StaleGrantNotice() {
       }
       notify({
         title: "Permission cleared",
-        description: "Lare has asked macOS again. Switch it on if prompted, then reopen Lare.",
+        description: "Allow it if macOS asks, then reopen Lare.",
       });
     },
     onError: (e) => notifyError("Couldn't reset the permission", e),
@@ -99,8 +96,8 @@ function StaleGrantNotice() {
   return (
     <div className="mt-2 rounded-[var(--lare-r-2)] border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2.5">
       <p className="text-xs text-zinc-400">
-        Switched on in System Settings but still denied? An update can invalidate the permission
-        while leaving Lare in the list. Clearing it lets macOS grant it to this build.
+        On in System Settings but still denied? Updates can break the permission; clear it and allow
+        it again.
       </p>
       <div className="mt-2">
         <Button
@@ -146,7 +143,7 @@ function PermissionRow({
         notify({
           title: "Turn on Lare in System Settings",
           description:
-            "Lare is now listed under Privacy & Security → Screen & System Audio Recording. Switch it on, then quit and reopen Lare.",
+            "Switch Lare on under Privacy & Security → Screen & System Audio Recording, then reopen Lare.",
         });
       }
     },

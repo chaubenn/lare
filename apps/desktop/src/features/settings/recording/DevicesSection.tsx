@@ -42,7 +42,7 @@ export function DevicesSection() {
   return (
     <SubSection
       title="Devices"
-      description="What to capture. Changes apply to the next recording."
+      description="Applies from the next recording."
       action={
         <Button
           size="sm"
@@ -91,7 +91,7 @@ export function DevicesSection() {
           />
           <SettingSelect
             id="rec-max-size"
-            label="Instant mode resolution cap"
+            label="Max resolution"
             hint="longest edge"
             value={
               settings.data.maxOutputSize === null ? null : String(settings.data.maxOutputSize)

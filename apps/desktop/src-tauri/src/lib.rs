@@ -1,6 +1,7 @@
 //! Lare desktop (Tauri 2). Hosts the local server the Chrome extension talks to, the OAuth
 //! loopback redirect, deep links, and a handful of commands the React frontend calls.
 
+mod camera;
 pub mod commands;
 pub mod deeplink;
 mod events;
@@ -237,13 +238,13 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        // The pill is the only thing Lare registers a global shortcut for (see
-        // `windows::sync_pill_shortcut`), so every press is a request to hide or show it.
+        // The overlays are the only things Lare registers global shortcuts for (see
+        // `windows::sync_shortcuts`), so every press is a request to hide or show one.
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        crate::windows::toggle_recorder(app);
+                        crate::windows::on_shortcut(app, shortcut);
                     }
                 })
                 .build(),
@@ -282,6 +283,11 @@ pub fn run() {
             commands::recording_delete,
             commands::clear_screen_sharing,
             commands::tuck_recorder_window,
+            commands::camera_layout,
+            commands::resize_camera_window,
+            commands::settle_camera_window,
+            commands::tuck_camera_window,
+            commands::show_camera_window,
             commands::show_desktop_notification,
             commands::media_info,
             commands::make_thumbnail,
@@ -321,6 +327,7 @@ pub fn run() {
                 }
             });
             app.manage(recorder);
+            app.manage(camera::CameraStore::new(&data_dir));
             app.manage(previews.clone());
 
             // The command palette's index. Nothing touches Zvec until the frontend opens it.

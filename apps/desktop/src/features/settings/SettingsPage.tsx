@@ -59,8 +59,7 @@ function ExtensionPanel() {
         </div>
       </dl>
       <p className="mt-3 text-xs text-[var(--text-tertiary)]">
-        The extension stays connected over localhost while a LeetCode tab is open. Reload the
-        extension on chrome://extensions and the LeetCode tab if this still says not connected.
+        Connects while a LeetCode tab is open. Not connecting? Reload the extension and the tab.
       </p>
     </Card>
   );

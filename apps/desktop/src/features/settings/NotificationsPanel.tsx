@@ -38,7 +38,7 @@ export function NotificationsPanel() {
         onChange={(next) => void change(next)}
         disabled={!inTauri || busy}
         label="Desktop notifications"
-        description="Show a system notification for likes, comments and follows while Lare is in the background."
+        description="Likes, comments and follows, while Lare is in the background."
       />
     </Card>
   );

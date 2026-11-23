@@ -133,7 +133,10 @@ pub fn recorder_settings(rec: Rec<'_>) -> RecorderSettings {
 pub fn set_recorder_settings(rec: Rec<'_>, settings: RecorderSettings) -> Result<(), String> {
     // Refuse a shortcut that would never register, rather than saving it and failing silently
     // the next time a recording starts.
-    windows::parse_pill_shortcut(settings.pill_shortcut.as_deref())?;
+    windows::check_shortcuts(
+        settings.pill_shortcut.as_deref(),
+        settings.camera_shortcut.as_deref(),
+    )?;
     rec.set_settings(settings);
     Ok(())
 }
@@ -299,6 +302,35 @@ fn confine(root: &Path, path: &Path) -> Result<PathBuf, String> {
 #[tauri::command]
 pub fn tuck_recorder_window(app: AppHandle) {
     windows::tuck_recorder(&app);
+}
+
+#[tauri::command]
+pub fn camera_layout(app: AppHandle) -> crate::camera::CameraLayout {
+    windows::camera_layout(&app)
+}
+
+#[tauri::command]
+pub fn resize_camera_window(
+    app: AppHandle,
+    shape: crate::camera::CameraShape,
+    height: f64,
+) -> Result<crate::camera::CameraLayout, String> {
+    windows::resize_camera(&app, shape, height)
+}
+
+#[tauri::command]
+pub fn settle_camera_window(app: AppHandle) -> Result<crate::camera::CameraLayout, String> {
+    windows::settle_camera(&app)
+}
+
+#[tauri::command]
+pub fn tuck_camera_window(app: AppHandle) {
+    windows::tuck_camera(&app);
+}
+
+#[tauri::command]
+pub fn show_camera_window(app: AppHandle) {
+    windows::untuck_camera(&app);
 }
 
 // ---------------------------------------------------------------------------

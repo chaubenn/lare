@@ -20,7 +20,7 @@ export function ScreenSharingSection() {
       const ok = await confirm({
         title: "Clear the screen-sharing indicator?",
         message:
-          "This releases the screen, camera and microphone, and restarts the macOS service that owns screen-capture sessions.\n\nAny other app that is recording or sharing its screen right now will stop too.",
+          "Releases the screen, camera and microphone.\n\nAny other app recording or sharing its screen will stop too.",
         confirmLabel: "Clear",
         destructive: true,
       });
@@ -45,7 +45,7 @@ export function ScreenSharingSection() {
   return (
     <SubSection
       title="Screen sharing"
-      description="Lare stops capturing when it quits. If it was force-quit or crashed mid-recording, macOS can keep showing it as sharing your screen — clear that here."
+      description="If Lare crashed mid-recording and macOS still shows it sharing your screen, clear it here."
       action={
         <Button
           size="sm"
@@ -59,7 +59,7 @@ export function ScreenSharingSection() {
       }
     >
       <p className="text-xs text-[var(--text-tertiary)]">
-        Other apps recording or sharing their screen will stop as well.
+        This also stops other apps that are sharing their screen.
       </p>
     </SubSection>
   );

@@ -1,5 +1,5 @@
 /**
- * Settings → Recording: OS permissions, capture devices/resolution cap, the recorder-pill hotkey
+ * Settings → Recording: OS permissions, capture devices/resolution cap, the pill and facecam hotkeys
  * and the local whisper.cpp speech model. Every change is persisted immediately through
  * `recorder.setSettings`.
  */
@@ -8,8 +8,8 @@ import { Card, SectionTitle } from "@lare/ui/primitives";
 import { inTauri } from "@/lib/tauri";
 import { DevicesSection } from "./DevicesSection";
 import { PermissionsSection } from "./PermissionsSection";
-import { PillShortcutSection } from "./PillShortcutSection";
 import { ScreenSharingSection } from "./ScreenSharingSection";
+import { ShortcutsSection } from "./ShortcutsSection";
 import { SpeechModelSection } from "./SpeechModelSection";
 
 export function RecordingPanel() {
@@ -21,7 +21,7 @@ export function RecordingPanel() {
           <PermissionsSection />
           <ScreenSharingSection />
           <DevicesSection />
-          <PillShortcutSection />
+          <ShortcutsSection />
           <SpeechModelSection />
         </div>
       ) : (

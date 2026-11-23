@@ -57,8 +57,8 @@ function SetupPage({ onDone, macOs }: { onDone: () => void; macOs: boolean }) {
       <div>
         <h1 className="text-xl font-semibold">Set up recording</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          Lare needs your permission to record demos and mock interviews, and a local speech model
-          to transcribe them. Anything you skip can be done later in Settings → Recording.
+          Allow recording and download a speech model. You can skip either and finish later in
+          Settings → Recording.
         </p>
       </div>
       <Card>

@@ -353,9 +353,13 @@ already in media time; edit events (wall-clock epoch from Monaco) and submission
    button lives inside its own webview, and destroying that webview under an in-flight
    `recording_stop` aborts the process. `destroy_overlays` closes them when the main window goes,
    which is also what quits the app.
-   A global shortcut (`windows::sync_pill_shortcut`, setting `pillShortcut`, default
-   Ctrl+Alt+Shift+H on every platform) hides and shows the pill mid-recording. It is registered only
-   between `open_recorder` and `hide_recorder`, so it never claims the keys outside a take.
+   Two global shortcuts (`windows::sync_shortcuts`) hide and show the overlays mid-recording: the
+   pill's (setting `pillShortcut`, default Ctrl+Alt+Shift+H on every platform) and the facecam's
+   (`cameraShortcut`, default Ctrl+Alt+Shift+C, only while the take has a facecam). They are
+   registered only between `open_recorder` and `hide_recorder`, so they never claim the keys
+   outside a take, and `set_recorder_settings` refuses the same keys for both.
+   The facecam's own toolbar can also hide it (`tuck_camera_window`, which drops the webcam too);
+   the pill then shows a camera button that brings it back.
 3. Stop: the `recording:completed` event hands the take to the React pipeline.
    `stop` and `cancel` are serialised on one mutex and idempotent: the pill's stop button and the
    extension's `session.end` race on every interview ended from the browser, and the second caller

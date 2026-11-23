@@ -18,10 +18,12 @@ use std::sync::{Mutex, OnceLock};
 use std::thread::ThreadId;
 use std::time::Duration;
 
-use tauri::{AppHandle, LogicalPosition, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
+use crate::camera::{self, CameraLayout, CameraShape, CameraStore};
 use crate::events;
+use crate::recorder::RecorderSettings;
 use crate::sync::lock;
 
 /// Window labels. The capabilities in `capabilities/*.json` grant permissions by these names, and
@@ -34,6 +36,12 @@ pub const CAMERA_LABEL: &str = "camera";
 /// OS, browser or editor binds, and nothing a recording session types (code, speech) produces,
 /// so it is the same on every platform and never collides with anything.
 pub const DEFAULT_PILL_SHORTCUT: &str = "Control+Alt+Shift+H";
+/// Hides and shows the facecam, on the same pattern (C for camera).
+pub const DEFAULT_CAMERA_SHORTCUT: &str = "Control+Alt+Shift+C";
+
+/// The keys registered for each overlay this take, so a press can be told apart.
+static PILL_KEYS: Mutex<Option<Shortcut>> = Mutex::new(None);
+static CAMERA_KEYS: Mutex<Option<Shortcut>> = Mutex::new(None);
 
 /// True from the moment the pill is put up for a recording until it is taken down. The shortcut is
 /// only registered, and only does anything, in between, so it can never shadow the same keys in
@@ -44,6 +52,15 @@ static PILL_LIVE: AtomicBool = AtomicBool::new(false);
 /// running its script, and nobody wants the camera light on between takes.
 fn set_camera_active(app: &AppHandle, active: bool) {
     events::emit_to(app, CAMERA_LABEL, events::CAMERA_ACTIVE, active);
+}
+
+/// A take has the facecam up: set by [`open_camera`], cleared by [`hide_camera`]. The bubble can be
+/// tucked away and brought back only while this holds.
+static CAMERA_LIVE: AtomicBool = AtomicBool::new(false);
+
+/// Tell the pill whether the user has hidden the facecam, so it can offer it back.
+fn set_camera_tucked(app: &AppHandle, tucked: bool) {
+    events::emit_to(app, RECORDER_LABEL, events::CAMERA_TUCKED, tucked);
 }
 
 static MAIN_THREAD: OnceLock<ThreadId> = OnceLock::new();
@@ -127,6 +144,15 @@ impl WorkArea {
             h: wa.size.height as f64 / scale,
         }
     }
+
+    fn rect(self) -> camera::Rect {
+        camera::Rect {
+            x: self.x,
+            y: self.y,
+            w: self.w,
+            h: self.h,
+        }
+    }
 }
 
 /// Work area of the display being recorded (`display_id` = Cap display id string, `None` =
@@ -165,21 +191,12 @@ const TOOLTIP_ROOM: f64 = 34.0;
 /// The pill itself is 52pt tall, sitting in the bottom 72pt with room for its shadow; the
 /// tooltip room is on top of that.
 const RECORDER_SIZE: (f64, f64) = (464.0, 72.0 + TOOLTIP_ROOM);
-const CAMERA_SIZE: f64 = 220.0;
 const EDGE_MARGIN: f64 = 16.0;
 
 /// Bottom-centre of the work area, clear of the Dock.
 fn recorder_position(wa: WorkArea) -> (f64, f64) {
     let (w, h) = RECORDER_SIZE;
     (wa.x + (wa.w - w) / 2.0, wa.y + wa.h - h - EDGE_MARGIN)
-}
-
-/// Bottom-right of the work area, clear of the Dock.
-fn camera_position(wa: WorkArea, size: f64) -> (f64, f64) {
-    (
-        wa.x + wa.w - size - EDGE_MARGIN,
-        wa.y + wa.h - size - EDGE_MARGIN,
-    )
 }
 
 /// Turn a freshly built, still hidden overlay into a non-activating `NSPanel` (macOS only).
@@ -595,8 +612,27 @@ fn is_claimable(shortcut: &Shortcut) -> bool {
 
 /// Reads the user's pill shortcut: `None` is the default, `Some("")` turns it off.
 pub fn parse_pill_shortcut(setting: Option<&str>) -> Result<Option<Shortcut>, String> {
+    parse_shortcut(setting, DEFAULT_PILL_SHORTCUT)
+}
+
+/// Reads the user's facecam shortcut, as [`parse_pill_shortcut`].
+pub fn parse_camera_shortcut(setting: Option<&str>) -> Result<Option<Shortcut>, String> {
+    parse_shortcut(setting, DEFAULT_CAMERA_SHORTCUT)
+}
+
+/// Both shortcuts, refused if either is unusable or they are the same keys.
+pub fn check_shortcuts(pill: Option<&str>, camera: Option<&str>) -> Result<(), String> {
+    let pill = parse_pill_shortcut(pill)?;
+    let camera = parse_camera_shortcut(camera)?;
+    if pill.is_some() && pill == camera {
+        return Err("The recorder pill and the facecam need different shortcuts.".into());
+    }
+    Ok(())
+}
+
+fn parse_shortcut(setting: Option<&str>, default: &str) -> Result<Option<Shortcut>, String> {
     let raw = match setting.map(str::trim) {
-        None => DEFAULT_PILL_SHORTCUT,
+        None => default,
         Some("") => return Ok(None),
         Some(raw) => raw,
     };
@@ -611,30 +647,68 @@ pub fn parse_pill_shortcut(setting: Option<&str>) -> Result<Option<Shortcut>, St
     Ok(Some(shortcut))
 }
 
-/// Makes the registered global shortcut match the recording state and `setting` (the saved
-/// `pill_shortcut`). Lare has no other global shortcut, so everything is cleared and the one
-/// wanted is re-added.
-pub fn sync_pill_shortcut(app: &AppHandle, setting: Option<String>) {
+/// Makes the registered global shortcuts match the recording state and the saved settings (`None`
+/// once the take is over). The pill's is claimed for the whole take, the facecam's only while the
+/// take has one. Lare has no other global shortcut, so everything is cleared and the ones wanted
+/// are re-added.
+pub fn sync_shortcuts(app: &AppHandle, settings: Option<RecorderSettings>) {
     on_main_unit(app, move |app| {
         let shortcuts = app.global_shortcut();
         if let Err(e) = shortcuts.unregister_all() {
-            tracing::warn!(%e, "could not clear the pill shortcut");
+            tracing::warn!(%e, "could not clear the overlay shortcuts");
         }
+        *lock(&PILL_KEYS) = None;
+        *lock(&CAMERA_KEYS) = None;
+        let Some(settings) = settings else {
+            return;
+        };
         if !PILL_LIVE.load(Ordering::SeqCst) {
             return;
         }
-        match parse_pill_shortcut(setting.as_deref()) {
-            Ok(Some(shortcut)) => {
-                // Typically the OS or another app already owns a combination the user picked;
-                // the pill then simply stays put.
-                if let Err(e) = shortcuts.register(shortcut) {
-                    tracing::warn!(%e, "could not register the pill shortcut");
+        let wanted = [
+            (
+                &PILL_KEYS,
+                parse_pill_shortcut(settings.pill_shortcut.as_deref()),
+                "pill",
+            ),
+            (
+                &CAMERA_KEYS,
+                if CAMERA_LIVE.load(Ordering::SeqCst) {
+                    parse_camera_shortcut(settings.camera_shortcut.as_deref())
+                } else {
+                    Ok(None)
+                },
+                "facecam",
+            ),
+        ];
+        for (slot, parsed, which) in wanted {
+            match parsed {
+                Ok(Some(shortcut)) => {
+                    // Typically the OS or another app already owns a combination the user picked;
+                    // the overlay then simply stays put. The same keys for both register once,
+                    // and belong to the pill.
+                    if lock(&PILL_KEYS).is_some_and(|p| p == shortcut) {
+                        continue;
+                    }
+                    match shortcuts.register(shortcut) {
+                        Ok(()) => *lock(slot) = Some(shortcut),
+                        Err(e) => tracing::warn!(%e, which, "could not register a shortcut"),
+                    }
                 }
+                Ok(None) => {}
+                Err(e) => tracing::warn!(%e, which, "ignoring a saved shortcut"),
             }
-            Ok(None) => {}
-            Err(e) => tracing::warn!(%e, "ignoring the saved pill shortcut"),
         }
     });
+}
+
+/// A registered shortcut was pressed: hide or show the overlay it belongs to.
+pub fn on_shortcut(app: &AppHandle, shortcut: &Shortcut) {
+    if lock(&CAMERA_KEYS).is_some_and(|c| c == *shortcut) {
+        toggle_camera(app);
+    } else {
+        toggle_recorder(app);
+    }
 }
 
 /// Hide the pill if it is showing, bring it back if it is hidden. The webview keeps running while
@@ -669,11 +743,11 @@ pub fn tuck_recorder(app: &AppHandle) {
 }
 
 /// Show the recorder pill (bottom-centre of the recorded display, above the Dock), with
-/// `pill_shortcut` (the saved setting) registered to hide and show it.
+/// the saved shortcuts registered to hide and show it and the facecam.
 pub fn open_recorder(
     app: &AppHandle,
     display_id: Option<&str>,
-    pill_shortcut: Option<String>,
+    settings: RecorderSettings,
 ) -> Result<(), String> {
     let display_id = display_id.map(str::to_owned);
     on_main(app, move |app| {
@@ -683,7 +757,7 @@ pub fn open_recorder(
             at: (x, y),
         });
         PILL_LIVE.store(true, Ordering::SeqCst);
-        sync_pill_shortcut(app, pill_shortcut);
+        sync_shortcuts(app, Some(settings));
         if let Some(w) = app.get_webview_window(RECORDER_LABEL) {
             let _ = w.set_position(LogicalPosition::new(x, y));
             show_overlay(&w)?;
@@ -718,43 +792,41 @@ pub fn open_recorder(
 pub fn hide_recorder(app: &AppHandle) {
     on_main_unit(app, |app| {
         PILL_LIVE.store(false, Ordering::SeqCst);
-        // No pill, no shortcut: whatever the setting says, nothing is registered now.
-        sync_pill_shortcut(app, None);
+        // No pill, no shortcuts: whatever the settings say, nothing is registered now.
+        sync_shortcuts(app, None);
         if let Some(w) = app.get_webview_window(RECORDER_LABEL) {
             let _ = w.hide();
         }
     });
 }
 
-/// Show the facecam preview (bottom-right of the recorded display, above the Dock). It is
-/// captured as part of the screen, so it must sit on the display being recorded.
+/// Show the facecam preview where the user last left it on the recorded display, at the shape and
+/// size they last picked (bottom-right, above the Dock, the first time). It is captured as part
+/// of the screen, so it must sit on the display being recorded.
 pub fn open_camera(app: &AppHandle, display_id: Option<&str>) -> Result<(), String> {
     let display_id = display_id.map(str::to_owned);
     on_main(app, move |app| {
-        let wa = target_work_area(app, display_id.as_deref());
+        CAMERA_LIVE.store(true, Ordering::SeqCst);
+        set_camera_tucked(app, false);
+        let layout = camera_layout(app);
+        let at = camera::place(&layout, target_work_area(app, display_id.as_deref()).rect());
         if let Some(w) = app.get_webview_window(CAMERA_LABEL) {
-            let scale = w.scale_factor().unwrap_or(1.0);
-            let size = w
-                .outer_size()
-                .map(|s| s.width as f64 / scale)
-                .unwrap_or(CAMERA_SIZE);
-            let (x, y) = camera_position(wa, size);
-            let _ = w.set_position(LogicalPosition::new(x, y));
+            set_camera_frame(&w, at);
             show_overlay(&w)?;
             set_camera_active(app, true);
             start_overlay_watchdog(app);
+            start_camera_hover_watch(app);
             return Ok(());
         }
-        let size = CAMERA_SIZE;
-        let (x, y) = camera_position(wa, size);
         let window = WebviewWindowBuilder::new(app, CAMERA_LABEL, window_url(CAMERA_LABEL))
             .title("Lare camera")
-            .inner_size(size, size)
-            .position(x, y)
+            .inner_size(at.w, at.h)
+            .position(at.x, at.y)
             .decorations(false)
             .transparent(true)
             .shadow(false)
             .resizable(false)
+            .maximizable(false)
             .skip_taskbar(true)
             .focused(false)
             .visible(false)
@@ -764,13 +836,191 @@ pub fn open_camera(app: &AppHandle, display_id: Option<&str>) -> Result<(), Stri
         prepare_overlay(&window);
         show_overlay(&window)?;
         start_overlay_watchdog(app);
+        start_camera_hover_watch(app);
         Ok(())
     })
+}
+
+/// The saved layout, or the default before setup has managed the store.
+pub fn camera_layout(app: &AppHandle) -> CameraLayout {
+    app.try_state::<CameraStore>()
+        .map(|s| s.get())
+        .unwrap_or_default()
+}
+
+fn store_camera_layout(app: &AppHandle, layout: CameraLayout, save: bool) {
+    if let Some(store) = app.try_state::<CameraStore>() {
+        if save {
+            store.save(layout);
+        } else {
+            store.set(layout);
+        }
+    }
+}
+
+fn set_camera_frame(w: &tauri::WebviewWindow, at: camera::Rect) {
+    let _ = w.set_size(LogicalSize::new(at.w, at.h));
+    let _ = w.set_position(LogicalPosition::new(at.x, at.y));
+}
+
+/// The camera window's frame in points, and the work area of the display it is on. Main thread.
+fn camera_frame(w: &tauri::WebviewWindow) -> Option<(camera::Rect, camera::Rect)> {
+    let scale = w.scale_factor().ok()?;
+    let pos = w.outer_position().ok()?.to_logical::<f64>(scale);
+    let size = w.outer_size().ok()?.to_logical::<f64>(scale);
+    let area = w.current_monitor().ok().flatten()?;
+    let frame = camera::Rect {
+        x: pos.x,
+        y: pos.y,
+        w: size.width,
+        h: size.height,
+    };
+    Some((frame, WorkArea::from_monitor(&area).rect()))
+}
+
+/// Give the bubble a new shape or height, holding still the corner it is anchored to. Kept in
+/// memory only (a resize sends one per frame); [`settle_camera`] saves it once the user lets go.
+pub fn resize_camera(
+    app: &AppHandle,
+    shape: CameraShape,
+    height: f64,
+) -> Result<CameraLayout, String> {
+    on_main(app, move |app| {
+        let w = app
+            .get_webview_window(CAMERA_LABEL)
+            .ok_or("the camera preview is not open")?;
+        let mut layout = camera_layout(app);
+        layout.shape = shape;
+        layout.height = camera::clamp_height(height);
+        if let Some((frame, area)) = camera_frame(&w) {
+            let size = camera::window_size(layout.shape, layout.height);
+            let at = camera::resize_from_corner(frame, layout.corner, size, area);
+            set_camera_frame(&w, at);
+        }
+        store_camera_layout(app, layout, false);
+        Ok(layout)
+    })
+}
+
+/// Anchor the bubble to the corner it is now nearest and save the layout, once a move or a resize
+/// has finished.
+pub fn settle_camera(app: &AppHandle) -> Result<CameraLayout, String> {
+    on_main(app, |app| {
+        let mut layout = camera_layout(app);
+        let frame = app
+            .get_webview_window(CAMERA_LABEL)
+            .and_then(|w| camera_frame(&w));
+        if let Some((frame, area)) = frame {
+            (layout.corner, layout.dx, layout.dy) = camera::anchor(frame, area);
+        }
+        store_camera_layout(app, layout, true);
+        Ok(layout)
+    })
+}
+
+static CAMERA_POINTER_WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// While the bubble is up, tell it where the pointer is over it, so it can show its controls and
+/// their tooltips. On macOS it is a non-activating panel, where WebKit tracks no hover (see
+/// [`start_pointer_watch`]); elsewhere this agrees with the webview's own pointer events.
+fn start_camera_hover_watch(app: &AppHandle) {
+    if CAMERA_POINTER_WATCH_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let mut last: Option<(i32, i32)> = None;
+        loop {
+            std::thread::sleep(Duration::from_millis(50));
+            let at = on_main(&app, |app| {
+                let Some(w) = app.get_webview_window(CAMERA_LABEL) else {
+                    return Ok(None);
+                };
+                if !w.is_visible().unwrap_or(false) {
+                    return Ok(None);
+                }
+                Ok(Some(pointer_over(&w)))
+            });
+            // Hidden (or quitting): the watch ends with the bubble and starts again with it.
+            let Ok(Some(at)) = at else {
+                if last.is_some() {
+                    events::emit_to(
+                        &app,
+                        CAMERA_LABEL,
+                        events::CAMERA_POINTER,
+                        None::<(i32, i32)>,
+                    );
+                }
+                break;
+            };
+            let at = at.map(|(x, y)| (x.round() as i32, y.round() as i32));
+            if at != last {
+                events::emit_to(&app, CAMERA_LABEL, events::CAMERA_POINTER, at);
+                last = at;
+            }
+        }
+        CAMERA_POINTER_WATCH_RUNNING.store(false, Ordering::SeqCst);
+        // Shown again while this was on its way out: its own start found the watch still running.
+        let shown = on_main(&app, |app| {
+            Ok(app
+                .get_webview_window(CAMERA_LABEL)
+                .is_some_and(|w| w.is_visible().unwrap_or(false)))
+        });
+        if shown.unwrap_or(false) {
+            start_camera_hover_watch(&app);
+        }
+    });
+}
+
+/// Take the bubble off screen for the rest of the take, from its own hide button or shortcut. It
+/// drops the webcam too, so the light goes out; the pill and the shortcut bring it back.
+pub fn tuck_camera(app: &AppHandle) {
+    on_main_unit(app, |app| set_camera_shown(app, false));
+}
+
+/// Bring a tucked bubble back where it was. Does nothing outside a take.
+pub fn untuck_camera(app: &AppHandle) {
+    on_main_unit(app, |app| set_camera_shown(app, true));
+}
+
+/// The facecam shortcut: hide the bubble if it is showing, bring it back if it is tucked.
+pub fn toggle_camera(app: &AppHandle) {
+    on_main_unit(app, |app| {
+        let showing = app
+            .get_webview_window(CAMERA_LABEL)
+            .is_some_and(|w| w.is_visible().unwrap_or(false));
+        set_camera_shown(app, !showing);
+    });
+}
+
+/// Main thread.
+fn set_camera_shown(app: &AppHandle, show: bool) {
+    if !CAMERA_LIVE.load(Ordering::SeqCst) {
+        return;
+    }
+    let Some(w) = app.get_webview_window(CAMERA_LABEL) else {
+        return;
+    };
+    let visible = w.is_visible().unwrap_or(false);
+    if show && !visible {
+        if show_overlay(&w).is_err() {
+            return;
+        }
+        set_camera_active(app, true);
+        start_overlay_watchdog(app);
+        start_camera_hover_watch(app);
+    } else if !show && visible {
+        let _ = w.hide();
+        set_camera_active(app, false);
+    }
+    set_camera_tucked(app, !show);
 }
 
 /// Take the facecam preview off screen, keeping its webview (see [`hide_recorder`]).
 pub fn hide_camera(app: &AppHandle) {
     on_main_unit(app, |app| {
+        CAMERA_LIVE.store(false, Ordering::SeqCst);
+        set_camera_tucked(app, false);
         if let Some(w) = app.get_webview_window(CAMERA_LABEL) {
             let _ = w.hide();
             set_camera_active(app, false);
@@ -793,7 +1043,10 @@ pub fn destroy_overlays(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{DEFAULT_PILL_SHORTCUT, parse_pill_shortcut};
+    use super::{
+        DEFAULT_CAMERA_SHORTCUT, DEFAULT_PILL_SHORTCUT, check_shortcuts, parse_camera_shortcut,
+        parse_pill_shortcut,
+    };
 
     #[test]
     fn unset_is_the_default_and_empty_is_off() {
@@ -803,6 +1056,21 @@ mod tests {
         );
         assert_eq!(parse_pill_shortcut(Some("")).unwrap(), None);
         assert_eq!(parse_pill_shortcut(Some("  ")).unwrap(), None);
+        assert_eq!(
+            parse_camera_shortcut(None).unwrap(),
+            Some(DEFAULT_CAMERA_SHORTCUT.parse().unwrap())
+        );
+        assert_eq!(parse_camera_shortcut(Some("")).unwrap(), None);
+    }
+
+    #[test]
+    fn the_pill_and_the_facecam_cannot_share_keys() {
+        assert!(check_shortcuts(None, None).is_ok());
+        assert!(check_shortcuts(Some("Control+Alt+H"), Some("Control+Alt+H")).is_err());
+        assert!(check_shortcuts(None, Some(DEFAULT_PILL_SHORTCUT)).is_err());
+        assert!(check_shortcuts(Some("Alt+F9"), Some("Alt+F10")).is_ok());
+        // Both off is not a clash.
+        assert!(check_shortcuts(Some(""), Some("")).is_ok());
     }
 
     #[test]

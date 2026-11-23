@@ -20,6 +20,7 @@ import {
   DragDropVerticalIcon,
   FavouriteIcon,
   FireIcon,
+  FlipHorizontalIcon,
   GlobalIcon,
   HardDriveIcon,
   Heading01Icon,
@@ -115,6 +116,7 @@ export const Eye = icon(ViewIcon);
 export const EyeOff = icon(ViewOffSlashIcon);
 export const FileCode2 = icon(SourceCodeIcon);
 export const Flame = icon(FireIcon);
+export const FlipHorizontal = icon(FlipHorizontalIcon);
 export const Globe = icon(GlobalIcon);
 export const GripVertical = icon(DragDropVerticalIcon);
 export const HardDrive = icon(HardDriveIcon);
